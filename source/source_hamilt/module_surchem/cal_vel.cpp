@@ -156,6 +156,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     delete[] tmp_Vel;
     delete[] phi_tilda_R;
     delete[] phi_tilda_R0;
+    delete[] epspot;
 
     ModuleBase::timer::tick("surchem", "cal_vel");
     return Vel;
