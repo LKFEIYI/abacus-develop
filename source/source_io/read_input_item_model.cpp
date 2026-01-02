@@ -102,7 +102,7 @@ void ReadInput::item_model()
     {
         Input_Item item("imp_sol");
         item.annotation = "calculate implicit solvation correction or not";
-        read_sync_bool(input.imp_sol);
+        read_sync_int(input.imp_sol);
         this->add_item(item);
     }
     {

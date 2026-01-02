@@ -106,7 +106,7 @@ HamiltLCAO<TK, TR>::HamiltLCAO(const UnitCell& ucell,
             pot_register_in.push_back("hartree");
         }
         pot_register_in.push_back("xc");
-        if (PARAM.inp.imp_sol)
+        if (PARAM.inp.imp_sol != 0)
         {
             pot_register_in.push_back("surchem");
         }

@@ -89,7 +89,7 @@ void OFDFT::print_info(const int iter,
             titles.push_back("E_vdwD3");
             energies_Ry.push_back(pelec->f_en.evdw);
         }
-        if (PARAM.inp.imp_sol)
+        if (PARAM.inp.imp_sol != 0)
         {
             titles.push_back("E_sol_el");
             energies_Ry.push_back(pelec->f_en.esol_el);

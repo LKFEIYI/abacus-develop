@@ -32,7 +32,7 @@ void write_elecstat_pot(
     const int nspin = PARAM.inp.nspin;
     const int efield = PARAM.inp.efield_flag;
     const int dip_corr = PARAM.inp.dip_cor_flag;
-    const bool imp_sol = PARAM.inp.imp_sol;
+    const int imp_sol = PARAM.inp.imp_sol;
 
     //==========================================
     // Hartree potential

@@ -22,7 +22,7 @@ void surchem::cal_smpbe_physics(const int nrxx,
                                 double* kappa2_factor_out)
 {
     // 1. 获取参数
-    double T = (PARAM.inp.temperature < 1.0) ? 298.15 : PARAM.inp.temperature;
+    double T = (PARAM.inp.sol_temp < 1.0) ? 298.15 : PARAM.inp.sol_temp;
     double beta = 1.0 / (KB_au * T);
     double c_bulk_M = PARAM.inp.c_molar;
     double c_bulk_au = c_bulk_M * 6.022e-4 * pow(0.52917721, 3);
@@ -80,7 +80,7 @@ void cal_dielectric_saturation(const int nrxx,
 {
     double eps_inf = (PARAM.inp.epsilon_inf < 1.0) ? 1.78 : PARAM.inp.epsilon_inf;
     double eps_bulk = PARAM.inp.eb_k;
-    double T = (PARAM.inp.temperature < 1.0) ? 298.15 : PARAM.inp.temperature;
+    double T = (PARAM.inp.sol_temp < 1.0) ? 298.15 : PARAM.inp.sol_temp;
     double beta = 1.0 / (KB_au * T);
     
     // Debye -> Atomic Units conversion (1 Debye approx 0.39343 au)

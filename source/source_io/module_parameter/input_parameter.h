@@ -487,7 +487,7 @@ struct Input_para
     double block_height = 0.1; ///< height of the block
 
     //    implicit solvation model       Menglin Sun added on 2022-04-04
-    bool imp_sol = false;    ///< true: implicit solvation correction; false:
+    int imp_sol = 0;    ///< true: implicit solvation correction; false:
                              ///< vacuum calculation(default)
     double eb_k = 80;        ///< the relative permittivity of the bulk solvent
     double tau = 1.0798e-05; ///< the effective surface tension parameter
@@ -499,6 +499,7 @@ struct Input_para
     double ion_size = 3.0;
     double p_mol = 1.85;
     double n_mol = 0.033;
+    double epsilon_inf = 1.78;
 
     // ==============  #Parameters (14.vdW Correction) ===========================
     // ==========================================================

@@ -262,7 +262,7 @@ void print_etot(const Magnetism& magnet,
         energies_Ry.push_back(elec.f_en.exx);
 
         //! solvation energy
-        if (PARAM.inp.imp_sol)
+        if (PARAM.inp.imp_sol != 0)
         {
             titles.push_back("E_sol_el");
             energies_Ry.push_back(elec.f_en.esol_el);

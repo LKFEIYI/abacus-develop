@@ -216,7 +216,7 @@ TEST_F(ElecStatePrintTest, PrintEtotColorS2)
     elecstate.charge->nxyz = 1000;
 
     PARAM.input.out_freq_elec = 1;
-    PARAM.input.imp_sol = true;
+    PARAM.input.imp_sol = 1;
     PARAM.input.efield_flag = true;
     PARAM.input.gate_flag = true;
     PARAM.sys.two_fermi = true;
@@ -245,7 +245,7 @@ TEST_F(ElecStatePrintTest, PrintEtotColorS4)
     elecstate.charge->nxyz = 1000;
 
     PARAM.input.out_freq_elec = 1;
-    PARAM.input.imp_sol = true;
+    PARAM.input.imp_sol = 1;
     PARAM.input.efield_flag = true;
     PARAM.input.gate_flag = true;
     PARAM.sys.two_fermi = true;

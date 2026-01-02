@@ -126,7 +126,7 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
     }
 
     ModuleBase::matrix forcesol;
-    if (PARAM.inp.imp_sol)
+    if (PARAM.inp.imp_sol != 0)
     {
         forcesol.create(this->nat, 3);
         solvent.cal_force_sol(ucell, rho_basis, locpp->vloc, forcesol);
@@ -165,7 +165,7 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
                     force(iat, ipol) = force(iat, ipol) + force_gate(iat, ipol);
                 }
 
-                if (PARAM.inp.imp_sol)
+                if (PARAM.inp.imp_sol != 0)
                 {
                     force(iat, ipol) = force(iat, ipol) + forcesol(iat, ipol);
                 }
@@ -300,7 +300,7 @@ void Forces<FPTYPE, Device>::cal_force(UnitCell& ucell,
                                   force_gate,
                                   false);
         }
-        if (PARAM.inp.imp_sol)
+        if (PARAM.inp.imp_sol != 0)
         {
             ModuleIO::print_force(GlobalV::ofs_running,
                                   ucell,
