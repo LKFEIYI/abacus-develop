@@ -493,6 +493,12 @@ struct Input_para
     double tau = 1.0798e-05; ///< the effective surface tension parameter
     double sigma_k = 0.6;    ///< the width of the diffuse cavity
     double nc_k = 0.00037;   ///< the cut-off charge density
+    double c_molar = 0.01;
+    double sol_temp = 298.15;
+    double z_ion = 1.0;
+    double ion_size = 3.0;
+    double p_mol = 1.85;
+    double n_mol = 0.033;
 
     // ==============  #Parameters (14.vdW Correction) ===========================
     // ==========================================================

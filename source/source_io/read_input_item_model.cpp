@@ -129,7 +129,42 @@ void ReadInput::item_model()
         read_sync_double(input.nc_k);
         this->add_item(item);
     }
-
+        {
+        Input_Item item("c_molar");
+        item.annotation = "the cut-off charge density";
+        read_sync_double(input.c_molar);
+        this->add_item(item);
+    }
+        {
+        Input_Item item("sol_temp");
+        item.annotation = "the cut-off charge density";
+        read_sync_double(input.sol_temp);
+        this->add_item(item);
+    }
+        {
+        Input_Item item("z_ion");
+        item.annotation = "the cut-off charge density";
+        read_sync_double(input.z_ion);
+        this->add_item(item);
+    }
+            {
+        Input_Item item("ion_size");
+        item.annotation = "the cut-off charge density";
+        read_sync_double(input.ion_size);
+        this->add_item(item);
+    }
+        {
+        Input_Item item("p_mol");
+        item.annotation = "the cut-off charge density";
+        read_sync_double(input.p_mol);
+        this->add_item(item);
+    }
+            {
+        Input_Item item("n_mol");
+        item.annotation = "the cut-off charge density";
+        read_sync_double(input.n_mol);
+        this->add_item(item);
+    }
     // vdW Correction
     {
         Input_Item item("vdw_method");

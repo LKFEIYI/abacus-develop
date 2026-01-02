@@ -88,6 +88,7 @@ class surchem
     void minimize_cg(const UnitCell& ucell,
                      const ModulePW::PW_Basis* rho_basis,
                      double* d_eps,
+                     const double* kappa2_factor, // NEW: 4pi * d(rho_ion)/d(phi)
                      const std::complex<double>* tot_N,
                      std::complex<double>* phi,
                      int& ncgsol);
@@ -95,12 +96,22 @@ class surchem
     void Leps2(const UnitCell& ucell,
                const ModulePW::PW_Basis* rho_basis,
                std::complex<double>* phi,
-               double* epsilon,            // epsilon from shapefunc, dim=nrxx
-               std::complex<double>* gradphi_x, // dim=ngmc
+               double* epsilon,
+               const double* kappa2_factor, // NEW
+               std::complex<double>* gradphi_x,
                std::complex<double>* gradphi_y,
                std::complex<double>* gradphi_z,
                std::complex<double>* phi_work,
                std::complex<double>* lp);
+               
+      void test_smpbe_driver(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis);
+
+// 新增：VASPsol++ 物理量计算辅助函数
+    void cal_smpbe_physics(const int nrxx,
+                           const double* phi_R,
+                           const double* eps_R,
+                           double* rho_ion_out,
+                           double* kappa2_factor_out);
 
     ModuleBase::matrix v_correction(const UnitCell& cell,
                                     const Parallel_Grid& pgrid,
