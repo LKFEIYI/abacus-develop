@@ -104,7 +104,7 @@ class surchem
                std::complex<double>* phi_work,
                std::complex<double>* lp);
                
-      void test_smpbe_driver(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis);
+      // void test_smpbe_driver(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis);
 
 // 新增：VASPsol++ 物理量计算辅助函数
     void cal_smpbe_physics(const int nrxx,
