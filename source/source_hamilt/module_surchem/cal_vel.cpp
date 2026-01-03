@@ -224,7 +224,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
         {
             // 简单的误差度量：所有 G 分量的模之和 (或者你可以做 FFT 后在实空间积分)
             // 这里为了快，直接在倒空间估算
-            local_drho += std::abs(ps_totn[i] - this->rho_history[i]);
+            local_drho += std::abs(PS_TOTN[i] - this->rho_history[i]);
         }
         // 归一化 (可选，视 ps_totn 的量级而定，通常 ps_totn 是 1/Omega 量级)
         // 也可以简单地看绝对值变化
@@ -238,7 +238,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
 
     // 保存当前密度到历史 (供下一步用)
     for(int i=0; i<rho_basis->npw; ++i) {
-        this->rho_history[i] = ps_totn[i];
+        this->rho_history[i] = PS_TOTN[i];
     }
 
     // [决策时刻]
@@ -303,7 +303,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     
     // Mode Determination
     // int mode = PARAM.inp.imp_sol; 
-    int mode = actual_run_mode
+    int mode = actual_run_mode;
     bool is_nonlinear = (mode >= 2);       // imp_sol = 2 or 3
     bool use_dielectric_sat = (mode == 3); // imp_sol = 3 only
 
