@@ -306,10 +306,12 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     int mode = actual_run_mode;
     bool is_nonlinear = (mode >= 2);       // imp_sol = 2 or 3
     bool use_dielectric_sat = (mode == 3); // imp_sol = 3 only
+    double sol_thr_val = (PARAM.inp.sol_thr > 1e-12) ? PARAM.inp.sol_thr : 1.0e-5;
 
     if (GlobalV::MY_RANK == 0 && mode != target_imp_sol) {
          std::cout << " [SURCHEM] DRHO Check Triggered: Running in Linear Mode (imp_sol=1) temporarily." << std::endl;
     }
+
     // =========================================================================
     // Nonlinear Loop (VASPsol++) OR Linear Solver (VASPsol)
     // =========================================================================
@@ -321,7 +323,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
         std::complex<double> *phi_new = new std::complex<double>[rho_basis->npw];
         
         // Newton-Raphson Loop
-        int max_iter = 15;
+        int max_iter = 100;
         for(int iter = 0; iter < max_iter; ++iter)
         {
             // A. Get current Real-space Potential
@@ -366,11 +368,14 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
                 diff += std::abs(phi_new[ig] - Sol_phi[ig]);
                 Sol_phi[ig] = alpha * phi_new[ig] + (1.0 - alpha) * Sol_phi[ig];
             }
+
+            Parallel_Reduce::reduce_pool(diff);
+
            if (GlobalV::MY_RANK == 0) {
 		      std::cout << "ITER " << iter << " Imp_Sol=" << mode 
 			                   << " Diff=" << diff << " Ael=" << this->Ael << std::endl;
 	   } 
-            if(diff < 1e-9 * rho_basis->npw) break; 
+            if(diff < sol_thr_val) break; 
         }
 
         delete[] phi_R_tmp;

@@ -500,6 +500,7 @@ struct Input_para
     double p_mol = 1.85;
     double n_mol = 0.033;
     double epsilon_inf = 1.78;
+    double sol_thr = 1e-5
 
     // ==============  #Parameters (14.vdW Correction) ===========================
     // ==========================================================

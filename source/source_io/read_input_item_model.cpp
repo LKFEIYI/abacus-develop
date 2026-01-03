@@ -131,38 +131,50 @@ void ReadInput::item_model()
     }
         {
         Input_Item item("c_molar");
-        item.annotation = "the cut-off charge density";
+        item.annotation = "Concentration of the electrolyte (mol/L)";
         read_sync_double(input.c_molar);
         this->add_item(item);
     }
         {
         Input_Item item("sol_temp");
-        item.annotation = "the cut-off charge density";
+        item.annotation = "simulation temperature in K";
         read_sync_double(input.sol_temp);
         this->add_item(item);
     }
         {
         Input_Item item("z_ion");
-        item.annotation = "the cut-off charge density";
+        item.annotation = "Electrolyte valency";
         read_sync_double(input.z_ion);
         this->add_item(item);
     }
             {
         Input_Item item("ion_size");
-        item.annotation = "the cut-off charge density";
+        item.annotation = "Ionic radius for constructing the ionic cavity";
         read_sync_double(input.ion_size);
         this->add_item(item);
     }
         {
         Input_Item item("p_mol");
-        item.annotation = "the cut-off charge density";
+        item.annotation = "Dipole moment of a solvent molecule";
         read_sync_double(input.p_mol);
         this->add_item(item);
     }
             {
         Input_Item item("n_mol");
-        item.annotation = "the cut-off charge density";
+        item.annotation = "Density of solvent molecules in the bulk ";
         read_sync_double(input.n_mol);
+        this->add_item(item);
+    }
+                {
+        Input_Item item("epsilon_inf");
+        item.annotation = "Bulk optical dielectric constant of the solvent";
+        read_sync_double(input.epsilon_inf);
+        this->add_item(item);
+    }
+                    {
+        Input_Item item("sol_thr");
+        item.annotation = "Threshold for converging solvation";
+        read_sync_double(input.sol_thr);
         this->add_item(item);
     }
     // vdW Correction
