@@ -292,7 +292,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
         // 调整大小以备后用
         this->phi_history.resize(rho_basis->npw, std::complex<double>(0,0));
     }
-    ModuleBase::GlobalFunc::ZEROS(Sol_phi, rho_basis->npw);
+
 
     double* rho_ion_R = new double[rho_basis->nrxx];
     double* kappa2_R = new double[rho_basis->nrxx];
