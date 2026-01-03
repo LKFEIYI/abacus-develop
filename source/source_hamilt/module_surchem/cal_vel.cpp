@@ -2,7 +2,6 @@
 #include "source_hamilt/module_xc/xc_functional.h"
 #include "source_io/module_parameter/parameter.h"
 #include "surchem.h"
-#include <cmath>
 #include <vector>
 #include <algorithm>
 #include <iostream>
@@ -45,10 +44,9 @@ void surchem::cal_smpbe_physics(const int nrxx,
         double u = z * beta * phi_R[ir];
         
         // 限制 u 的范围防止溢出 (Though ABACUS uses double, safety first)
-        if(u > 20.0) u = 20.0;
-        if(u < -20.0) u = -20.0;
+        u = std::max(-20.0, std::min(u, 20.0));
 
-        double exp_u = std::exp(u);
+        double exp_u = exp(u);
         double exp_neg_u = 1.0 / exp_u;
         double sinh_u = 0.5 * (exp_u - exp_neg_u);
         double cosh_u = 0.5 * (exp_u + exp_neg_u);
@@ -108,7 +106,12 @@ void cal_dielectric_saturation(const int nrxx,
         if(x < 1e-4) {
             langevin = x / 3.0; 
         } else {
-            langevin = (1.0 / tanh(x)) - (1.0 / x);
+            // 优化尝试：利用 libm::exp 替换 tanh
+            // tanh(x) = 1 - 2 / (exp(2x) + 1)
+            double exp_2x = exp(2.0 * x);
+            double tanh_x = 1.0 - 2.0 / (exp_2x + 1.0);
+            
+            langevin = (1.0 / tanh_x) - (1.0 / x);
         }
         
         double term_dipole = 0.0;
@@ -140,6 +143,7 @@ void shape_gradn(const double* PS_TOTN_real, const ModulePW::PW_Basis* rho_basis
         // Gaussian error function derivative chain rule
         epr_z = log(std::max(PS_TOTN_real[ir], min) / PARAM.inp.nc_k) / sqrt(2) / PARAM.inp.sigma_k;
         eprime[ir] = epr_c * exp(-pow(epr_z, 2)) / std::max(PS_TOTN_real[ir], min);
+  
     }
 }
 
