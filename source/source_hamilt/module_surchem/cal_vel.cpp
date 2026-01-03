@@ -6,6 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include <iostream>
+#include "source_base/global_function.h"
 
 // --- 物理常数 ---
 const double KB_au = 3.1668114e-6;      // Boltzmann constant in Hartree/K
@@ -31,7 +32,7 @@ void surchem::cal_smpbe_physics(const int nrxx,
     
     // Packing fraction theta = c_bulk / c_max
     double theta = c_bulk_au * pow(a_ion * Ang2Bohr, 3); 
-
+    #pragma omp parallel for schedule(static)
     for (int ir = 0; ir < nrxx; ir++)
     {
         // 在介电常数接近 1 的区域（真空/板层内部），强制无离子
@@ -47,8 +48,10 @@ void surchem::cal_smpbe_physics(const int nrxx,
         if(u > 20.0) u = 20.0;
         if(u < -20.0) u = -20.0;
 
-        double sinh_u = sinh(u);
-        double cosh_u = cosh(u);
+        double exp_u = std::exp(u);
+        double exp_neg_u = 1.0 / exp_u;
+        double sinh_u = 0.5 * (exp_u - exp_neg_u);
+        double cosh_u = 0.5 * (exp_u + exp_neg_u);
         
         // SMPBE Formula: Lattice-Gas Model
         double denom = 1.0 + theta * (cosh_u - 1.0);
@@ -87,7 +90,7 @@ void cal_dielectric_saturation(const int nrxx,
     double p_mol_au = (PARAM.inp.p_mol < 0.01) ? 1.85 * 0.39343 : PARAM.inp.p_mol * 0.39343;
     // Mol density: 1/Ang^3 -> 1/Bohr^3
     double n_mol_au = (PARAM.inp.n_mol < 1e-4) ? 0.0333 * pow(0.52917721, 3) : PARAM.inp.n_mol;
-
+    #pragma omp parallel for schedule(static)
     for(int i=0; i<nrxx; ++i) {
         if(shape_func[i] < 1e-6) {
             epsilon_out[i] = 1.0;
@@ -205,7 +208,55 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
 
     // 1. Prepare Data
     rho_basis->recip2real(TOTN, TOTN_real);
+    const double switch_threshold = 0.01; 
     
+    // 获取用户设定的求解模式 (2 或 3)
+    int target_imp_sol = PARAM.inp.imp_sol; // 或者 INPUT.imp_sol
+    int actual_run_mode = target_imp_sol;   // 实际运行的模式
+
+    // 计算局部的 DRHO
+    double local_drho = 0.0;
+    
+    // 检查历史密度是否存在且大小匹配
+    if(this->rho_history.size() == rho_basis->npw)
+    {
+        for(int i=0; i<rho_basis->npw; ++i)
+        {
+            // 简单的误差度量：所有 G 分量的模之和 (或者你可以做 FFT 后在实空间积分)
+            // 这里为了快，直接在倒空间估算
+            local_drho += std::abs(ps_totn[i] - this->rho_history[i]);
+        }
+        // 归一化 (可选，视 ps_totn 的量级而定，通常 ps_totn 是 1/Omega 量级)
+        // 也可以简单地看绝对值变化
+    }
+    else
+    {
+        // 如果是第一步 (没有历史)，强制认为误差很大，或者直接跑线性
+        local_drho = 100.0; 
+        this->rho_history.resize(rho_basis->npw);
+    }
+
+    // 保存当前密度到历史 (供下一步用)
+    for(int i=0; i<rho_basis->npw; ++i) {
+        this->rho_history[i] = ps_totn[i];
+    }
+
+    // [决策时刻]
+    if (local_drho > switch_threshold)
+    {
+        // 误差太大，降级为线性模型 (跑得快，稳)
+        if (GlobalV::MY_RANK == 0) {
+            std::cout << " [SURCHEM] Large DRHO (" << local_drho 
+                      << " > " << switch_threshold 
+                      << "), downgrading to Linear Model (imp_sol=1)." << std::endl;
+        }
+        actual_run_mode = 1; 
+    }
+    else
+    {
+        // 误差小，开启完全非线性迭代
+        actual_run_mode = target_imp_sol;
+    }
     // B_elec = -4pi * rho_elec(G)
     std::complex<double> *B_elec = new std::complex<double>[rho_basis->npw];
     for (int ig = 0; ig < rho_basis->npw; ig++)
@@ -230,6 +281,17 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     // 3. Setup Variables for Solver
     std::complex<double> *Sol_phi = new std::complex<double>[rho_basis->npw];
     std::complex<double> *Sol_phi0 = new std::complex<double>[rho_basis->npw];
+    if (this->phi_history.size() == rho_basis->npw) {
+        // 有缓存：拷贝作为初猜
+        for(int i=0; i<rho_basis->npw; ++i) {
+            Sol_phi[i] = this->phi_history[i];
+        }
+    } else {
+        // 无缓存或大小不匹配：重置为0
+        ModuleBase::GlobalFunc::ZEROS(Sol_phi, rho_basis->npw);
+        // 调整大小以备后用
+        this->phi_history.resize(rho_basis->npw, std::complex<double>(0,0));
+    }
     ModuleBase::GlobalFunc::ZEROS(Sol_phi, rho_basis->npw);
 
     double* rho_ion_R = new double[rho_basis->nrxx];
@@ -240,10 +302,14 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     int ncgsol = 0;
     
     // Mode Determination
-    int mode = PARAM.inp.imp_sol; 
+    // int mode = PARAM.inp.imp_sol; 
+    int mode = actual_run_mode
     bool is_nonlinear = (mode >= 2);       // imp_sol = 2 or 3
     bool use_dielectric_sat = (mode == 3); // imp_sol = 3 only
 
+    if (GlobalV::MY_RANK == 0 && mode != target_imp_sol) {
+         std::cout << " [SURCHEM] DRHO Check Triggered: Running in Linear Mode (imp_sol=1) temporarily." << std::endl;
+    }
     // =========================================================================
     // Nonlinear Loop (VASPsol++) OR Linear Solver (VASPsol)
     // =========================================================================
@@ -279,6 +345,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
             // Linearized Eq: (L - eps*k^2) * dphi = Residual
             // Equivalent to solving: (L - eps*k^2) * phi_new = B_elec + B_ion(phi_old) - eps*k^2*phi_old
             // RHS in Real Space:
+            #pragma omp parallel for schedule(static)
             for(int i=0; i<rho_basis->nrxx; ++i) {
                 phi_R_tmp[i] = -4.0 * ModuleBase::PI * rho_ion_R[i] 
                                - epsilon[i] * kappa2_R[i] * phi_R_tmp[i];
@@ -299,8 +366,11 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
                 diff += std::abs(phi_new[ig] - Sol_phi[ig]);
                 Sol_phi[ig] = alpha * phi_new[ig] + (1.0 - alpha) * Sol_phi[ig];
             }
-            
-            if(diff < 1e-5 * rho_basis->npw) break; 
+           if (GlobalV::MY_RANK == 0) {
+		      std::cout << "ITER " << iter << " Imp_Sol=" << mode 
+			                   << " Diff=" << diff << " Ael=" << this->Ael << std::endl;
+	   } 
+            if(diff < 1e-9 * rho_basis->npw) break; 
         }
 
         delete[] phi_R_tmp;
@@ -333,6 +403,14 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
         delete[] k_dummy;
     }
 
+    if(this->phi_history.size() != rho_basis->npw) {
+         this->phi_history.resize(rho_basis->npw);
+    }
+    // 保存当前收敛的解，供下一步 SCF 使用
+    for(int i=0; i<rho_basis->npw; ++i) {
+        this->phi_history[i] = Sol_phi[i];
+    }
+
     // 3. Calculate Vel and Ael
     double *tmp_Vel = new double[rho_basis->nrxx];
     ModuleBase::GlobalFunc::ZEROS(tmp_Vel, rho_basis->nrxx);
@@ -361,7 +439,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
         this->Ael -= (term_elec + term_ion);
     }
     Parallel_Reduce::reduce_pool(this->Ael);
-    this->Ael *= cell.omega / rho_basis->nxyz * 0.5; // Linear Response Factor
+    this->Ael *= cell.omega / rho_basis->nxyz; // Linear Response Factor
 
     // 4. Calculate Non-electrostatic Potential (eps_pot)
     // NOTE: For imp_sol=3, we use the shape-based epsilon gradient for the force term

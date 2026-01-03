@@ -193,7 +193,7 @@ void surchem::Leps2(const UnitCell& ucell,
     ModuleBase::Vector3<double> *grad_phi = new ModuleBase::Vector3<double>[rho_basis->nrxx];
 
     XC_Functional::grad_rho(phi, grad_phi, rho_basis, ucell.tpiba);
-    
+    #pragma omp parallel for schedule(static)
     for (int ir = 0; ir < rho_basis->nrxx; ir++)
     {
         grad_phi[ir].x *= epsilon[ir];
@@ -232,7 +232,7 @@ void surchem::Leps2(const UnitCell& ucell,
     {
         double* phi_real = new double[rho_basis->nrxx];
         rho_basis->recip2real(phi, phi_real);
-        
+        #pragma omp parallel for schedule(static)
         for(int ir = 0; ir < rho_basis->nrxx; ir++)
         {
             // L = div(eps grad) - eps * kappa^2

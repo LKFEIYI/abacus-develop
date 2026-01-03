@@ -10,6 +10,8 @@
 #include "source_cell/unitcell.h"
 #include "source_pw/module_pwdft/parallel_grid.h"
 #include "source_pw/module_pwdft/structure_factor.h"
+#include <vector>
+#include <complex>
 
 class surchem
 {
@@ -26,6 +28,8 @@ class surchem
 
     static double Acav;
     static double Ael;
+    std::vector<std::complex<double>> phi_history;
+    std::vector<std::complex<double>> rho_history;
 
     // get atom info
     atom_in GetAtom;
