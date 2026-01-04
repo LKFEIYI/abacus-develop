@@ -249,7 +249,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     if (local_drho > switch_threshold)
     {
         // 误差太大，降级为线性模型 (跑得快，稳)
-        if (GlobalV::MY_RANK == 0 && target_imp_sol > = 2) {
+        if (GlobalV::MY_RANK == 0 && target_imp_sol >= 2) {
             std::cout << " [SURCHEM] Large DRHO (" << local_drho 
                       << " > " << switch_threshold 
                       << "), downgrading to Linear Model (imp_sol=1)." << std::endl;
