@@ -31,11 +31,24 @@ class surchem
     std::vector<std::complex<double>> phi_history;
     std::vector<std::complex<double>> rho_history;
 
+    // CG Solver Workspace (for minimize_cg)
+  std::vector<std::complex<double>> cg_resid;
+    std::vector<std::complex<double>> cg_z;
+    std::vector<std::complex<double>> cg_lp;
+    std::vector<std::complex<double>> cg_gsqu;
+    std::vector<std::complex<double>> cg_d;
+    // Leps2 Solver Workspace (for Leps2)
+    std::vector<ModuleBase::Vector3<double>> le_grad_phi;     // 实空间梯度
+    std::vector<std::complex<double>> le_grad_grad_phi_G;     // 倒空间分量
+    std::vector<ModuleBase::Vector3<double>> le_tmp_vector3;  // 临时向量
+    std::vector<double> le_lp_real;                           // 实空间拉普拉斯
+    std::vector<double> le_aux_real;                          // nrxx
+
     // get atom info
     atom_in GetAtom;
 
     // allocate memory and deallocate them
-    void allocate(const int& nrxx, const int& nspin);
+    void allocate(const int& nrxx, const int& npw, const int& nspin);
 
     void clear();
 
@@ -97,15 +110,11 @@ class surchem
                      std::complex<double>* phi,
                      int& ncgsol);
 
-    void Leps2(const UnitCell& ucell,
+void Leps2(const UnitCell& ucell,
                const ModulePW::PW_Basis* rho_basis,
                std::complex<double>* phi,
                double* epsilon,
-               const double* kappa2_factor, // NEW
-               std::complex<double>* gradphi_x,
-               std::complex<double>* gradphi_y,
-               std::complex<double>* gradphi_z,
-               std::complex<double>* phi_work,
+               const double* kappa2_factor, 
                std::complex<double>* lp);
                
       // void test_smpbe_driver(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis);

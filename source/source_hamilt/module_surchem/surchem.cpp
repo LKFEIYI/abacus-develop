@@ -15,7 +15,7 @@ surchem::surchem()
     qs = 0;
 }
 
-void surchem::allocate(const int &nrxx, const int &nspin)
+void surchem::allocate(const int& nrxx, const int& npw, const int& nspin)
 {
     assert(nrxx >= 0);
     assert(nspin > 0);
@@ -41,6 +41,21 @@ void surchem::allocate(const int &nrxx, const int &nspin)
     ModuleBase::GlobalFunc::ZEROS(delta_phi, nrxx);
     ModuleBase::GlobalFunc::ZEROS(TOTN_real, nrxx);
     ModuleBase::GlobalFunc::ZEROS(epspot, nrxx);
+
+    // CG Buffers
+    if (cg_resid.size() != npw) cg_resid.resize(npw);
+    if (cg_z.size() != npw) cg_z.resize(npw);
+    if (cg_lp.size() != npw) cg_lp.resize(npw);
+    if (cg_gsqu.size() != npw) cg_gsqu.resize(npw);
+    if (cg_d.size() != npw) cg_d.resize(npw);
+
+    // Leps2 Buffers
+    if (le_grad_grad_phi_G.size() != npw) le_grad_grad_phi_G.resize(npw);
+    
+    if (le_grad_phi.size() != nrxx) le_grad_phi.resize(nrxx);
+    if (le_tmp_vector3.size() != nrxx) le_tmp_vector3.resize(nrxx);
+    if (le_lp_real.size() != nrxx) le_lp_real.resize(nrxx);
+    if (le_aux_real.size() != nrxx) le_aux_real.resize(nrxx);
     return;
 }
 

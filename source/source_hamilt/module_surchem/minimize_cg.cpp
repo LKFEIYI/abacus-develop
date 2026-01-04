@@ -13,35 +13,27 @@ void surchem::minimize_cg(const UnitCell& ucell,
                           std::complex<double>* phi,
                           int& ncgsol)
 {
+
+    std::complex<double>* resid = this->cg_resid.data();
+    std::complex<double>* z = this->cg_z.data();
+    std::complex<double>* lp = this->cg_lp.data();
+    std::complex<double>* gsqu = this->cg_gsqu.data();
+    std::complex<double>* d = this->cg_d.data();
+
+    ModuleBase::GlobalFunc::ZEROS(phi, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(resid, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(z, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(lp, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(d, rho_basis->npw);
     // parameters of CG method
     double alpha = 0;
     double beta = 0;
     double rinvLr = 0;
     double r2 = 0;
 
-    ModuleBase::GlobalFunc::ZEROS(phi, rho_basis->npw);
 
-    // malloc vectors in G space
-    std::complex<double> *resid = new std::complex<double>[rho_basis->npw];
-    std::complex<double> *z = new std::complex<double>[rho_basis->npw];
-    std::complex<double> *lp = new std::complex<double>[rho_basis->npw];
-    std::complex<double> *gsqu = new std::complex<double>[rho_basis->npw];
-    std::complex<double> *d = new std::complex<double>[rho_basis->npw];
 
-    std::complex<double> *gradphi_x = new std::complex<double>[rho_basis->npw];
-    std::complex<double> *gradphi_y = new std::complex<double>[rho_basis->npw];
-    std::complex<double> *gradphi_z = new std::complex<double>[rho_basis->npw];
-    std::complex<double> *phi_work = new std::complex<double>[rho_basis->npw];
 
-    ModuleBase::GlobalFunc::ZEROS(resid, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(z, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(lp, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(gsqu, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(d, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(gradphi_x, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(gradphi_y, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(gradphi_z, rho_basis->npw);
-    ModuleBase::GlobalFunc::ZEROS(phi_work, rho_basis->npw);
 
     int count = 0;
     
@@ -60,13 +52,10 @@ void surchem::minimize_cg(const UnitCell& ucell,
     for (int ig = 0; ig < rho_basis->npw; ig++)
     {
         double gg = rho_basis->gg[ig];
-        // [Image of Modified Preconditioner]
-        // 加上 avg_kappa2 使得 G=0 时分母不为0
         double denom = gg * ucell.tpiba2 + avg_kappa2; 
         if (denom < 1e-9) denom = 1e-9; 
         
-        gsqu[ig].real(1.0 / denom);
-        gsqu[ig].imag(0);
+        gsqu[ig] = std::complex<double>(1.0 / denom, 0.0);
     }
 
     // init guess for phi
@@ -77,8 +66,7 @@ void surchem::minimize_cg(const UnitCell& ucell,
     }
 
     // call leps
-    Leps2(ucell, rho_basis, phi, d_eps, kappa2_factor, 
-          gradphi_x, gradphi_y, gradphi_z, phi_work, lp);
+    Leps2(ucell, rho_basis, phi, d_eps, kappa2_factor, lp);
 
     // residue
     for (int ig = 0; ig < rho_basis->npw; ig++)
@@ -114,8 +102,7 @@ void surchem::minimize_cg(const UnitCell& ucell,
             break;
         }
 
-        Leps2(ucell, rho_basis, d, d_eps, kappa2_factor, 
-              gradphi_x, gradphi_y, gradphi_z, phi_work, lp);
+        Leps2(ucell, rho_basis, d, d_eps, kappa2_factor, lp);
 
         // calculate alpha
         std::complex<double> d_dot_lp = 0.0;
@@ -168,15 +155,6 @@ void surchem::minimize_cg(const UnitCell& ucell,
     ncgsol = count;
 
     // cleanup
-    delete[] resid;
-    delete[] z;
-    delete[] lp;
-    delete[] gsqu;
-    delete[] d;
-    delete[] gradphi_x;
-    delete[] gradphi_y;
-    delete[] gradphi_z;
-    delete[] phi_work;
 }
 
 void surchem::Leps2(const UnitCell& ucell,
@@ -184,15 +162,22 @@ void surchem::Leps2(const UnitCell& ucell,
                     std::complex<double>* phi,
                     double* epsilon,            
                     const double* kappa2_factor,
-                    std::complex<double>* gradphi_x, 
-                    std::complex<double>* gradphi_y,
-                    std::complex<double>* gradphi_z,
-                    std::complex<double>* phi_work,
                     std::complex<double>* lp)
 {
-    ModuleBase::Vector3<double> *grad_phi = new ModuleBase::Vector3<double>[rho_basis->nrxx];
+    ModuleBase::Vector3<double> *grad_phi = this->le_grad_phi.data();
+    std::complex<double> *grad_grad_phi_G = this->le_grad_grad_phi_G.data();
+    ModuleBase::Vector3<double> *tmp_vector3 = this->le_tmp_vector3.data();
+    double *lp_real_ptr = this->le_lp_real.data();
+    double *aux_real_ptr = this->le_aux_real.data();
+
+
+    #pragma omp parallel for schedule(static)
+    for(int i=0; i<rho_basis->nrxx; ++i) {
+        lp_real_ptr[i] = 0.0;
+    }
 
     XC_Functional::grad_rho(phi, grad_phi, rho_basis, ucell.tpiba);
+
     #pragma omp parallel for schedule(static)
     for (int ir = 0; ir < rho_basis->nrxx; ir++)
     {
@@ -201,24 +186,25 @@ void surchem::Leps2(const UnitCell& ucell,
         grad_phi[ir].z *= epsilon[ir];
     }
     
-    std::vector<double> lp_real(rho_basis->nrxx, 0.0);
-    ModuleBase::GlobalFunc::ZEROS(lp, rho_basis->npw);
 
-    std::vector<double> grad_grad_phi(rho_basis->nrxx, 0.0);
-    std::complex<double> *grad_grad_phi_G = new std::complex<double>[rho_basis->npw];
-    ModuleBase::Vector3<double> *tmp_vector3 = new ModuleBase::Vector3<double>[rho_basis->nrxx];
+
+
+
 
     // Helper lambda to calculate div component
     auto calc_div_component = [&](double ModuleBase::Vector3<double>::* component) {
-        ModuleBase::GlobalFunc::ZEROS(grad_grad_phi_G, rho_basis->npw);
-        ModuleBase::GlobalFunc::ZEROS(tmp_vector3, rho_basis->nrxx);
+
+        #pragma omp parallel for schedule(static)
         for (int ir = 0; ir < rho_basis->nrxx; ir++) {
-            grad_grad_phi[ir] = grad_phi[ir].*component;
+            aux_real_ptr[ir] = grad_phi[ir].*component;
         }
-        rho_basis->real2recip(grad_grad_phi.data(), grad_grad_phi_G);
+        rho_basis->real2recip(aux_real_ptr, grad_grad_phi_G);
         XC_Functional::grad_rho(grad_grad_phi_G, tmp_vector3, rho_basis, ucell.tpiba);
+
+        #pragma omp parallel for schedule(static)
         for (int ir = 0; ir < rho_basis->nrxx; ir++) {
-            lp_real[ir] += tmp_vector3[ir].*component;
+            // 所有线程写入同一个 lp_real 数组，但写入索引 ir 不同，因此无需 atomic，绝对安全。
+            lp_real_ptr[ir] += tmp_vector3[ir].*component;
         }
     };
 
@@ -230,23 +216,19 @@ void surchem::Leps2(const UnitCell& ucell,
     // === VASPsol++ Contribution: - epsilon * kappa^2 * phi ===
     if (kappa2_factor != nullptr)
     {
-        double* phi_real = new double[rho_basis->nrxx];
-        rho_basis->recip2real(phi, phi_real);
+        // 复用 aux_real_ptr 来存储 phi_real，节省内存
+        // 注意：这里覆盖了 aux_real_ptr 的旧数据，这是安全的，因为上面已经用完了
+        rho_basis->recip2real(phi, aux_real_ptr);
+        
         #pragma omp parallel for schedule(static)
         for(int ir = 0; ir < rho_basis->nrxx; ir++)
         {
-            // L = div(eps grad) - eps * kappa^2
-            // 注意: kappa2_factor 是 4pi * d(rho)/d(phi)
-            // 根据 Helmholtz 算符定义，这里应减去线性
-            lp_real[ir] -= epsilon[ir] * kappa2_factor[ir] * phi_real[ir];
+            lp_real_ptr[ir] -= epsilon[ir] * kappa2_factor[ir] * aux_real_ptr[ir];
         }
-        delete[] phi_real;
     }
     // =========================================================
 
-    rho_basis->real2recip(lp_real.data(), lp);
+    rho_basis->real2recip(lp_real_ptr, lp);
 
-    delete[] grad_phi;
-    delete[] grad_grad_phi_G;
-    delete[] tmp_vector3;
+
 }

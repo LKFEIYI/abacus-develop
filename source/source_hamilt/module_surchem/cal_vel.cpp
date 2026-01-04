@@ -249,7 +249,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     if (local_drho > switch_threshold)
     {
         // 误差太大，降级为线性模型 (跑得快，稳)
-        if (GlobalV::MY_RANK == 0) {
+        if (GlobalV::MY_RANK == 0 && target_imp_sol > = 2) {
             std::cout << " [SURCHEM] Large DRHO (" << local_drho 
                       << " > " << switch_threshold 
                       << "), downgrading to Linear Model (imp_sol=1)." << std::endl;
@@ -312,9 +312,7 @@ ModuleBase::matrix surchem::cal_vel(const UnitCell& cell,
     bool use_dielectric_sat = (mode == 3); // imp_sol = 3 only
     double sol_thr_val = (PARAM.inp.sol_thr > 1e-12) ? PARAM.inp.sol_thr : 1.0e-5;
 
-    if (GlobalV::MY_RANK == 0 && mode != target_imp_sol) {
-         std::cout << " [SURCHEM] DRHO Check Triggered: Running in Linear Mode (imp_sol=1) temporarily." << std::endl;
-    }
+
 
     // =========================================================================
     // Nonlinear Loop (VASPsol++) OR Linear Solver (VASPsol)
