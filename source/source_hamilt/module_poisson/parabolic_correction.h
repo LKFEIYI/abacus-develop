@@ -3,6 +3,7 @@
 
 #include "source_base/matrix.h"
 #include <vector>
+#include "source_cell/unitcell.h"
 
 class UnitCell;
 namespace ModulePW { class PW_Basis; }
@@ -19,7 +20,7 @@ public:
                             double* v_hartree, 
                             const double* const* rho_elec, // 修正类型
                             int nspin,                     // 新增参数
-                            double nelec,
+                            //double nelec,
                             int dir);
 
     // 力修正需要单独调用（在力计算模块）

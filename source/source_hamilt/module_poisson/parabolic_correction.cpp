@@ -61,7 +61,7 @@ double ParabolicCorrection::apply_correction(const UnitCell& cell,
                                              double* v_hartree, 
                                              const double* const* rho_elec, 
                                              int nspin,                     
-                                             double nelec,
+                                             //double nelec,
                                              int dir)
 {
     // 基础几何参数
@@ -81,7 +81,7 @@ double ParabolicCorrection::apply_correction(const UnitCell& cell,
     if(slab_center >= 1.0) slab_center -= 1.0;
 
     // 2. 计算电荷与偶极
-    double net_charge = calc_net_charge(cell, nelec); 
+    double net_charge = -PARAM.inp.nelec_delta; 
     double total_dipole = calc_total_dipole(cell, rho_basis, rho_elec, nspin, dir, slab_center);
     
     // 缓存偶极矩供后续力修正使用
@@ -129,14 +129,14 @@ double ParabolicCorrection::apply_correction(const UnitCell& cell,
 // ---------------------------------------------------------
 // 辅助计算函数
 // ---------------------------------------------------------
-double ParabolicCorrection::calc_net_charge(const UnitCell& cell, double nelec)
-{
-    double ion_charge = 0.0;
-    for(int it=0; it<cell.ntype; ++it) {
-        ion_charge += cell.atoms[it].na * cell.atoms[it].ncpp.zv;
-    }
-    return ion_charge - nelec; 
-}
+// double ParabolicCorrection::calc_net_charge(const UnitCell& cell, double nelec)
+// {
+//     double ion_charge = 0.0;
+//     for(int it=0; it<cell.ntype; ++it) {
+//         ion_charge += cell.atoms[it].na * cell.atoms[it].ncpp.zv;
+//     }
+//     return ion_charge - nelec; 
+// }
 
 double ParabolicCorrection::calc_total_dipole(const UnitCell& cell, 
                                               const ModulePW::PW_Basis* rho_basis,

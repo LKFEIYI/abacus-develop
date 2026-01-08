@@ -122,12 +122,12 @@ if (use_parabolic)
         
         // 1. 调用 apply_correction (同时获取离子修正能)
         double e_ion = pc.apply_correction(
-            GlobalC::unitcell,
+            cell,
             rho_basis,
             &v(0, 0),       // 势场指针
             rho,            // 密度指针 (const double* const*)
             nspin,          // 自旋
-            GlobalV::nelec,
+            //GlobalV::nelec,
             dir
         );
 
@@ -143,8 +143,8 @@ if (use_parabolic)
         // 4. 处理 nspin=2 的第二列势场 (能量只需加一次，所以这里不加)
         if (nspin == 2) {
              pc.apply_correction(
-                GlobalC::unitcell, rho_basis, &v(1, 0), 
-                rho, nspin, GlobalV::nelec, dir
+                cell, rho_basis, &v(1, 0), 
+                rho, nspin, dir
             );
         }
     }
