@@ -3,7 +3,7 @@
 
 set( sources
     mt_poisson.cpp
-    parabolic.cpp
+    parabolic_correction.cpp
 )
 
 add_library(hamilt_poisson OBJECT ${sources})

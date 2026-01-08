@@ -168,14 +168,7 @@ double H_Ewald_pw::compute_ewald(const UnitCell& cell,
         // 修改累加公式：加上 term_mt
         ewaldg += fact * std::abs(rhon) * std::abs(rhon) * (term_std + term_mt);
 
-        /* 原代码参考：
-        ewaldg += fact * std::abs(rhon) * std::abs(rhon)
-                  * exp(- rho_basis->gg[ig] * cell.tpiba2 / alpha / 4.0 ) / rho_basis->gg[ig] / cell.tpiba2;
-        */
 
-
-        ewaldg += fact * std::abs(rhon) * std::abs(rhon)
-                  * exp(- rho_basis->gg[ig] * cell.tpiba2 / alpha / 4.0 ) / rho_basis->gg[ig] / cell.tpiba2;
     }
 
     ewaldg = ModuleBase::FOUR_PI / cell.omega * ewaldg;

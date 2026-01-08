@@ -116,40 +116,39 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
             for (int ir = 0; ir < rho_basis->nrxx; ir++)
                 v(is, ir) = Porter[ir].real();
     }
-    if (do_parabolic) 
 if (use_parabolic) 
     {
         ParabolicCorrection pc;
-        // int dir = PARAM.inp.dim_corr_dir;
-
-        // 1. 修正 Spin 1 (Up) 或 Total
-        // 注意：这里传入完整的 rho 和 nspin，模块内部会自动处理密度求和
-        pc.apply_correction(
+        
+        // 1. 调用 apply_correction (同时获取离子修正能)
+        double e_ion = pc.apply_correction(
             GlobalC::unitcell,
             rho_basis,
-            &v(0, 0),       // 修改第一列势场
-            rho,            // 传入完整的 rho 指针 (const double* const*)
-            nspin,          // 传入 nspin
+            &v(0, 0),       // 势场指针
+            rho,            // 密度指针 (const double* const*)
+            nspin,          // 自旋
             GlobalV::nelec,
             dir
         );
 
-        // 2. 如果是 Spin 2 (Down)，必须施加同样的修正
-        // 因为 Hartree 势对 Up 和 Down 电子是一样的
+        // 2. 将离子修正能加到 Hartree 能量中
+        // 这样总能量就正确了
+        H_Hartree_pw::hartree_energy += e_ion;
+        
+        // 3. (可选) 日志输出
+        if (GlobalV::RANK_IN_POOL == 0) {
+            std::cout << " Parabolic Correction Applied. E_ion_corr = " << e_ion << " Ry" << std::endl;
+        }
+
+        // 4. 处理 nspin=2 的第二列势场 (能量只需加一次，所以这里不加)
         if (nspin == 2) {
              pc.apply_correction(
-                GlobalC::unitcell,
-                rho_basis,
-                &v(1, 0),   // 修改第二列势场
-                rho,        // 依然传入同样的 rho，计算出的偶极矩是一样的
-                nspin,
-                GlobalV::nelec,
-                dir
+                GlobalC::unitcell, rho_basis, &v(1, 0), 
+                rho, nspin, GlobalV::nelec, dir
             );
         }
     }
-        // 对于 nspin=4，通常只处理 v(0, :)，因为它是 H_scalar
-    }
+
     ModuleBase::timer::tick("H_Hartree_pw", "v_hartree");
     return v;
 } // end subroutine v_h
