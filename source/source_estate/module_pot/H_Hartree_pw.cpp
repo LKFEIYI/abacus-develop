@@ -5,6 +5,7 @@
 #include "source_base/timer.h"
 #include "source_base/parallel_reduce.h"
 #include "source_hamilt/module_poisson/mt_poisson.h"
+#include "source_hamilt/module_poisson/parabolic_correction.h"
 
 namespace elecstate
 {
@@ -48,6 +49,7 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
     const int ig0 = rho_basis->ig_gge0;
 
     bool use_mt = (PARAM.inp.dim_corr == "mt");
+    bool use_parabolic = (PARAM.inp.dim_corr == "parabolic");
     double tpiba = cell.tpiba;
     double tpiba2 = cell.tpiba2;
     int dir = PARAM.inp.dim_corr_dir;; // 0=x, 1=y, 2=z
@@ -114,7 +116,40 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
             for (int ir = 0; ir < rho_basis->nrxx; ir++)
                 v(is, ir) = Porter[ir].real();
     }
+    if (do_parabolic) 
+if (use_parabolic) 
+    {
+        ParabolicCorrection pc;
+        // int dir = PARAM.inp.dim_corr_dir;
 
+        // 1. 修正 Spin 1 (Up) 或 Total
+        // 注意：这里传入完整的 rho 和 nspin，模块内部会自动处理密度求和
+        pc.apply_correction(
+            GlobalC::unitcell,
+            rho_basis,
+            &v(0, 0),       // 修改第一列势场
+            rho,            // 传入完整的 rho 指针 (const double* const*)
+            nspin,          // 传入 nspin
+            GlobalV::nelec,
+            dir
+        );
+
+        // 2. 如果是 Spin 2 (Down)，必须施加同样的修正
+        // 因为 Hartree 势对 Up 和 Down 电子是一样的
+        if (nspin == 2) {
+             pc.apply_correction(
+                GlobalC::unitcell,
+                rho_basis,
+                &v(1, 0),   // 修改第二列势场
+                rho,        // 依然传入同样的 rho，计算出的偶极矩是一样的
+                nspin,
+                GlobalV::nelec,
+                dir
+            );
+        }
+    }
+        // 对于 nspin=4，通常只处理 v(0, :)，因为它是 H_scalar
+    }
     ModuleBase::timer::tick("H_Hartree_pw", "v_hartree");
     return v;
 } // end subroutine v_h

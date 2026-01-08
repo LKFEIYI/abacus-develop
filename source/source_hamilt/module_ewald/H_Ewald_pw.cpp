@@ -172,7 +172,7 @@ double H_Ewald_pw::compute_ewald(const UnitCell& cell,
         ewaldg += fact * std::abs(rhon) * std::abs(rhon)
                   * exp(- rho_basis->gg[ig] * cell.tpiba2 / alpha / 4.0 ) / rho_basis->gg[ig] / cell.tpiba2;
         */
-    }
+
 
         ewaldg += fact * std::abs(rhon) * std::abs(rhon)
                   * exp(- rho_basis->gg[ig] * cell.tpiba2 / alpha / 4.0 ) / rho_basis->gg[ig] / cell.tpiba2;
