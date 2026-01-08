@@ -698,9 +698,9 @@ struct Input_para
     int dsp_count = 4;   /// the count of dsp hardwares in one node
 
     // ==============   #Parameters (26.uncommon hardware) =================
-    std::string dim_corr = 'mt';
+    std::string dim_corr = "mt";
     int dim_corr_dir = 1; // x 0, y 1, z 3  abacus could have the best performance when x/y
-    std::string mt_type = '2D';
+    std::string mt_type = "2D";
 
 };
 #endif
