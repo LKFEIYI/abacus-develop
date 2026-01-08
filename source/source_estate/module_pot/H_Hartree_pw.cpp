@@ -134,11 +134,10 @@ if (use_parabolic)
         // 2. 将离子修正能加到 Hartree 能量中
         // 这样总能量就正确了
         H_Hartree_pw::hartree_energy += e_ion;
-        
         // 3. (可选) 日志输出
         if (GlobalV::RANK_IN_POOL == 0) {
             std::cout << " Parabolic Correction Applied. E_ion_corr = " << e_ion << " Ry" << std::endl;
-        }
+        }   
 
         // 4. 处理 nspin=2 的第二列势场 (能量只需加一次，所以这里不加)
         if (nspin == 2) {

@@ -92,8 +92,8 @@ double ParabolicCorrection::apply_correction(const UnitCell& cell,
     double e_ion_corr = calc_energy_correction(cell, dir, net_charge, total_dipole, vacuum_center);
 
     // 4. 构造 1D 修正势并叠加到 v_hartree
-    double factor = (ModuleBase::FOUR_PI / area) * ModuleBase::e2;
-    int nrxx = rho_basis->nrxx; 
+    double factor = (ModuleBase::FOUR_PI / omega) * ModuleBase::e2;   
+    int nrxx = rho_basis->nrxx;
 
     #ifdef _OPENMP
     #pragma omp parallel for
@@ -122,6 +122,15 @@ double ParabolicCorrection::apply_correction(const UnitCell& cell,
 
         v_hartree[ir] += v_corr;
     }
+    if (GlobalV::RANK_IN_POOL == 0) {
+    std::cout << "DEBUG PARABOLIC:" << std::endl;
+    std::cout << "  nelec_delta (Input): " << PARAM.inp.nelec_delta << std::endl;
+    std::cout << "  net_charge (Used):   " << net_charge << std::endl;
+    //std::cout << "  Calculated Q (Ion-Elec): " << calc_net_charge(cell, GlobalV::nelec) << std::endl;
+    std::cout << "  Total Dipole:        " << total_dipole << std::endl;
+    std::cout << "  Slab Center:         " << slab_center << std::endl;
+    std::cout << "  Factor:              " << factor << std::endl;
+}
 
     // 返回离子修正能，方便外部加到 Total Energy
     return e_ion_corr;
@@ -227,7 +236,7 @@ double ParabolicCorrection::calc_energy_correction(const UnitCell& cell,
     else lat_vec = cell.a3.norm() * cell.lat0;
     
     double area = cell.omega / lat_vec;
-    double factor = (ModuleBase::FOUR_PI / area) * ModuleBase::e2;
+    double factor = (ModuleBase::FOUR_PI / cell.omega) * ModuleBase::e2;
     
     double slab_center = vacuum_center + 0.5;
     if(slab_center >= 1.0) slab_center -= 1.0;
@@ -265,11 +274,14 @@ void ParabolicCorrection::calc_force_correction(const UnitCell& cell,
                                                 double vacuum_center,
                                                 double area)
 {
-    double factor = (ModuleBase::FOUR_PI / area) * ModuleBase::e2;
+    double factor = (ModuleBase::FOUR_PI / cell.omega) * ModuleBase::e2;
     double slab_center = vacuum_center + 0.5;
     if(slab_center >= 1.0) slab_center -= 1.0;
     
-    double lat_vec = cell.omega / area; // 反推 L
+    double lat_vec = 0.0;
+    if (dir == 0) lat_vec = cell.a1.norm() * cell.lat0;
+    else if (dir == 1) lat_vec = cell.a2.norm() * cell.lat0;
+    else lat_vec = cell.a3.norm() * cell.lat0;
 
     int iat = 0;
     for(int it=0; it<cell.ntype; ++it) {
