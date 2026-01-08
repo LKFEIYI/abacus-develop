@@ -1,7 +1,7 @@
 #ifndef PARABOLIC_CORRECTION_H
 #define PARABOLIC_CORRECTION_H
 
-#include "module_base/matrix.h"
+#include "source_base/matrix.h"
 #include <vector>
 
 class UnitCell;
