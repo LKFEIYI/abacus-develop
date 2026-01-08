@@ -1,9 +1,9 @@
 #include "mt_poisson.h"
-#include "module_base/constants.h" // 获取 PI, FOUR_PI
+#include "source_base/constants.h" // 获取 PI, FOUR_PI
 #include <iostream>
 
 // 如果需要报错功能
-#include "module_base/global_function.h" 
+#include "source_base/global_function.h" 
 
 double MTPoisson::get_screen_val_g0(double L, std::string type) {
     // 对应 CP2K 逻辑: IF (grid%have_g0) screen_function%array(1) = pi*zlength*zlength/2.0_dp

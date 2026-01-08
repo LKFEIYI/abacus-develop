@@ -7,6 +7,7 @@
 #include "source_base/constants.h"
 #include "source_base/timer.h"
 #include "source_pw/module_pwdft/global.h"
+#include "source_hamilt/module_poisson/mt_poisson.h"
 
 double H_Ewald_pw::alpha=0.0;
 int H_Ewald_pw::mxr = 200;
@@ -123,6 +124,17 @@ double H_Ewald_pw::compute_ewald(const UnitCell& cell,
 	// but that's not the term "gamma_only" I want to use in LCAO,  
 	fact = 1.0;
 
+    bool use_mt = (PARAM.inp.dim_corr == "mt");
+    int dir = PARAM.inp.dim_corr_dir;
+    double L = 0.0;
+    if (use_mt) {
+        if (dir == 0) L = cell.a1.norm() * cell.lat0;      // X方向
+        else if (dir == 1) L = cell.a2.norm() * cell.lat0; // Y方向
+        else if (dir == 2) L = cell.a3.norm() * cell.lat0; // Z方向
+    }
+
+
+
     //GlobalV::ofs_running << "\n pwb.gstart = " << pwb.gstart << std::endl;
     const int ig0 = rho_basis->ig_gge0;
     for (int ig = 0; ig < rho_basis->npw; ig++)
@@ -138,6 +150,30 @@ double H_Ewald_pw::compute_ewald(const UnitCell& cell,
                 rhon += static_cast<double>(cell.atoms[it].ncpp.zv) * conj(strucFac(it, ig));
             }
         }
+        double g2_phys = rho_basis->gg[ig] * cell.tpiba2;
+        double term_std = exp(- g2_phys / alpha / 4.0 ) / g2_phys;
+        double term_mt = 0.0;
+        if (use_mt) {
+            ModuleBase::Vector3<double> g_vec = rho_basis->gcar[ig] * cell.tpiba;
+            
+            // get_screen_val 返回的值包含 4pi 因子 (类似 4pi/G^2)
+            double screen_val = MTPoisson::get_screen_val(g2_phys, g_vec, L, 0, PARAM.inp.mt_type, dir);
+            
+            // 因为 ewaldg 在循环外会统一乘以 (FOUR_PI / omega)
+            // 所以这里我们需要除以 FOUR_PI，使得 screen_val 被正确还原
+            // (screen_val / 4pi) * (4pi / omega) = screen_val / omega -> 正确的能量密度形式
+            term_mt = screen_val / ModuleBase::FOUR_PI;
+        }
+
+        // 修改累加公式：加上 term_mt
+        ewaldg += fact * std::abs(rhon) * std::abs(rhon) * (term_std + term_mt);
+
+        /* 原代码参考：
+        ewaldg += fact * std::abs(rhon) * std::abs(rhon)
+                  * exp(- rho_basis->gg[ig] * cell.tpiba2 / alpha / 4.0 ) / rho_basis->gg[ig] / cell.tpiba2;
+        */
+    }
+
         ewaldg += fact * std::abs(rhon) * std::abs(rhon)
                   * exp(- rho_basis->gg[ig] * cell.tpiba2 / alpha / 4.0 ) / rho_basis->gg[ig] / cell.tpiba2;
     }

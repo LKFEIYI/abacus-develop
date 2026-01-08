@@ -4,6 +4,7 @@
 #include "source_base/constants.h"
 #include "source_base/timer.h"
 #include "source_base/parallel_reduce.h"
+#include "source_hamilt/module_poisson/mt_poisson.h"
 
 namespace elecstate
 {
@@ -49,7 +50,7 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
     bool use_mt = (PARAM.inp.dim_corr == "mt");
     double tpiba = cell.tpiba;
     double tpiba2 = cell.tpiba2;
-    int dir = INPUT.mt_special_dimension; // 0=x, 1=y, 2=z
+    int dir = PARAM.inp.dim_corr_dir;; // 0=x, 1=y, 2=z
     double L = 0.0;
     if (dir == 0) L = cell.a1.norm() * cell.lat0; // X方向, 注意乘以 lat0 (Bohr)
     else if (dir == 1) L = cell.a2.norm() * cell.lat0; // Y方向
@@ -60,21 +61,12 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
 #endif
     for (int ig = 0; ig < rho_basis->npw; ig++)
     {
-        double g2 = tpiba2 * rho_basis->gg[ig];
+            
+	    double g2 = tpiba2 * rho_basis->gg[ig];
 
         if (ig == ig0) 
         {
-            if (use_mt)
-            {
-                double screen_val0 = MTPoisson::get_screen_val_g0(L, PARAM.inp.mt_type);
-                double fac0 = ModuleBase::e2 * screen_val0;
-                double rho_g0_sq = (conj(Porter[ig]) * Porter[ig]).real();
-                ehart += rho_g0_sq * fac0;
-                vh_g[ig] = fac0 * Porter[ig];
-            }
-            else{
-                vh_g[ig] = std::complex<double>(0.0, 0.0);
-            }
+            vh_g[ig] = std::complex<double>(0.0, 0.0);
             continue; // skip G=0
         }
         double fac = ModuleBase::e2 * ModuleBase::FOUR_PI / g2;
