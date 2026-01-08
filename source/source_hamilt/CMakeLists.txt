@@ -1,11 +1,13 @@
 add_subdirectory(module_vdw)
 add_subdirectory(module_surchem)
 add_subdirectory(module_xc)
+add_subdirectory(module_poisson)
 
 list(APPEND objects
     operator.cpp
     module_ewald/H_Ewald_pw.cpp
     module_ewald/dnrm2.cpp
+    module_poisson/mt_poisson.cpp
 )
 
 add_library(

@@ -45,16 +45,47 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
 
     std::vector<std::complex<double>> vh_g(rho_basis->npw);
     const int ig0 = rho_basis->ig_gge0;
+
+    bool use_mt = (PARAM.inp.dim_corr == "mt");
+    double tpiba = cell.tpiba;
+    double tpiba2 = cell.tpiba2;
+    int dir = INPUT.mt_special_dimension; // 0=x, 1=y, 2=z
+    double L = 0.0;
+    if (dir == 0) L = cell.a1.norm() * cell.lat0; // X方向, 注意乘以 lat0 (Bohr)
+    else if (dir == 1) L = cell.a2.norm() * cell.lat0; // Y方向
+    else if (dir == 2) L = cell.a3.norm() * cell.lat0; // Z方向
+
 #ifdef _OPENMP
 #pragma omp parallel for reduction(+:ehart)
 #endif
     for (int ig = 0; ig < rho_basis->npw; ig++)
     {
+        double g2 = tpiba2 * rho_basis->gg[ig];
+
         if (ig == ig0) 
         {
+            if (use_mt)
+            {
+                double screen_val0 = MTPoisson::get_screen_val_g0(L, PARAM.inp.mt_type);
+                double fac0 = ModuleBase::e2 * screen_val0;
+                double rho_g0_sq = (conj(Porter[ig]) * Porter[ig]).real();
+                ehart += rho_g0_sq * fac0;
+                vh_g[ig] = fac0 * Porter[ig];
+            }
+            else{
+                vh_g[ig] = std::complex<double>(0.0, 0.0);
+            }
             continue; // skip G=0
         }
-        const double fac = ModuleBase::e2 * ModuleBase::FOUR_PI / (cell.tpiba2 * rho_basis->gg[ig]);
+        double fac = ModuleBase::e2 * ModuleBase::FOUR_PI / g2;
+        if (use_mt)
+        {
+            ModuleBase::Vector3<double> g_vec = rho_basis->gcar[ig] * tpiba;
+            
+            double screen_val = MTPoisson::get_screen_val(g2, g_vec, L, 0, PARAM.inp.mt_type, dir); //alpha is not used now
+
+            fac += ModuleBase::e2 * screen_val;
+        }
         ehart += (conj(Porter[ig]) * Porter[ig]).real() * fac;
         vh_g[ig] = fac * Porter[ig];
         

@@ -130,6 +130,25 @@ void ReadInput::item_model()
         this->add_item(item);
     }
 
+    // MT correction
+        {
+        Input_Item item("dim_corr");
+        item.annotation = "how to correct dimession";
+        read_sync_double(input.dim_corr);
+        this->add_item(item);
+    }
+        {
+        Input_Item item("dim_corr_dir");
+        item.annotation = "the direction for correction";
+        read_sync_double(input.mt_special_dimension);
+        this->add_item(item);
+    }
+        {
+        Input_Item item("mt_type");
+        item.annotation = "MT correction type 2D/0D 0D is not implemented";
+        read_sync_double(input.mt_type);
+        this->add_item(item);
+    }
     // vdW Correction
     {
         Input_Item item("vdw_method");
