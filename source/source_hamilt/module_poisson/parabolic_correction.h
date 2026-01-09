@@ -38,6 +38,12 @@ public:
     
     // 获取偶极矩的接口，方便力修正使用
     double get_last_total_dipole() const { return last_total_dipole_; }
+    double calc_total_quadrupole(const UnitCell& cell, 
+                                 const ModulePW::PW_Basis* rho_basis,
+                                 const double* const* rho_elec, 
+                                 int nspin,
+                                 int dir, 
+                                 double center);
 
 private:
     double calc_total_dipole(const UnitCell& cell, 
@@ -60,10 +66,18 @@ private:
                                   int dir,
                                   double net_charge,
                                   double total_dipole,
-                                  double vacuum_center);
+                                  double vacuum_center,
+                                  double v_const);
 
     // 缓存一些中间变量供力修正使用，避免重复计算
     double last_total_dipole_ = 0.0;
+    double calc_ion_quadrupole(const UnitCell& cell, int dir, double center);
+    double calc_elec_quadrupole(const ModulePW::PW_Basis* rho_basis, 
+                                const double* const* rho_elec, 
+                                int nspin, 
+                                int dir, 
+                                double center, 
+                                double omega);
 };
 
 #endif
