@@ -72,14 +72,7 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
             continue; // skip G=0
         }
         double fac = ModuleBase::e2 * ModuleBase::FOUR_PI / g2;
-        if (use_mt)
-        {
-            ModuleBase::Vector3<double> g_vec = rho_basis->gcar[ig] * tpiba;
-            
-            double screen_val = MTPoisson::get_screen_val(g2, g_vec, L, 0, PARAM.inp.mt_type, dir); //alpha is not used now
-
-            fac += ModuleBase::e2 * screen_val;
-        }
+       
         ehart += (conj(Porter[ig]) * Porter[ig]).real() * fac;
         vh_g[ig] = fac * Porter[ig];
         
@@ -116,6 +109,34 @@ ModuleBase::matrix H_Hartree_pw::v_hartree(const UnitCell &cell,
             for (int ir = 0; ir < rho_basis->nrxx; ir++)
                 v(is, ir) = Porter[ir].real();
     }
+
+if (PARAM.inp.dim_corr == "mt") 
+{
+    MTCorrection mt;
+    std::vector<double> v_corr(rho_basis->nrxx, 0.0);
+    
+    // 计算修正
+    double e_mt = mt.apply_correction(cell, rho_basis, v_corr.data(), rho, nspin, dir);
+    
+    // 叠加势场 (Total Spin)
+    for (int ir = 0; ir < rho_basis->nrxx; ir++) {
+        v(0, ir) += v_corr[ir];
+    }
+    // 如果有自旋，Spin down 也要加上同样的静电势修正
+    if (nspin == 2) {
+        for (int ir = 0; ir < rho_basis->nrxx; ir++) {
+            v(1, ir) += v_corr[ir];
+        }
+    }
+    
+    // 修正能量
+    H_Hartree_pw::hartree_energy += e_mt;
+    
+    if (GlobalV::RANK_IN_POOL == 0) {
+        std::cout << " MT Correction Applied. Energy correction = " << e_mt << " Ry" << std::endl;
+    }
+}
+
 if (use_parabolic) 
     {
         ParabolicCorrection pc;

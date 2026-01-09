@@ -2,7 +2,7 @@
 
 
 set( sources
-    mt_poisson.cpp
+    mt_correction.cpp
     parabolic_correction.cpp
 )
 
