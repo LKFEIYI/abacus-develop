@@ -8,6 +8,7 @@ list(APPEND objects
     module_ewald/H_Ewald_pw.cpp
     module_ewald/dnrm2.cpp
     module_poisson/mt_correction.cpp
+    module_poisson/mt_poisson.cpp
     module_poisson/parabolic_correction.cpp
 )
 
