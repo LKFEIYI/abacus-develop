@@ -281,7 +281,7 @@ double ParabolicCorrection::calc_energy_correction(const UnitCell& cell,
 
             // V_corr at atom position
             double v_at_atom = factor * ( -0.5 * net_charge * dist_bohr * dist_bohr 
-                                          + total_dipole * dist_bohr ) + v_const;
+                                          - total_dipole * dist_bohr ) + v_const;
             
             e_corr += Z * v_at_atom;
         }
