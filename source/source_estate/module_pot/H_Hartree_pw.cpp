@@ -4,7 +4,7 @@
 #include "source_base/constants.h"
 #include "source_base/timer.h"
 #include "source_base/parallel_reduce.h"
-#include "source_hamilt/module_poisson/mt_poisson.h"
+#include "source_hamilt/module_poisson/mt_correction.h"
 #include "source_hamilt/module_poisson/parabolic_correction.h"
 
 namespace elecstate
