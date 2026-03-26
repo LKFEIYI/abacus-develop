@@ -88,16 +88,16 @@ class surchem
                    std::vector<double>& res);
 
     void minimize_cg(const UnitCell& ucell,
-                     const ModulePW::PW_Basis* rho_basis,
-                     double* d_eps,
-                     const std::complex<double>* tot_N,
-                     std::complex<double>* phi,
-                     int& ncgsol);
+                 const ModulePW::PW_Basis* rho_basis,
+                 double* chi[3][3], // <--- 修改这里
+                 const std::complex<double>* tot_N,
+                 std::complex<double>* phi,
+                 int& ncgsol);
 
     void Leps2(const UnitCell& ucell,
                const ModulePW::PW_Basis* rho_basis,
                std::complex<double>* phi,
-               double* epsilon,            // epsilon from shapefunc, dim=nrxx
+               double* chi[3][3],            // epsilon from shapefunc, dim=nrxx
                std::complex<double>* gradphi_G_work,
                std::complex<double>* lp,
                ModuleBase::Vector3<double>* grad_phi_R,   // size: nrxx
@@ -132,7 +132,29 @@ class surchem
     void get_totn_reci(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis, std::complex<double>* totn_reci);
 
     void induced_charge(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis, double* induced_rho) const;
+    void minimize_cg_linear(const UnitCell& ucell,
+                        const ModulePW::PW_Basis* rho_basis,
+                        double* chi[3][3],
+                        const std::complex<double>* rhs, // 传入残差
+                        std::complex<double>* dphi,      // 输出修正量
+                        int& ncgsol,
+                      double cg_tol);
 
+void update_nlpb_and_chi(const UnitCell& ucell,
+                               const ModulePW::PW_Basis* rho_basis,
+                               std::complex<double>* phi,
+                               const std::complex<double>* B,
+                               const double* epsilon_linear,
+                               double* chi[3][3],
+                               std::complex<double>* rhs,
+                               double& rms);
+
+void cal_vel_nlpcm(const UnitCell& cell,
+                   const ModulePW::PW_Basis* rho_basis,
+                   std::complex<double>* TOTN,
+                   std::complex<double>* PS_TOTN,
+                   int nspin,
+                   ModuleBase::matrix& v);
   private:
 };
 

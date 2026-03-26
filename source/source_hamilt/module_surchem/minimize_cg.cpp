@@ -3,7 +3,7 @@
 
 void surchem::minimize_cg(const UnitCell& ucell,
                           const ModulePW::PW_Basis* rho_basis,
-                          double* d_eps,
+                          double* chi[3][3],
                           const std::complex<double>* tot_N,
                           std::complex<double>* phi,
                           int& ncgsol)
@@ -63,7 +63,7 @@ void surchem::minimize_cg(const UnitCell& ucell,
 
     // call leps to calculate div ( epsilon * grad ) phi
     // Updated Leps2 call with new buffers
-    Leps2(ucell, rho_basis, phi, d_eps, gradphi_G_work, lp,
+    Leps2(ucell, rho_basis, phi, chi, gradphi_G_work, lp,
           aux_grad_phi, aux_grad_grad_phi_real);
 
     // the residue
@@ -101,7 +101,7 @@ void surchem::minimize_cg(const UnitCell& ucell,
         }
 
         // Updated Leps2 call inside loop
-        Leps2(ucell, rho_basis, d, d_eps, gradphi_G_work, lp,
+        Leps2(ucell, rho_basis, d, chi, gradphi_G_work, lp,
               aux_grad_phi, aux_grad_grad_phi_real);
 
         // calculate alpha
@@ -167,7 +167,7 @@ void surchem::minimize_cg(const UnitCell& ucell,
 void surchem::Leps2(const UnitCell& ucell,
                     const ModulePW::PW_Basis* rho_basis,
                     std::complex<double>* phi,
-                    double* epsilon, // epsilon from shapefunc, dim=nrxx
+                    double* chi[3][3], // epsilon from shapefunc, dim=nrxx
                     std::complex<double>* gradphi_G_work,
                     std::complex<double>* lp,
                     ModuleBase::Vector3<double>* grad_phi_R,   // size: nrxx
@@ -179,9 +179,13 @@ void surchem::Leps2(const UnitCell& ucell,
 
     for (int ir = 0; ir < rho_basis->nrxx; ir++)
     {
-        grad_phi_R[ir].x *= epsilon[ir];
-        grad_phi_R[ir].y *= epsilon[ir];
-        grad_phi_R[ir].z *= epsilon[ir];
+        double gx = grad_phi_R[ir].x;
+        double gy = grad_phi_R[ir].y;
+        double gz = grad_phi_R[ir].z;
+
+        grad_phi_R[ir].x = chi[0][0][ir] * gx + chi[0][1][ir] * gy + chi[0][2][ir] * gz;
+        grad_phi_R[ir].y = chi[1][0][ir] * gx + chi[1][1][ir] * gy + chi[1][2][ir] * gz;
+        grad_phi_R[ir].z = chi[2][0][ir] * gx + chi[2][1][ir] * gy + chi[2][2][ir] * gz;
     }
 
 
@@ -213,4 +217,103 @@ void surchem::Leps2(const UnitCell& ucell,
     for(int ig=0; ig<rho_basis->npw; ig++) {
         lp[ig] *= ucell.tpiba; 
     }
+}
+
+void surchem::minimize_cg_linear(const UnitCell& ucell,
+                                 const ModulePW::PW_Basis* rho_basis,
+                                 double* chi[3][3],
+                                 const std::complex<double>* rhs,
+                                 std::complex<double>* dphi,
+                                 int& ncgsol,
+                                double cg_tol)
+{
+    double alpha = 0, beta = 0, rinvLr = 0, r2 = 0;
+    
+    // 【关键】：初始修正量必须是 0
+    ModuleBase::GlobalFunc::ZEROS(dphi, rho_basis->npw);
+    
+    std::complex<double> *resid = new std::complex<double>[rho_basis->npw];
+    std::complex<double> *z = new std::complex<double>[rho_basis->npw];
+    std::complex<double> *lp = new std::complex<double>[rho_basis->npw];
+    std::complex<double> *gsqu = new std::complex<double>[rho_basis->npw];
+    std::complex<double> *d = new std::complex<double>[rho_basis->npw];
+    std::complex<double> *gradphi_G_work = new std::complex<double>[rho_basis->npw];
+
+    ModuleBase::Vector3<double> *aux_grad_phi = new ModuleBase::Vector3<double>[rho_basis->nrxx];
+    double *aux_grad_grad_phi_real = new double[rho_basis->nrxx];
+
+    ModuleBase::GlobalFunc::ZEROS(resid, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(z, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(d, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(lp, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(gsqu, rho_basis->npw);
+    ModuleBase::GlobalFunc::ZEROS(gradphi_G_work, rho_basis->npw);
+
+    const int ig0 = rho_basis->ig_gge0;
+    double gg = 0;
+    for (int ig = 0; ig < rho_basis->npw; ig++)
+    {
+        if(ig == ig0) continue;
+        gg = rho_basis->gg[ig];
+        gsqu[ig].real(1.0 / (gg * ucell.tpiba2)); 
+        gsqu[ig].imag(0);
+    }
+
+    // 【关键】：直接将传入的 rhs 作为初始残差 (因为 L(0) = 0)
+    for (int ig = 0; ig < rho_basis->npw; ig++)
+    {
+        if(ig == ig0) continue;
+        resid[ig] = rhs[ig];
+    }
+
+    // 计算预条件子和初始方向
+    for (int ig = 0; ig < rho_basis->npw; ig++)
+    {
+        if(ig == ig0) continue;
+        z[ig].real(gsqu[ig].real() * resid[ig].real());
+        z[ig].imag(gsqu[ig].real() * resid[ig].imag());
+        d[ig] = z[ig];
+    }
+    
+    rinvLr = ModuleBase::GlobalFunc::ddot_real(rho_basis->npw, resid, z);
+    r2 = ModuleBase::GlobalFunc::ddot_real(rho_basis->npw, resid, resid);
+
+    int count = 0;
+    while (count < 2000 && sqrt(r2) > cg_tol && sqrt(rinvLr) > 1e-10)
+    {
+        // 传入 dphi (数组d) 和 chi
+        Leps2(ucell, rho_basis, d, chi, gradphi_G_work, lp, aux_grad_phi, aux_grad_grad_phi_real);
+
+        alpha = -rinvLr / ModuleBase::GlobalFunc::ddot_real(rho_basis->npw, d, lp);
+        
+        for (int ig = 0; ig < rho_basis->npw; ig++)
+        {
+            if(ig == ig0) continue;
+            dphi[ig] += alpha * d[ig];
+            resid[ig] += alpha * lp[ig];
+        }
+
+        for (int ig = 0; ig < rho_basis->npw; ig++)
+        {
+            if(ig == ig0) continue;
+            z[ig] = gsqu[ig] * resid[ig];
+        }
+
+        beta = 1.0 / rinvLr;
+        rinvLr = ModuleBase::GlobalFunc::ddot_real(rho_basis->npw, resid, z);
+        beta *= rinvLr;
+        
+        for (int ig = 0; ig < rho_basis->npw; ig++)
+        {
+            if(ig == ig0) continue;
+            d[ig] = beta * d[ig] + z[ig];
+        }
+        r2 = ModuleBase::GlobalFunc::ddot_real(rho_basis->npw, resid, resid);
+        count++;
+    }
+
+    ncgsol = count;
+
+    delete[] resid; delete[] z; delete[] lp; delete[] gsqu; delete[] d; delete[] gradphi_G_work;
+    delete[] aux_grad_phi; delete[] aux_grad_grad_phi_real;
 }

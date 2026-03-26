@@ -54,7 +54,7 @@ void surchem::v_correction(const UnitCell& cell,
     }
     ModuleBase::GlobalFunc::ZEROS(v.c, nspin * rho_basis->nrxx);
 
-    cal_vel(cell, rho_basis, total_n, ps_totn, nspin, v);
+    cal_vel_nlpcm(cell, rho_basis, total_n, ps_totn, nspin, v);
     cal_vcav(cell, rho_basis, ps_totn, nspin, v);
 
     delete[] porter;
