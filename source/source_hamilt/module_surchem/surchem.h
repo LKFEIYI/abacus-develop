@@ -23,6 +23,13 @@ class surchem
     ModuleBase::matrix Vcav;
     ModuleBase::matrix Vel;
     double qs;
+    // 【新增】：用于存储上一次 SCF 步的电势，作为牛顿迭代的极佳初猜
+std::complex<double>* phi_history = nullptr;
+    std::complex<double>* phi0_history = nullptr;
+    bool is_phi_history_allocated = false; 
+    
+    // 【新增】：记录当前记忆数组的 G 空间网格大小
+    int history_npw = 0;
 
     static double Acav;
     static double Ael;
@@ -90,6 +97,7 @@ class surchem
     void minimize_cg(const UnitCell& ucell,
                  const ModulePW::PW_Basis* rho_basis,
                  double* chi[3][3], // <--- 修改这里
+                 double* ekappa2,
                  const std::complex<double>* tot_N,
                  std::complex<double>* phi,
                  int& ncgsol);
@@ -98,6 +106,7 @@ class surchem
                const ModulePW::PW_Basis* rho_basis,
                std::complex<double>* phi,
                double* chi[3][3],            // epsilon from shapefunc, dim=nrxx
+               double* ekappa2,
                std::complex<double>* gradphi_G_work,
                std::complex<double>* lp,
                ModuleBase::Vector3<double>* grad_phi_R,   // size: nrxx
@@ -135,6 +144,7 @@ class surchem
     void minimize_cg_linear(const UnitCell& ucell,
                         const ModulePW::PW_Basis* rho_basis,
                         double* chi[3][3],
+                        double* ekappa2,
                         const std::complex<double>* rhs, // 传入残差
                         std::complex<double>* dphi,      // 输出修正量
                         int& ncgsol,
@@ -146,6 +156,7 @@ void update_nlpb_and_chi(const UnitCell& ucell,
                                const std::complex<double>* B,
                                const double* epsilon_linear,
                                double* chi[3][3],
+                               double* ekappa2,
                                std::complex<double>* rhs,
                                double& rms);
 

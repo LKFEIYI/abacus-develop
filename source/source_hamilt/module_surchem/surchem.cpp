@@ -53,6 +53,14 @@ void surchem::clear()
 
     this->Vcav.create(0, 0); 
     this->Vel.create(0, 0);
+if (this->is_phi_history_allocated) {
+        delete[] this->phi_history;
+        delete[] this->phi0_history;
+        this->phi_history = nullptr;
+        this->phi0_history = nullptr;
+        this->is_phi_history_allocated = false;
+        this->history_npw = 0;
+    }
 }
 
 surchem::~surchem()

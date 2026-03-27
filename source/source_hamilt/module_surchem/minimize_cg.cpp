@@ -4,6 +4,7 @@
 void surchem::minimize_cg(const UnitCell& ucell,
                           const ModulePW::PW_Basis* rho_basis,
                           double* chi[3][3],
+                          double* ekappa2,
                           const std::complex<double>* tot_N,
                           std::complex<double>* phi,
                           int& ncgsol)
@@ -63,7 +64,7 @@ void surchem::minimize_cg(const UnitCell& ucell,
 
     // call leps to calculate div ( epsilon * grad ) phi
     // Updated Leps2 call with new buffers
-    Leps2(ucell, rho_basis, phi, chi, gradphi_G_work, lp,
+    Leps2(ucell, rho_basis, phi, chi,ekappa2, gradphi_G_work, lp,
           aux_grad_phi, aux_grad_grad_phi_real);
 
     // the residue
@@ -101,7 +102,7 @@ void surchem::minimize_cg(const UnitCell& ucell,
         }
 
         // Updated Leps2 call inside loop
-        Leps2(ucell, rho_basis, d, chi, gradphi_G_work, lp,
+        Leps2(ucell, rho_basis, d, chi,ekappa2 ,gradphi_G_work, lp,
               aux_grad_phi, aux_grad_grad_phi_real);
 
         // calculate alpha
@@ -168,6 +169,7 @@ void surchem::Leps2(const UnitCell& ucell,
                     const ModulePW::PW_Basis* rho_basis,
                     std::complex<double>* phi,
                     double* chi[3][3], // epsilon from shapefunc, dim=nrxx
+                    double* ekappa2,
                     std::complex<double>* gradphi_G_work,
                     std::complex<double>* lp,
                     ModuleBase::Vector3<double>* grad_phi_R,   // size: nrxx
@@ -217,11 +219,29 @@ void surchem::Leps2(const UnitCell& ucell,
     for(int ig=0; ig<rho_basis->npw; ig++) {
         lp[ig] *= ucell.tpiba; 
     }
+    if (ekappa2 != nullptr) {
+        double* phi_real = new double[rho_basis->nrxx];
+        rho_basis->recip2real(phi, phi_real);
+        
+        for (int ir = 0; ir < rho_basis->nrxx; ir++) {
+            // L(phi) = \nabla(\chi \nabla \phi) - \kappa^2 \phi
+            aux_R[ir] = -ekappa2[ir] * phi_real[ir];
+        }
+        
+        // 复用 gradphi_G_work 数组进行 FFT 回到 G 空间
+        rho_basis->real2recip(aux_R, gradphi_G_work);
+        
+        for (int ig = 0; ig < rho_basis->npw; ig++) {
+            lp[ig] += gradphi_G_work[ig]; // 叠加屏蔽项到总残差
+        }
+        delete[] phi_real;
+    }
 }
 
 void surchem::minimize_cg_linear(const UnitCell& ucell,
                                  const ModulePW::PW_Basis* rho_basis,
                                  double* chi[3][3],
+                                 double* ekappa2,
                                  const std::complex<double>* rhs,
                                  std::complex<double>* dphi,
                                  int& ncgsol,
@@ -282,7 +302,7 @@ void surchem::minimize_cg_linear(const UnitCell& ucell,
     while (count < 2000 && sqrt(r2) > cg_tol && sqrt(rinvLr) > 1e-10)
     {
         // 传入 dphi (数组d) 和 chi
-        Leps2(ucell, rho_basis, d, chi, gradphi_G_work, lp, aux_grad_phi, aux_grad_grad_phi_real);
+        Leps2(ucell, rho_basis, d, chi, ekappa2, gradphi_G_work, lp, aux_grad_phi, aux_grad_grad_phi_real);
 
         alpha = -rinvLr / ModuleBase::GlobalFunc::ddot_real(rho_basis->npw, d, lp);
         

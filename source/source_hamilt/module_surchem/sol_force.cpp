@@ -104,38 +104,17 @@ void surchem::force_cor_two(const UnitCell& cell, const ModulePW::PW_Basis* rho_
              ModuleBase::GlobalFunc::ZEROS(n_pseudo, rho_basis->npw);
             for (int ig = 0; ig < rho_basis->npw; ig++)
             {
-                // G^2
-                double gg = rho_basis->gg[ig];
-                gg = gg * cell.tpiba2;
-                std::complex<double> phase = exp( ModuleBase::NEG_IMAG_UNIT *ModuleBase::TWO_PI * ( rho_basis->gcar[ig] * cell.atoms[it].tau[ia]));
-
-                n_pseudo[ig].real((this->GetAtom.atom_Z[cell.atoms[it].ncpp.psd] - cell.atoms[it].ncpp.zv)
-                                  * phase.real() * exp(-0.5 * gg * (sigma_rc_k * sigma_rc_k)));
-                n_pseudo[ig].imag((this->GetAtom.atom_Z[cell.atoms[it].ncpp.psd] - cell.atoms[it].ncpp.zv)
-                                  * phase.imag() * exp(-0.5 * gg * (sigma_rc_k * sigma_rc_k)));
-            }
-            
-            for (int ig = 0; ig < rho_basis->npw; ig++)
-            {   
-                n_pseudo[ig] /= cell.omega;
-            }
-            for (int ig = 0; ig < rho_basis->npw; ig++)
-            {
-                forcesol(iat, 0) -= rho_basis->gcar[ig][0] * imag(conj(Vcav_g[ig]+Vel_g[ig]) * n_pseudo[ig]);
-                forcesol(iat, 1) -= rho_basis->gcar[ig][1] * imag(conj(Vcav_g[ig]+Vel_g[ig]) * n_pseudo[ig]);
-                forcesol(iat, 2) -= rho_basis->gcar[ig][2] * imag(conj(Vcav_g[ig]+Vel_g[ig]) * n_pseudo[ig]);
+                // 【核心修复 1】：Vcav_g 是 Rydberg, Vel_g 是 Hartree。相加前必须把 Vel_g 乘 2 统一到 Rydberg！
+                std::complex<double> pot_g = Vcav_g[ig] + 2.0 * Vel_g[ig];
+                
+                forcesol(iat, 0) -= rho_basis->gcar[ig][0] * imag(conj(pot_g) * n_pseudo[ig]);
+                forcesol(iat, 1) -= rho_basis->gcar[ig][1] * imag(conj(pot_g) * n_pseudo[ig]);
+                forcesol(iat, 2) -= rho_basis->gcar[ig][2] * imag(conj(pot_g) * n_pseudo[ig]);
             }
 
-                forcesol(iat, 0) *= (cell.tpiba * cell.omega);
-                forcesol(iat, 1) *= (cell.tpiba * cell.omega);
-                forcesol(iat, 2) *= (cell.tpiba * cell.omega);
-            //eV/Ang
-                forcesol(iat, 0) *= 2 ;
-                forcesol(iat, 1) *= 2 ;
-                forcesol(iat, 2) *= 2 ;
-
-                //cout<<"Force2"<<iat<<":"<<" "<<forcesol(iat, 0)<<" "<<forcesol(iat, 1)<<" "<<forcesol(iat, 2)<<endl;
-
+            forcesol(iat, 0) *= (cell.tpiba * cell.omega);
+            forcesol(iat, 1) *= (cell.tpiba * cell.omega);
+            forcesol(iat, 2) *= (cell.tpiba * cell.omega);
             ++iat;
         }
     }
