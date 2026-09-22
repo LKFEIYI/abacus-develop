@@ -6,7 +6,6 @@
 
 #ifdef __JSON
 #include <nlohmann/json.hpp>
-#include <stdexcept>
 #endif
 
 #include <cmath>
@@ -17,44 +16,17 @@ namespace Json
 
 #ifdef __JSON
 
-namespace
-{
-jsonValue& current_output()
-{
-    jsonValue& root = AbacusJson::document();
-    const jsonValue::iterator output = root.find("output");
-    if (output == root.end() || !output->is_array())
-    {
-        throw std::invalid_argument("JSON output records must be initialized as an array");
-    }
-    if (output->empty())
-    {
-        throw std::out_of_range("JSON output record is not initialized");
-    }
-    jsonValue& record = output->back();
-    if (!record.is_object())
-    {
-        throw std::invalid_argument("JSON output record must be an object");
-    }
-    return record;
-}
-} // namespace
-
 void init_output_array_obj()
 {
-    jsonValue& output = *AbacusJson::document().emplace("output", jsonValue::array()).first;
-    if (!output.is_array())
-    {
-        throw std::invalid_argument("JSON output must be an array");
-    }
-    output.push_back({{"e_fermi", nullptr},
-                      {"energy", nullptr},
-                      {"scf_converge", nullptr},
-                      {"force", nullptr},
-                      {"stress", nullptr},
-                      {"coordinate", jsonValue::array()},
-                      {"mag", jsonValue::array()},
-                      {"cell", jsonValue::array()}});
+    AbacusJson::append_json({"output"},
+                            {{"e_fermi", nullptr},
+                             {"energy", nullptr},
+                             {"scf_converge", nullptr},
+                             {"force", nullptr},
+                             {"stress", nullptr},
+                             {"coordinate", jsonValue::array()},
+                             {"mag", jsonValue::array()},
+                             {"cell", jsonValue::array()}});
 }
 
 void add_output_cell_coo_stress_force(const UnitCell& ucell,
@@ -65,7 +37,6 @@ void add_output_cell_coo_stress_force(const UnitCell& ucell,
                                       const bool cal_force,
                                       const bool cal_stress)
 {
-    jsonValue& output = current_output();
     const double output_acc = 1.0e-8;
     if (cal_force)
     {
@@ -82,7 +53,7 @@ void add_output_cell_coo_stress_force(const UnitCell& ucell,
                 ++iat;
             }
         }
-        output["force"] = std::move(force_array);
+        AbacusJson::set_json({"output", -1, "force"}, std::move(force_array));
     }
 
     if (cal_stress)
@@ -94,7 +65,7 @@ void add_output_cell_coo_stress_force(const UnitCell& ucell,
                                                      stress(i, 1) * unit_transform,
                                                      stress(i, 2) * unit_transform}));
         }
-        output["stress"] = std::move(stress_array);
+        AbacusJson::set_json({"output", -1, "stress"}, std::move(stress_array));
     }
 
     const double lat0_angstrom = ucell.lat0_angstrom;
@@ -111,29 +82,29 @@ void add_output_cell_coo_stress_force(const UnitCell& ucell,
             mag.push_back(ucell.atoms[it].mag[ia]);
         }
     }
-    output["coordinate"] = std::move(coordinates);
-    output["mag"] = std::move(mag);
-    output["cell"] = {{ucell.latvec.e11 * lat0_angstrom,
-                       ucell.latvec.e12 * lat0_angstrom,
-                       ucell.latvec.e13 * lat0_angstrom},
-                      {ucell.latvec.e21 * lat0_angstrom,
-                       ucell.latvec.e22 * lat0_angstrom,
-                       ucell.latvec.e23 * lat0_angstrom},
-                      {ucell.latvec.e31 * lat0_angstrom,
-                       ucell.latvec.e32 * lat0_angstrom,
-                       ucell.latvec.e33 * lat0_angstrom}};
+    AbacusJson::set_json({"output", -1, "coordinate"}, std::move(coordinates));
+    AbacusJson::set_json({"output", -1, "mag"}, std::move(mag));
+    AbacusJson::set_json({"output", -1, "cell"},
+                         {{ucell.latvec.e11 * lat0_angstrom,
+                           ucell.latvec.e12 * lat0_angstrom,
+                           ucell.latvec.e13 * lat0_angstrom},
+                          {ucell.latvec.e21 * lat0_angstrom,
+                           ucell.latvec.e22 * lat0_angstrom,
+                           ucell.latvec.e23 * lat0_angstrom},
+                          {ucell.latvec.e31 * lat0_angstrom,
+                           ucell.latvec.e32 * lat0_angstrom,
+                           ucell.latvec.e33 * lat0_angstrom}});
 }
 
 void add_output_efermi_converge(const double efermi, const bool scf_converge)
 {
-    jsonValue& output = current_output();
-    output["e_fermi"] = efermi;
-    output["scf_converge"] = scf_converge;
+    AbacusJson::set_json({"output", -1, "e_fermi"}, efermi);
+    AbacusJson::set_json({"output", -1, "scf_converge"}, scf_converge);
 }
 
 void add_output_energy(const double energy)
 {
-    current_output()["energy"] = energy;
+    AbacusJson::set_json({"output", -1, "energy"}, energy);
 }
 
 void add_output_scf_mag(const double total_mag,
@@ -143,16 +114,10 @@ void add_output_scf_mag(const double total_mag,
                         const double drho,
                         const double time)
 {
-    jsonValue& output = current_output();
-    output["total_mag"] = total_mag;
-    output["absolute_mag"] = absolute_mag;
-    // Acquire the history only after inserting other fields: ordered_json may reallocate them.
-    jsonValue& scf = *output.emplace("scf", jsonValue::array()).first;
-    if (!scf.is_array())
-    {
-        throw std::invalid_argument("JSON SCF history must be an array");
-    }
-    scf.push_back({{"energy", energy}, {"ediff", ediff}, {"drho", drho}, {"time", time}});
+    AbacusJson::set_json({"output", -1, "total_mag"}, total_mag);
+    AbacusJson::set_json({"output", -1, "absolute_mag"}, absolute_mag);
+    AbacusJson::append_json({"output", -1, "scf"},
+                            {{"energy", energy}, {"ediff", ediff}, {"drho", drho}, {"time", time}});
 }
 
 #endif // __JSON

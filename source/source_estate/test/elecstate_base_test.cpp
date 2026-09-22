@@ -100,19 +100,24 @@ void ModulePW::PW_Basis::initgrids(double, ModuleBase::Matrix3, int, int, int)
 void ModulePW::PW_Basis::distribute_r()
 {
 }
+void Charge::set_rho_core(const UnitCell& ucell, ModuleBase::ComplexMatrix const&, const bool*)
+{
+}
 void Charge::init_rho(const UnitCell&,
                       const Parallel_Grid&,
                       ModuleBase::ComplexMatrix const&,
                       ModuleSymmetry::Symmetry& symm,
                       const void*,
-                      const void*,
-                      const module_charge::InitRhoCfg&)
+                      const void*)
 {
 }
 void Charge::set_rhopw(ModulePW::PW_Basis*)
 {
 }
-void Charge::renormalize_rho(const double, const double)
+void Charge::renormalize_rho()
+{
+}
+void Charge::check_rho()
 {
 }
 

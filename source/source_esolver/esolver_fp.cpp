@@ -2,15 +2,14 @@
 
 #include "source_base/tool_quit.h"
 #include "source_cell/cal_ux.h"
-#include "source_estate/module_charge/chg_atomic.h"
-#include "source_estate/module_charge/chg_symm.h"
+#include "source_estate/module_charge/symm_rho.h"
 #include "source_cell/read_pp_ucell.h"
 #include "source_estate/param_update.h"
 #include "source_hamilt/module_ewald/h_ewald_pw.h"
 #include "source_hamilt/module_vdw/vdw.h"
 #include "source_io/module_output/output_log.h"
 #include "source_io/module_output/print_info.h"
-#include "source_estate/module_charge/chg_rhog_io.h"
+#include "source_estate/rhog_io.h"
 #include "source_io/module_parameter/parameter.h"
 
 #include "source_pw/module_pwdft/setup_pwrho.h" // mohan 20251005
@@ -21,6 +20,10 @@
 #include "source_base/module_parallel/para_world.h"
 #include "source_base/module_parallel/para_tag.h"
 #include "source_base/module_parallel/para_bridge.h"
+#include "source_base/parallel_reduce.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace ModuleESolver
 {
@@ -46,13 +49,6 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
     UnitCell& ucell = static_cast<UnitCell&>(basecell);
 
     this->inp_ = &inp;
-
-    SurchemParameters surchem_parameters;
-    surchem_parameters.eb_k = inp.eb_k;
-    surchem_parameters.tau = inp.tau;
-    surchem_parameters.sigma_k = inp.sigma_k;
-    surchem_parameters.nc_k = inp.nc_k;
-    this->solvent.set_parameters(surchem_parameters);
 
     XCFunctionalParameters xc_parameters;
     xc_parameters.xc_temperature = inp.xc_temperature;
@@ -93,6 +89,56 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
 
     elecstate::ParamUpdater::update_from_atoms_info(atoms_info);
 
+    SurchemParameters surchem_parameters;
+    surchem_parameters.eb_k = inp.eb_k;
+    surchem_parameters.tau = inp.tau;
+    surchem_parameters.sigma_k = inp.sigma_k;
+    surchem_parameters.nc_k = inp.nc_k;
+    surchem_parameters.use_sccs = inp.solvation_model == "sccs";
+    if (surchem_parameters.use_sccs)
+    {
+        const ModuleSccs::Preset preset = ModuleSccs::parse_preset(inp.sccs_preset);
+        if (preset == ModuleSccs::Preset::Custom)
+        {
+            surchem_parameters.sccs_config.cavity.density_min = inp.sccs_rho_min;
+            surchem_parameters.sccs_config.cavity.density_max = inp.sccs_rho_max;
+            surchem_parameters.sccs_config.cavity.epsilon_bulk = inp.sccs_epsilon;
+            surchem_parameters.sccs_config.surface_tension
+                = ModuleSccs::dyn_per_cm_to_hartree_per_bohr2(inp.sccs_gamma);
+            surchem_parameters.sccs_config.pressure
+                = ModuleSccs::gpa_to_hartree_per_bohr3(inp.sccs_pressure);
+        }
+        else
+        {
+            surchem_parameters.sccs_config = ModuleSccs::water_preset(preset);
+        }
+        surchem_parameters.sccs_config.boundary
+            = ModuleSccs::parse_boundary(inp.sccs_boundary);
+        surchem_parameters.sccs_config.max_iterations = inp.sccs_maxiter;
+        surchem_parameters.sccs_config.mixing = inp.sccs_mixing;
+        surchem_parameters.sccs_config.tolerance_rms = inp.sccs_tol_rms;
+        surchem_parameters.sccs_config.tolerance_max = inp.sccs_tol_max;
+        surchem_parameters.sccs_config.surface_regularization = inp.sccs_surface_eta;
+        ModuleSccs::validate_config(surchem_parameters.sccs_config);
+        surchem_parameters.expected_electron_count = atoms_info.nelec;
+        for (int atom_type = 0; atom_type < ucell.ntype; ++atom_type)
+        {
+            surchem_parameters.expected_ionic_charge
+                += ucell.atoms[atom_type].ncpp.zv * ucell.atoms[atom_type].na;
+        }
+        if (surchem_parameters.sccs_config.boundary == ModuleSccs::Boundary::Pcc2d
+            && std::abs(surchem_parameters.expected_ionic_charge
+                        - surchem_parameters.expected_electron_count)
+                   > surchem_parameters.normalization_tolerance)
+        {
+            ModuleBase::WARNING(
+                "ESolver_FP",
+                "charged SCCS pcc_2d slab: the open-boundary field energy grows "
+                "linearly with the cell length, so absolute total energies at "
+                "different y cell lengths are not directly comparable");
+        }
+    }
+
     XC_Functional::set_xc_type(ucell.atoms[0].ncpp.xc_func);
     pw::validate_uspp_support(atoms_info.use_uspp,
                               inp.basis_type,
@@ -107,6 +153,17 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
     //! 2) setup pw_rho, pw_rhod, pw_big, sf, and read_pseudopotentials
     pw::setup_pwrho(ucell, PARAM.globalv.double_grid, this->pw_rho_flag, 
       this->pw_rho, this->pw_rhod, this->pw_big, this->classname, inp);
+
+    if (surchem_parameters.use_sccs)
+    {
+        if (atoms_info.use_uspp)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_FP",
+                                     "the first SCCS implementation supports only norm-conserving pseudopotentials");
+        }
+        surchem_parameters.pool_process_count = this->pw_rhod->poolnproc;
+    }
+    this->solvent.set_parameters(surchem_parameters);
 
     //! 3) setup structure factors
     this->sf.set(this->pw_rhod, inp.nbspline);
@@ -131,6 +188,22 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
     const double kspacing[3] = {this->inp_->kspacing[0], this->inp_->kspacing[1], this->inp_->kspacing[2]};
     const double koffset[3] = {this->inp_->koffset[0], this->inp_->koffset[1], this->inp_->koffset[2]};
     this->kv.set(ucell, ucell.symm, inp.kpoint_file, inp.nspin, ucell.G, ucell.latvec, GlobalV::ofs_running, GlobalV::ofs_warning, use_ibz, global_out_dir, gamma_only_local, kspacing, this->inp_->kmesh_type, koffset);
+    if (surchem_parameters.use_sccs
+        && surchem_parameters.sccs_config.boundary == ModuleSccs::Boundary::Pcc2d)
+    {
+        double maximum_open_direction_k = 0.0;
+        for (int ik = 0; ik < this->kv.get_nks(); ++ik)
+        {
+            maximum_open_direction_k
+                = std::max(maximum_open_direction_k, std::abs(this->kv.kvec_d[ik].y));
+        }
+        Parallel_Reduce::reduce_max(maximum_open_direction_k);
+        if (maximum_open_direction_k > 1.0e-12)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_FP",
+                                     "SCCS pcc_2d requires Gamma-only sampling along the second lattice direction");
+        }
+    }
     ModuleBase::GlobalFunc::DONE(GlobalV::ofs_running, "INIT K-POINTS");
 
     //! 8) print information
@@ -148,8 +221,8 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
     //! 11) initialize the charge density, we need to first set xc_type,
     // then we can call chr.allocate()
 	this->chr.set_rhopw(this->pw_rhod); // mohan add 20251130
-    const bool kin_den = XC_Functional::get_ked_flag() || (inp.out_elf[0] > 0); // mohan add 20251202
-	this->chr.allocate(inp.nspin, kin_den, XC_Functional::get_ked_flag(), inp.test_charge); // mohan move this from setup_estate_pw, 20251128
+    const bool kin_den = this->chr.kin_density(); // mohan add 20251202
+	this->chr.allocate(inp.nspin, kin_den); // mohan move this from setup_estate_pw, 20251128
 
 
     return;
@@ -166,13 +239,7 @@ void ESolver_FP::after_scf(UnitCell& ucell, const int istep, const bool conv_eso
     ModuleIO::output_efermi(conv_esolver, this->pelec->eferm.ef);
 
     //! Update delta_rho for charge extrapolation
-    const module_charge::AtomicRhoCfg atomic_rho_cfg_after{
-        PARAM.inp.nelec,
-        PARAM.inp.test_charge,
-        PARAM.globalv.domag,
-        PARAM.globalv.domag_z,
-        GlobalV::ofs_warning};
-    CE.update_delta_rho(ucell, &(this->chr), *this->pw_rhod, &(this->sf), atomic_rho_cfg_after);
+    CE.update_delta_rho(ucell, &(this->chr), &(this->sf));
 
     //! print out charge density, potential, elf, etc.
 	ModuleIO::ctrl_output_fp(ucell, *this->inp_, this->pelec, this->pw_big, this->pw_rhod, 
@@ -225,15 +292,8 @@ void ESolver_FP::before_scf(UnitCell& ucell, const int istep)
     if (ucell.ionic_position_updated)
     {
         this->CE.update_all_dis(ucell);
-        const module_charge::AtomicRhoCfg atomic_rho_cfg_before{
-            PARAM.inp.nelec,
-            PARAM.inp.test_charge,
-            PARAM.globalv.domag,
-            PARAM.globalv.domag_z,
-            GlobalV::ofs_warning};
-        this->CE.extrapolate_charge(&this->Pgrid, ucell, &this->chr, *this->pw_rhod,
-                                    &this->sf, GlobalV::ofs_running, GlobalV::ofs_warning,
-                                    atomic_rho_cfg_before);
+        this->CE.extrapolate_charge(&this->Pgrid, ucell, &this->chr, &this->sf,
+                                    GlobalV::ofs_running, GlobalV::ofs_warning);
     }
 
     //! Evaluate the vdW correction once for this ionic configuration.
@@ -282,7 +342,7 @@ void ESolver_FP::iter_finish(UnitCell& ucell, const int istep, int& iter, bool& 
             // Only pool 0 writes the rhog file (rhog is identical across pools).
             if (GlobalV::MY_POOL == 0)
             {
-                module_charge::write_rhog(PARAM.globalv.global_out_dir + this->inp_->suffix + "-CHARGE-DENSITY.restart",
+                elecstate::write_rhog(PARAM.globalv.global_out_dir + this->inp_->suffix + "-CHARGE-DENSITY.restart",
                                      PARAM.globalv.gamma_only_pw,
                                      this->pw_rhod,
                                      this->inp_->nspin,
@@ -303,7 +363,7 @@ void ESolver_FP::iter_finish(UnitCell& ucell, const int istep, int& iter, bool& 
                 }
                 if (GlobalV::MY_POOL == 0)
                 {
-                    module_charge::write_rhog(PARAM.globalv.global_out_dir + this->inp_->suffix + "-TAU-DENSITY.restart",
+                    elecstate::write_rhog(PARAM.globalv.global_out_dir + this->inp_->suffix + "-TAU-DENSITY.restart",
                                          PARAM.globalv.gamma_only_pw,
                                          this->pw_rhod,
                                          this->inp_->nspin,

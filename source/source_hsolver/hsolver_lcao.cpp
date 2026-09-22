@@ -45,7 +45,6 @@ void HSolverLCAO<TK>::solve(HSMatrix<TK>& hs,
 								   elecstate::DensityMatrix<TK, double>& dm, // mohan add 2025-11-03
 								   Charge &chr,
                                    const int nspin,
-                                   const double omega,
                                    const bool skip_charge)
 {
     ModuleBase::TITLE("HSolverLCAO", "solve");
@@ -106,7 +105,7 @@ void HSolverLCAO<TK>::solve(HSMatrix<TK>& hs,
             // compute charge density from density matrix, mohan update 20251024
             // delegate to ElecStateLCAO to keep the source_lcao dependency out of
             // source_hsolver (mirrors the pexsi branch below and the PW psiToRho path)
-            dynamic_cast<elecstate::ElecStateLCAO<TK>*>(pes)->dmToRho(dm.get_DMR_vector(), nspin, &chr, omega);
+            dynamic_cast<elecstate::ElecStateLCAO<TK>*>(pes)->dmToRho(dm.get_DMR_vector(), nspin, &chr);
         }
         else
         {
@@ -128,7 +127,7 @@ void HSolverLCAO<TK>::solve(HSMatrix<TK>& hs,
         auto _pes = dynamic_cast<elecstate::ElecStateLCAO<TK>*>(pes);
         pes->f_en.eband = pe.totalFreeEnergy;
         // maybe eferm could be dealt with in the future
-        _pes->dm2rho(pe.DM, pe.EDM, &dm, omega);
+        _pes->dm2rho(pe.DM, pe.EDM, &dm);
 #endif
     }
 

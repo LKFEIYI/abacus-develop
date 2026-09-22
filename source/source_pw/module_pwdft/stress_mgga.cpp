@@ -1,5 +1,4 @@
 #include "source_base/timer.h"
-#include "source_estate/module_charge/chg_parallel.h"
 #include "source_hamilt/module_xc/xc_functional.h"
 #include "source_io/module_parameter/parameter.h"
 #include "stress_func.h"
@@ -81,11 +80,7 @@ void Stress_Func<FPTYPE, Device>::stress_mgga(const UnitCell& ucell,
     {
         for (int ipol = 0; ipol < 6; ++ipol)
         {
-            module_charge::reduce_diff_pools(&crosstaus_pack[is][ipol * nrxx],
-                                             *chr,
-                                             GlobalV::KPAR,
-                                             PARAM.globalv.all_ks_run,
-                                             PARAM.inp.bndpar);
+            chr->reduce_diff_pools(&crosstaus_pack[is][ipol * nrxx]);
         }
     }
 #endif

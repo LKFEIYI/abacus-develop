@@ -15,6 +15,11 @@ void surchem::v_correction(const UnitCell& cell,
                            Structure_Factor* sf,
                            ModuleBase::matrix& v)
 {
+    if (this->uses_sccs())
+    {
+        this->v_correction_sccs(cell, *rho_basis, nspin, rho, vlocal, v);
+        return;
+    }
     ModuleBase::TITLE("surchem", "v_cor");
     ModuleBase::timer::start("surchem", "v_cor");
 

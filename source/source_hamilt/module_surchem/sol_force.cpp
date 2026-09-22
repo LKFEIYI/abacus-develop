@@ -1,6 +1,11 @@
 #include "surchem.h"
+#include "sccs_pcc_2d.h"
+#include "sccs_pw_charge.h"
+#include "sccs_pw_force.h"
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
+
+#include <stdexcept>
 
 void surchem::force_cor_one(const UnitCell& cell,
                             const ModulePW::PW_Basis* rho_basis,
@@ -158,6 +163,25 @@ void surchem::cal_force_sol(const UnitCell& cell,
     ModuleBase::TITLE("surchem", "cal_force_sol");
     ModuleBase::timer::start("surchem", "cal_force_sol");
 
+    if (this->uses_sccs())
+    {
+        try
+        {
+            if (rho_basis == nullptr)
+            {
+                throw std::invalid_argument("SCCS force requires an initialized PW basis");
+            }
+            this->cal_force_sccs(cell, *rho_basis, vloc, forcesol);
+        }
+        catch (...)
+        {
+            ModuleBase::timer::end("surchem", "cal_force_sol");
+            throw;
+        }
+        ModuleBase::timer::end("surchem", "cal_force_sol");
+        return;
+    }
+
     int nat = cell.nat;
 	ModuleBase::matrix force1(nat, 3);
     ModuleBase::matrix force2(nat, 3);
@@ -182,4 +206,90 @@ void surchem::cal_force_sol(const UnitCell& cell,
     Parallel_Reduce::reduce_pool(forcesol.c, forcesol.nr * forcesol.nc);
     ModuleBase::timer::end("surchem", "cal_force_sol");
     return;
+}
+
+void surchem::cal_force_sccs(const UnitCell& cell,
+                             const ModulePW::PW_Basis& rho_basis,
+                             const ModuleBase::matrix& vloc,
+                             ModuleBase::matrix& forcesol) const
+{
+    if (forcesol.nr != cell.nat || forcesol.nc != 3)
+    {
+        throw std::invalid_argument("SCCS force matrix must have nat rows and three columns");
+    }
+    const ModuleSccs::SccsConfig& config = this->parameters_.sccs_config;
+    if (!this->sccs_state_.valid)
+    {
+        throw std::logic_error("SCCS force requires a converged SCCS state");
+    }
+
+    const ModuleBase::matrix smooth_force_hartree
+        = ModuleSccs::smooth_ionic_force_hartree(cell,
+                                                 rho_basis,
+                                                 vloc,
+                                                 this->sccs_result_.electrostatic.reaction_potential);
+    for (int atom = 0; atom < cell.nat; ++atom)
+    {
+        for (int direction = 0; direction < 3; ++direction)
+        {
+            forcesol(atom, direction) = 2.0 * smooth_force_hartree(atom, direction);
+        }
+    }
+    Parallel_Reduce::reduce_pool(forcesol.c, forcesol.nr * forcesol.nc);
+    if (config.boundary == ModuleSccs::Boundary::Periodic)
+    {
+        return;
+    }
+
+    if (config.boundary == ModuleSccs::Boundary::Pcc2d)
+    {
+        const ModuleSccs::Pcc2dGeometry geometry
+            = ModuleSccs::pcc_2d_geometry(cell.latvec, cell.lat0, 1.0e-10);
+        int atom_index = 0;
+        for (int atom_type = 0; atom_type < cell.ntype; ++atom_type)
+        {
+            for (int atom = 0; atom < cell.atoms[atom_type].na; ++atom)
+            {
+                ModuleSccs::PointCharge point;
+                point.charge = cell.atoms[atom_type].ncpp.zv;
+                point.position = cell.atoms[atom_type].tau[atom] * cell.lat0;
+                const ModuleBase::Vector3<double> force_hartree
+                    = ModuleSccs::pcc_2d_point_charge_force(
+                        this->sccs_result_.point_solute_moments_2d,
+                        point,
+                        geometry.origin_y,
+                        geometry.parameters);
+                forcesol(atom_index, 0) += 2.0 * force_hartree.x;
+                forcesol(atom_index, 1) += 2.0 * force_hartree.y;
+                forcesol(atom_index, 2) += 2.0 * force_hartree.z;
+                ++atom_index;
+            }
+        }
+        return;
+    }
+
+    ModuleSccs::PccParameters parameters;
+    parameters.cube_length
+        = ModuleSccs::validate_cubic_cell(cell.latvec, cell.lat0, 1.0e-10);
+    const ModuleBase::Vector3<double> origin
+        = ModuleSccs::cell_center(cell.latvec, cell.lat0);
+    int atom_index = 0;
+    for (int atom_type = 0; atom_type < cell.ntype; ++atom_type)
+    {
+        for (int atom = 0; atom < cell.atoms[atom_type].na; ++atom)
+        {
+            ModuleSccs::PointCharge point;
+            point.charge = cell.atoms[atom_type].ncpp.zv;
+            point.position = cell.atoms[atom_type].tau[atom] * cell.lat0;
+            const ModuleBase::Vector3<double> force_hartree
+                = ModuleSccs::pcc_point_charge_force(this->sccs_result_.point_solute_moments,
+                                                     point,
+                                                     origin,
+                                                     parameters);
+            forcesol(atom_index, 0) += 2.0 * force_hartree.x;
+            forcesol(atom_index, 1) += 2.0 * force_hartree.y;
+            forcesol(atom_index, 2) += 2.0 * force_hartree.z;
+            ++atom_index;
+        }
+    }
 }

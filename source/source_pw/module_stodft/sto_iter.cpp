@@ -8,7 +8,6 @@
 #include "source_base/tool_quit.h"
 #include "source_base/tool_title.h"
 #include "source_estate/kernels/elecstate_op.h"
-#include "source_estate/module_charge/chg_parallel.h"
 #include "source_estate/occupy.h"
 #include "source_hsolver/para_lin_tf.h"
 #include "source_io/module_parameter/parameter.h"
@@ -673,11 +672,7 @@ void Stochastic_Iter<T, Device>::cal_storho(const UnitCell& ucell,
     {
         for (int is = 0; is < nspin; ++is)
         {
-            module_charge::reduce_diff_pools(sto_rho[is],
-                                             *pes->charge,
-                                             GlobalV::KPAR,
-                                             PARAM.globalv.all_ks_run,
-                                             PARAM.inp.bndpar);
+            pes->charge->reduce_diff_pools(sto_rho[is]);
             if (!PARAM.globalv.all_ks_run && PARAM.inp.bndpar > 1)
             {
                 MPI_Allreduce(MPI_IN_PLACE, sto_rho[is], nrxx, MPI_DOUBLE, MPI_SUM, BP_WORLD);

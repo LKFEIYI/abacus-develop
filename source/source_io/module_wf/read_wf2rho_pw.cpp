@@ -4,8 +4,7 @@
 #include "source_base/module_out/filename.h"
 #include "source_base/timer.h"
 #include "source_estate/kernels/elecstate_op.h"
-#include "source_estate/module_charge/chg_parallel.h"
-#include "source_estate/module_charge/chg_symm.h"
+#include "source_estate/module_charge/symm_rho.h"
 #include "source_io/module_parameter/parameter.h"
 #include "source_base/module_device/memory_op.h"
 
@@ -219,15 +218,15 @@ void ModuleIO::read_wf2rho_pw_impl(const ModulePW::PW_Basis_K* pw_wfc,
 #ifdef __MPI
     for (int is = 0; is < nspin; ++is)
     {
-        module_charge::reduce_diff_pools(chg.rho[is], chg, kpar,
-                                         PARAM.globalv.all_ks_run, PARAM.inp.bndpar);
+        chg.reduce_diff_pools(chg.rho[is]);
     }
 #endif
 
     // Since rho is calculated by psi^2, it is not symmetric. We need to rearrange it.
+    Symmetry_rho srho;
     for (int is = 0; is < nspin; is++)
     {
-        module_charge::cal_rhog_symm(is, chg, chg.rhopw, symm);
+        srho.begin(is, chg, chg.rhopw, symm);
     }
 
     // Free device memory

@@ -9,8 +9,7 @@
 #include "source_cell/klist.h"
 #include "source_cell/unitcell.h"
 #include "source_estate/module_charge/charge.h"
-#include "source_estate/module_charge/chg_parallel.h"
-#include "source_estate/module_charge/chg_symm.h"
+#include "source_estate/module_charge/symm_rho.h"
 #include "source_hamilt/module_xc/xc_functional.h"
 #include "source_io/module_parameter/parameter.h"
 #include "source_io/module_wf/read_wf2rho_pw.h"
@@ -56,16 +55,16 @@ Sep_Cell::~Sep_Cell() noexcept
 int XC_Functional::func_type = 0;
 bool XC_Functional::ked_flag = false;
 
-namespace module_charge
+Symmetry_rho::Symmetry_rho()
 {
-void cal_rhog_symm(const int& spin_now,
-                   const Charge& CHR,
-                   const ModulePW::PW_Basis* rho_basis,
-                   ModuleSymmetry::Symmetry& symm)
+}
+Symmetry_rho::~Symmetry_rho()
+{
+}
+void Symmetry_rho::begin(const int& spin_now, const Charge& CHR, const ModulePW::PW_Basis* rho_basis, ModuleSymmetry::Symmetry& symm) const
 {
     return;
 }
-} // namespace module_charge
 
 void cal_ik2iktot(std::vector<int>& ik2iktot, const int& nks, const int& nkstot)
 {
@@ -231,8 +230,8 @@ TEST_F(ReadWfcRhoTest, ReadWfcRho)
     // Initialize charge density
     //----------------------------------------
     chg.rho = new double*[nspin];
-    chg._space_rho.resize(rhopw->nrxx);
-    chg.rho[0] = chg._space_rho.data();
+    chg._space_rho = new double[rhopw->nrxx];
+    chg.rho[0] = chg._space_rho;
     ModuleBase::GlobalFunc::ZEROS(chg.rho[0], rhopw->nrxx);
     chg.rhopw = rhopw;
     chg.nrxx = rhopw->nrxx;
@@ -243,8 +242,8 @@ TEST_F(ReadWfcRhoTest, ReadWfcRho)
     //----------------------------------------
     Charge chg_ref;
     chg_ref.rho = new double*[nspin];
-    chg_ref._space_rho.resize(rhopw->nrxx);
-    chg_ref.rho[0] = chg_ref._space_rho.data();
+    chg_ref._space_rho = new double[rhopw->nrxx];
+    chg_ref.rho[0] = chg_ref._space_rho;
     ModuleBase::GlobalFunc::ZEROS(chg_ref.rho[0], rhopw->nrxx);
     std::vector<std::complex<double>> rho_tmp(rhopw->nrxx);
     chg_ref.nrxx = rhopw->nrxx;
@@ -267,8 +266,7 @@ TEST_F(ReadWfcRhoTest, ReadWfcRho)
     }
 
 #ifdef __MPI
-    module_charge::reduce_diff_pools(chg_ref.rho[0], chg_ref, GlobalV::KPAR,
-                                     PARAM.globalv.all_ks_run, PARAM.inp.bndpar);
+    chg_ref.reduce_diff_pools(chg_ref.rho[0]);
 #endif
 
     // for spin=1 or 2, npol=1
@@ -350,7 +348,9 @@ TEST_F(ReadWfcRhoTest, ReadWfcRho)
     }
 
     delete[] chg.rho;
+    delete[] chg._space_rho;
     delete[] chg_ref.rho;
+    delete[] chg_ref._space_rho;
     delete psi;
 
     if (GlobalV::MY_RANK == 0)

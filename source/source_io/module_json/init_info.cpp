@@ -7,20 +7,20 @@
 
 #ifdef __JSON
 #include <nlohmann/json.hpp>
-#include <stdexcept>
+#include <utility>
 
 namespace Json
 {
 namespace
 {
-jsonValue& init_section()
+// Structure, k-point metadata and calculation metadata share the init section.
+// Replace only the fields built by this generator, not the entire section.
+void set_init_fields(jsonValue fields)
 {
-    jsonValue& init = *AbacusJson::document().emplace("init", jsonValue::object()).first;
-    if (!init.is_object())
+    for (jsonValue::iterator field = fields.begin(); field != fields.end(); ++field)
     {
-        throw std::invalid_argument("JSON init section must be an object");
+        AbacusJson::set_json({"init", field.key()}, std::move(field.value()));
     }
-    return init;
 }
 } // namespace
 
@@ -49,19 +49,18 @@ void gen_init(UnitCell* ucell, const Input_para& inp)
     info["kmesh_type"] = inp.kmesh_type;
     info["kspacing"] = jsonValue::array({inp.kspacing[0], inp.kspacing[1], inp.kspacing[2]});
     info["koffset"] = jsonValue::array({inp.koffset[0], inp.koffset[1], inp.koffset[2]});
-    // Shallow update: preserve other generators' fields, replace this generator's containers.
-    init_section().update(info);
+    set_init_fields(std::move(info));
 }
 
 void add_nkstot(int nkstot)
 {
-    init_section()["nkstot"] = nkstot;
+    AbacusJson::set_json({"init", "nkstot"}, nkstot);
 }
 
 void gen_stru(UnitCell* ucell, const Input_para& inp)
 {
-    AbacusJson::document()["comment"] =
-        "Unless otherwise specified, the unit of energy is eV and the unit of length is Angstrom";
+    AbacusJson::set_json({"comment"},
+                         "Unless otherwise specified, the unit of energy is eV and the unit of length is Angstrom");
 
     jsonValue info = jsonValue::object();
     for (int it = 0; it < ucell->ntype; ++it)
@@ -96,7 +95,7 @@ void gen_stru(UnitCell* ucell, const Input_para& inp)
                     {ucell->latvec.e31 * lat0_angstrom,
                      ucell->latvec.e32 * lat0_angstrom,
                      ucell->latvec.e33 * lat0_angstrom}};
-    init_section().update(info);
+    set_init_fields(std::move(info));
 }
 
 } // namespace Json
