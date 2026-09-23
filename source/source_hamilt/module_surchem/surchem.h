@@ -6,6 +6,9 @@
 #include "source_base/matrix.h"
 #include "source_basis/module_pw/pw_basis.h"
 #include "source_cell/unitcell.h"
+#include "sccs_driver.h"
+
+#include <iosfwd>
 
 // forward-declared: used below only as pointer/reference
 class Parallel_Grid;
@@ -26,6 +29,14 @@ struct SurchemParameters
     double tau = 0.0;     ///< effective surface tension parameter
     double sigma_k = 0.0; ///< width of the diffuse cavity
     double nc_k = 0.0;    ///< cut-off charge density
+    bool use_sccs = false;
+    ModuleSccs::SccsConfig sccs_config;
+    double expected_electron_count = 0.0;
+    double expected_ionic_charge = 0.0;
+    double normalization_tolerance = 1.0e-6;
+    int pool_process_count = 1;
+    double start_drho = 0.0;
+    int start_nmax = 30;
 };
 
 class surchem
@@ -53,6 +64,18 @@ class surchem
     void clear();
 
     void set_parameters(const SurchemParameters& parameters);
+
+    bool uses_sccs() const;
+
+    bool sccs_is_active() const;
+
+    bool try_activate_sccs(int electronic_iteration, double drho);
+
+    const ModuleSccs::SccsResult& sccs_result() const;
+
+    void write_sccs_iteration(std::ostream& output) const;
+
+    void write_sccs_diagnostics(std::ostream& output) const;
 
     void cal_epsilon(const ModulePW::PW_Basis* rho_basis, const double* PS_TOTN_real, double* epsilon, double* epsilon0);
 
@@ -131,6 +154,13 @@ class surchem
                       Structure_Factor* sf,
                       ModuleBase::matrix& v);
 
+    void v_correction_sccs(const UnitCell& cell,
+                           const ModulePW::PW_Basis& rho_basis,
+                           int nspin,
+                           const double* const* rho,
+                           const double* vlocal,
+                           ModuleBase::matrix& v);
+
     void test_V_to_N(ModuleBase::matrix& v,
                      const UnitCell& cell,
                      const ModulePW::PW_Basis* rho_basis,
@@ -152,6 +182,11 @@ class surchem
                        int nspin,
                        ModuleBase::matrix& forcesol);
 
+    void cal_force_sccs(const UnitCell& cell,
+                        const ModulePW::PW_Basis& rho_basis,
+                        const ModuleBase::matrix& vloc,
+                        ModuleBase::matrix& forcesol) const;
+
     void get_totn_reci(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis, std::complex<double>* totn_reci);
 
     void induced_charge(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis, double* induced_rho) const;
@@ -159,6 +194,10 @@ class surchem
   private:
     SurchemParameters parameters_;
     bool parameters_set_ = false;
+    bool sccs_active_ = false;
+    ModuleSccs::SccsState sccs_state_;
+    ModuleSccs::SccsResult sccs_result_;
+    double sccs_elapsed_seconds_ = 0.0;
 };
 
 #endif
