@@ -524,6 +524,19 @@
     - [tau](#tau)
     - [sigma\_k](#sigma_k)
     - [nc\_k](#nc_k)
+    - [solvation\_model](#solvation_model)
+    - [sccs\_preset](#sccs_preset)
+    - [sccs\_epsilon](#sccs_epsilon)
+    - [sccs\_rho\_min](#sccs_rho_min)
+    - [sccs\_rho\_max](#sccs_rho_max)
+    - [sccs\_gamma](#sccs_gamma)
+    - [sccs\_pressure](#sccs_pressure)
+    - [sccs\_mixing](#sccs_mixing)
+    - [sccs\_tol\_rms](#sccs_tol_rms)
+    - [sccs\_tol\_max](#sccs_tol_max)
+    - [sccs\_surface\_eta](#sccs_surface_eta)
+    - [sccs\_boundary](#sccs_boundary)
+    - [sccs\_maxiter](#sccs_maxiter)
   - [Quasiatomic Orbital (QO) analysis](#quasiatomic-orbital-qo-analysis)
     - [qo\_switch](#qo_switch)
     - [qo\_basis](#qo_basis)
@@ -4831,6 +4844,117 @@
 - **Type**: Real
 - **Description**: The value of the electron density at which the dielectric cavity forms
 - **Default**: 0.00037
+
+### solvation_model
+
+- **Type**: String
+- **Description**: Select legacy or the native SCCS implementation. SCCS is enabled only together with imp_sol=true and supports scf or fixed-cell relax calculations. During every electronic SCF iteration, the screen output reports the SCCS inner-iteration count, SCCS wall time, and current total solvation energy in Ry. Cell relaxation and molecular dynamics are not supported.
+- **Default**: legacy
+
+### sccs_preset
+
+- **Type**: String
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: Select custom, water-neutral, water-cation, or water-anion parameters. Numerical cavity and non-electrostatic inputs are used only by custom.
+- **Default**: custom
+
+### sccs_epsilon
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS bulk relative permittivity
+- **Default**: 78.3
+
+### sccs_rho_min
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS lower cavity-density threshold
+- **Default**: 1.0e-4
+- **Unit**: bohr^-3
+
+### sccs_rho_max
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS upper cavity-density threshold
+- **Default**: 5.0e-3
+- **Unit**: bohr^-3
+
+### sccs_gamma
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS effective surface coefficient
+- **Default**: 0.0
+- **Unit**: dyn/cm
+
+### sccs_pressure
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS effective volume coefficient
+- **Default**: 0.0
+- **Unit**: GPa
+
+### sccs_mixing
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS polarization linear mixing
+- **Default**: 0.5
+
+### sccs_tol_rms
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS polarization RMS residual tolerance
+- **Default**: 1.0e-10
+- **Unit**: e/bohr^3
+
+### sccs_tol_max
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS polarization maximum residual tolerance
+- **Default**: 1.0e-8
+- **Unit**: e/bohr^3
+
+### sccs_surface_eta
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: SCCS surface regularization
+- **Default**: 1.0e-8
+- **Unit**: bohr^-1
+
+### sccs_start_drho
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: Delay SCCS on a cold start until DRHO is at or below this value. Zero starts SCCS immediately. Once activated, SCCS remains active for all later electronic and ionic steps. Activating SCCS resets the charge-mixing history and forces at least one further electronic iteration.
+- **Default**: 0.0
+
+### sccs_start_nmax
+
+- **Type**: Integer
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. This value must be smaller than scf_nmax when delayed start is enabled so at least one subsequent electronic iteration uses the SCCS Hamiltonian.
+- **Default**: 30
+
+### sccs_boundary
+
+- **Type**: String
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: Select periodic electrostatics, cubic zero-dimensional PCC (pcc_0d), or slab PCC (pcc_2d). The pcc_2d boundary fixes the open/vacuum direction to the second lattice vector (+y) and requires that vector to be perpendicular to the x-z periodic plane. Neutral and charged slabs are supported. For a charged slab, the open-boundary field energy grows linearly with the y cell length, so absolute total energies at different y cell lengths are not directly comparable. PCC includes the smooth-source solvent response plus the point-ion/electron vacuum correction in the host energy, electronic potential, and ionic forces.
+- **Default**: periodic
+
+### sccs_maxiter
+
+- **Type**: Integer
+- **Availability**: *[`imp_sol`](#imp_sol)==true and [`solvation_model`](#solvation_model)==sccs*
+- **Description**: Maximum number of inner SCCS polarization iterations.
+- **Default**: 200
 
 [back to top](#full-list-of-input-keywords)
 

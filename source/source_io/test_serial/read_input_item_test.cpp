@@ -121,6 +121,65 @@ TEST_F(InputTest, Item_test)
         EXPECT_THAT(output, testing::HasSubstr("NOTICE"));
     }
 
+    { // solvation_model
+        auto it = find_label("solvation_model", readinput.input_lists);
+        param.input.solvation_model = "sccs";
+        param.input.imp_sol = true;
+        param.input.device = "cpu";
+        param.input.nspin = 1;
+        param.input.efield_flag = false;
+        param.input.gate_flag = false;
+        param.input.assume_isolated = "none";
+        param.input.dfthalf_type = 0;
+
+        param.input.calculation = "scf";
+        EXPECT_NO_THROW(it->second.check_value(it->second, param));
+        param.input.calculation = "relax";
+        EXPECT_NO_THROW(it->second.check_value(it->second, param));
+
+        for (const std::string& unsupported : {"cell-relax", "md", "nscf"})
+        {
+            param.input.calculation = unsupported;
+            EXPECT_EXIT(it->second.check_value(it->second, param),
+                        ::testing::ExitedWithCode(1),
+                        "");
+        }
+    }
+
+    { // sccs_start_drho
+        auto it = find_label("sccs_start_drho", readinput.input_lists);
+        param.input.sccs_start_drho = 0.0;
+        EXPECT_NO_THROW(it->second.check_value(it->second, param));
+        param.input.sccs_start_drho = 1.0e-2;
+        EXPECT_NO_THROW(it->second.check_value(it->second, param));
+        param.input.sccs_start_drho = -1.0;
+        EXPECT_EXIT(it->second.check_value(it->second, param),
+                    ::testing::ExitedWithCode(1),
+                    "");
+        param.input.sccs_start_drho = 0.0;
+        param.input.sccs_start_nmax = 30;
+        param.input.scf_nmax = 100;
+    }
+
+    { // sccs_start_nmax
+        auto it = find_label("sccs_start_nmax", readinput.input_lists);
+        param.input.sccs_start_drho = 1.0e-2;
+        param.input.scf_nmax = 40;
+        param.input.sccs_start_nmax = 30;
+        EXPECT_NO_THROW(it->second.check_value(it->second, param));
+        param.input.sccs_start_nmax = 0;
+        EXPECT_EXIT(it->second.check_value(it->second, param),
+                    ::testing::ExitedWithCode(1),
+                    "");
+        param.input.sccs_start_nmax = 40;
+        EXPECT_EXIT(it->second.check_value(it->second, param),
+                    ::testing::ExitedWithCode(1),
+                    "");
+        param.input.sccs_start_drho = 0.0;
+        param.input.sccs_start_nmax = 30;
+        param.input.scf_nmax = 100;
+    }
+
     { // socket_driver
         auto it = find_label("socket_driver", readinput.input_lists);
         param.input.socket_driver = true;

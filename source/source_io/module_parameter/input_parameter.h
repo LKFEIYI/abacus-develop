@@ -560,6 +560,21 @@ struct Input_para
     double tau = 1.0798e-05; ///< the effective surface tension parameter
     double sigma_k = 0.6;    ///< the width of the diffuse cavity
     double nc_k = 0.00037;   ///< the cut-off charge density
+    std::string solvation_model = "legacy"; ///< implicit-solvent implementation
+    std::string sccs_preset = "custom";     ///< SCCS parameter preset
+    double sccs_epsilon = 78.3;              ///< SCCS bulk relative permittivity
+    double sccs_rho_min = 1.0e-4;            ///< lower cavity-density threshold, bohr^-3
+    double sccs_rho_max = 5.0e-3;            ///< upper cavity-density threshold, bohr^-3
+    double sccs_gamma = 0.0;                  ///< SCCS surface coefficient, dyn/cm
+    double sccs_pressure = 0.0;               ///< SCCS volume coefficient, GPa
+    std::string sccs_boundary = "periodic";  ///< periodic, pcc_0d, or pcc_2d electrostatics
+    int sccs_maxiter = 200;                   ///< polarization iteration limit
+    double sccs_mixing = 0.5;                 ///< polarization linear mixing
+    double sccs_tol_rms = 1.0e-10;            ///< polarization RMS residual tolerance
+    double sccs_tol_max = 1.0e-8;             ///< polarization maximum residual tolerance
+    double sccs_surface_eta = 1.0e-8;         ///< regularized surface norm, bohr^-1
+    double sccs_start_drho = 0.0;              ///< delayed-start density threshold; zero starts immediately
+    int sccs_start_nmax = 30;                  ///< forced delayed-start electronic iteration
 
     // ==============  #Parameters (14.vdW Correction) ===========================
     // ==========================================================
