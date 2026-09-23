@@ -256,6 +256,19 @@ void ESolver_KS::iter_init(UnitCell& ucell, const int istep, const int iter)
 
 void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &conv_esolver)
 {
+    const bool is_output_rank
+        = this->kv.para_k.my_pool == 0 && this->kv.para_k.rank_in_pool == 0;
+    const bool sccs_activated_this_iteration
+        = this->solvent.try_activate_sccs(iter, this->drho);
+    if (sccs_activated_this_iteration)
+    {
+        this->p_chgmix->mix_reset();
+        if (is_output_rank)
+        {
+            std::cout << " SCCS activated at electronic iteration " << iter
+                      << ", previous DRHO = " << this->drho << std::endl;
+        }
+    }
 
     // 1.1) print out band gap 
     if (!PARAM.globalv.two_fermi)
@@ -298,7 +311,7 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
 
     module_charge::ScfMixingCtx ctx;
     ctx.hsolver_error = hsolver_error;
-    ctx.scf_thr = this->scf_thr;
+    ctx.scf_thr = sccs_activated_this_iteration ? -1.0 : this->scf_thr;
     ctx.scf_ene_thr = this->scf_ene_thr;
     ctx.converged_u = converged_u;
     ctx.ks_run = PARAM.globalv.ks_run;
@@ -343,6 +356,20 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     // print energies
     elecstate::print_etot(ucell.magnet, *pelec, conv_esolver, iter, drho,
     dkin, duration, *this->inp_, PARAM.globalv.two_fermi, diag_ethr, 0, true, this->ds_rms_);
+
+    if (is_output_rank)
+    {
+        if (this->solvent.sccs_is_active())
+        {
+            this->solvent.write_sccs_iteration(std::cout);
+        }
+        else if (this->solvent.uses_sccs())
+        {
+            std::cout << " SCCS_DEFERRED DRHO " << this->drho
+                      << " START_DRHO " << this->inp_->sccs_start_drho
+                      << " START_NMAX " << this->inp_->sccs_start_nmax << std::endl;
+        }
+    }
 
 
 #ifdef __JSON
