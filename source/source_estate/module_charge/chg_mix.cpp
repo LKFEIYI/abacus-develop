@@ -194,6 +194,7 @@ void Charge_Mixing::mix_reset()
 {
     this->mixing->reset();
     this->rho_mdata.reset();
+    this->dmr_mdata.reset();
     // initailize tau_mdata
     if (cfg_.mixing_tau)
     {
