@@ -3,6 +3,7 @@ add_library(
     OBJECT
     surchem.cpp
     h_corr_pw.cpp
+    h_corr_sccs.cpp
     cal_epsilon.cpp
     cal_pseudo.cpp
     cal_totn.cpp
@@ -10,6 +11,23 @@ add_library(
     cal_vel.cpp
     minimize_cg.cpp
     sol_force.cpp
+    sccs_cavity.cpp
+    sccs_charge.cpp
+    sccs_driver.cpp
+    sccs_functional.cpp
+    sccs_nonel.cpp
+    sccs_parameters.cpp
+    sccs_pcc.cpp
+    sccs_pcc_2d.cpp
+    sccs_pcc_2d_coulomb.cpp
+    sccs_pcc_coulomb.cpp
+    sccs_poisson.cpp
+    sccs_pw_coulomb.cpp
+    sccs_pw_charge.cpp
+    sccs_pw_force.cpp
+    sccs_pw_nonel.cpp
+    sccs_pw_reduction.cpp
+    sccs_periodic.cpp
 )
 
 if(ENABLE_COVERAGE)
