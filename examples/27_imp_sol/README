@@ -54,6 +54,18 @@ Both plane wave (PW) and LCAO basis sets are supported for implicit solvation mo
   - `STRU`: Describes the platinum slab structure
   - `run.sh`: Script to run the calculation
 
+### 2. 02_pw_sccs_pcc2d_water
+- **System**: Neutral water molecule in an x-z periodic slab cell
+- **Basis**: Plane wave (PW)
+- **Purpose**: Demonstrates native SCCS with the second lattice vector (+y) as the open direction
+- **Boundary conditions**: `sccs_boundary pcc_2d`, with Gamma-only sampling along y
+
+### 3. 03_lcao_sccs_pcc2d_water
+- **System**: Neutral water molecule in the same x-z periodic slab cell
+- **Basis**: Numerical atomic orbitals (LCAO)
+- **Purpose**: Demonstrates that native SCCS 2D-PCC contributes to LCAO SCF, energy, potential, and ionic forces
+- **Boundary conditions**: `sccs_boundary pcc_2d`, with Gamma-only sampling along y
+
 ## How to Run
 
 1. Navigate to the example directory:

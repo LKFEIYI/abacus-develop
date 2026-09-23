@@ -1,0 +1,2 @@
+LCAO multi-k neutral water with native SCCS and the second lattice vector (+y) as the 2D-PCC open direction.
+The 2x1x2 mesh keeps the open y direction at Gamma and uses kpar=2 to cover k-point pool parallelism.
