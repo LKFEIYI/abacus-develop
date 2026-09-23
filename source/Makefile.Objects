@@ -564,6 +564,7 @@ OBJS_RELAXATION=relax_data.o\
 
 OBJS_SURCHEM=surchem.o\
     h_corr_pw.o\
+    h_corr_sccs.o\
     cal_epsilon.o\
     cal_pseudo.o\
     cal_totn.o\
@@ -571,6 +572,23 @@ OBJS_SURCHEM=surchem.o\
     cal_vel.o\
     minimize_cg.o\
     sol_force.o\
+    sccs_cavity.o\
+    sccs_charge.o\
+    sccs_driver.o\
+    sccs_functional.o\
+    sccs_nonel.o\
+    sccs_parameters.o\
+    sccs_pcc.o\
+    sccs_pcc_2d.o\
+    sccs_pcc_2d_coulomb.o\
+    sccs_pcc_coulomb.o\
+    sccs_poisson.o\
+    sccs_pw_coulomb.o\
+    sccs_pw_charge.o\
+    sccs_pw_force.o\
+    sccs_pw_nonel.o\
+    sccs_pw_reduction.o\
+    sccs_periodic.o\
 
 OBJS_SYMMETRY=symm_other.o\
     symm_rot_spin.o\
