@@ -267,6 +267,11 @@ ${OBJ_DIR}/symm_rho_charge.o: $(ABACUS_ROOT)source_estate/module_charge/symm_rho
 	@mkdir -p $(dir $@)
 	${CXX} ${OPTS} ${OPTS_MPI} -c ${HONG} $< -o $@
 
+# Explicit rule for chgmixing.o to avoid VPATH-dependent source resolution.
+${OBJ_DIR}/chgmixing.o: $(ABACUS_ROOT)source_estate/module_charge/chgmixing.cpp
+	@mkdir -p $(dir $@)
+	${CXX} ${OPTS} ${OPTS_MPI} -c ${HONG} $< -o $@
+
 ###### END of ABACUS INFO PART ######
 
 #==========================
