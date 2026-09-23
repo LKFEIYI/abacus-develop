@@ -21,6 +21,117 @@
 #include "source_base/module_parallel/para_world.h"
 #include "source_base/module_parallel/para_tag.h"
 #include "source_base/module_parallel/para_bridge.h"
+#include "source_base/parallel_reduce.h"
+
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+
+namespace
+{
+
+SurchemParameters make_surchem_parameters(const Input_para& inp,
+                                           const AtomsInfoResult& atoms_info,
+                                           const UnitCell& ucell)
+{
+    SurchemParameters parameters;
+    parameters.eb_k = inp.eb_k;
+    parameters.tau = inp.tau;
+    parameters.sigma_k = inp.sigma_k;
+    parameters.nc_k = inp.nc_k;
+    parameters.use_sccs = inp.solvation_model == "sccs";
+    if (!parameters.use_sccs)
+    {
+        return parameters;
+    }
+
+    const ModuleSccs::Preset preset = ModuleSccs::parse_preset(inp.sccs_preset);
+    if (preset == ModuleSccs::Preset::Custom)
+    {
+        parameters.sccs_config.cavity.density_min = inp.sccs_rho_min;
+        parameters.sccs_config.cavity.density_max = inp.sccs_rho_max;
+        parameters.sccs_config.cavity.epsilon_bulk = inp.sccs_epsilon;
+        parameters.sccs_config.surface_tension
+            = ModuleSccs::dyn_per_cm_to_hartree_per_bohr2(inp.sccs_gamma);
+        parameters.sccs_config.pressure
+            = ModuleSccs::gpa_to_hartree_per_bohr3(inp.sccs_pressure);
+    }
+    else
+    {
+        parameters.sccs_config = ModuleSccs::water_preset(preset);
+    }
+    parameters.sccs_config.boundary = ModuleSccs::parse_boundary(inp.sccs_boundary);
+    parameters.sccs_config.max_iterations = inp.sccs_maxiter;
+    parameters.sccs_config.mixing = inp.sccs_mixing;
+    parameters.sccs_config.tolerance_rms = inp.sccs_tol_rms;
+    parameters.sccs_config.tolerance_max = inp.sccs_tol_max;
+    parameters.sccs_config.surface_regularization = inp.sccs_surface_eta;
+    parameters.start_drho = inp.sccs_start_drho;
+    parameters.start_nmax = inp.sccs_start_nmax;
+    parameters.expected_electron_count = atoms_info.nelec;
+    for (int atom_type = 0; atom_type < ucell.ntype; ++atom_type)
+    {
+        parameters.expected_ionic_charge
+            += ucell.atoms[atom_type].ncpp.zv * ucell.atoms[atom_type].na;
+    }
+    ModuleSccs::validate_config(parameters.sccs_config);
+
+    const double net_charge
+        = parameters.expected_ionic_charge - parameters.expected_electron_count;
+    if (parameters.sccs_config.boundary == ModuleSccs::Boundary::Pcc2d
+        && std::abs(net_charge) > parameters.normalization_tolerance)
+    {
+        ModuleBase::WARNING(
+            "ESolver_FP",
+            "charged SCCS pcc_2d slab: the open-boundary field energy grows "
+            "linearly with the cell length, so absolute total energies at "
+            "different y cell lengths are not directly comparable");
+    }
+    return parameters;
+}
+
+void finalize_surchem_parameters(const bool use_uspp,
+                                  const int pool_process_count,
+                                  SurchemParameters& parameters)
+{
+    if (!parameters.use_sccs)
+    {
+        return;
+    }
+    if (use_uspp)
+    {
+        ModuleBase::WARNING_QUIT(
+            "ESolver_FP",
+            "the first SCCS implementation supports only norm-conserving pseudopotentials");
+    }
+    parameters.pool_process_count = pool_process_count;
+}
+
+void validate_sccs_kpoints(const SurchemParameters& parameters,
+                           const K_Vectors& kv)
+{
+    if (!parameters.use_sccs
+        || parameters.sccs_config.boundary != ModuleSccs::Boundary::Pcc2d)
+    {
+        return;
+    }
+
+    double maximum_open_direction_k = 0.0;
+    for (int ik = 0; ik < kv.get_nks(); ++ik)
+    {
+        maximum_open_direction_k
+            = std::max(maximum_open_direction_k, std::abs(kv.kvec_d[ik].y));
+    }
+    Parallel_Reduce::reduce_max(maximum_open_direction_k);
+    if (maximum_open_direction_k > 1.0e-12)
+    {
+        ModuleBase::WARNING_QUIT(
+            "ESolver_FP",
+            "SCCS pcc_2d requires Gamma-only sampling along the second lattice direction");
+    }
+}
+
+} // namespace
 
 namespace ModuleESolver
 {
@@ -47,13 +158,6 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
 
     this->inp_ = &inp;
 
-    SurchemParameters surchem_parameters;
-    surchem_parameters.eb_k = inp.eb_k;
-    surchem_parameters.tau = inp.tau;
-    surchem_parameters.sigma_k = inp.sigma_k;
-    surchem_parameters.nc_k = inp.nc_k;
-    this->solvent.set_parameters(surchem_parameters);
-
     XCFunctionalParameters xc_parameters;
     xc_parameters.xc_temperature = inp.xc_temperature;
     xc_parameters.exx_fock_alpha = inp.exx_fock_alpha;
@@ -68,7 +172,7 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
     const std::string global_out_dir = PARAM.globalv.global_out_dir;
     const int npol = PARAM.globalv.npol;
     const bool two_fermi = PARAM.globalv.two_fermi;
-    auto atoms_info = unitcell::read_pseudo(GlobalV::ofs_running,
+    AtomsInfoResult atoms_info = unitcell::read_pseudo(GlobalV::ofs_running,
                                             ucell,
                                             this->inp_->pseudo_dir,
                                             global_out_dir,
@@ -93,6 +197,9 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
 
     elecstate::ParamUpdater::update_from_atoms_info(atoms_info);
 
+    SurchemParameters surchem_parameters
+        = make_surchem_parameters(inp, atoms_info, ucell);
+
     XC_Functional::set_xc_type(ucell.atoms[0].ncpp.xc_func);
     pw::validate_uspp_support(atoms_info.use_uspp,
                               inp.basis_type,
@@ -107,6 +214,11 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
     //! 2) setup pw_rho, pw_rhod, pw_big, sf, and read_pseudopotentials
     pw::setup_pwrho(ucell, PARAM.globalv.double_grid, this->pw_rho_flag, 
       this->pw_rho, this->pw_rhod, this->pw_big, this->classname, inp);
+
+    finalize_surchem_parameters(atoms_info.use_uspp,
+                                  this->pw_rhod->poolnproc,
+                                  surchem_parameters);
+    this->solvent.set_parameters(surchem_parameters);
 
     //! 3) setup structure factors
     this->sf.set(this->pw_rhod, inp.nbspline);
@@ -131,6 +243,7 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
     const double kspacing[3] = {this->inp_->kspacing[0], this->inp_->kspacing[1], this->inp_->kspacing[2]};
     const double koffset[3] = {this->inp_->koffset[0], this->inp_->koffset[1], this->inp_->koffset[2]};
     this->kv.set(ucell, ucell.symm, inp.kpoint_file, inp.nspin, ucell.G, ucell.latvec, GlobalV::ofs_running, GlobalV::ofs_warning, use_ibz, global_out_dir, gamma_only_local, kspacing, this->inp_->kmesh_type, koffset);
+    validate_sccs_kpoints(surchem_parameters, this->kv);
     ModuleBase::GlobalFunc::DONE(GlobalV::ofs_running, "INIT K-POINTS");
 
     //! 8) print information
@@ -158,6 +271,13 @@ void ESolver_FP::before_all_runners(BaseCell& basecell, const Input_para& inp)
 void ESolver_FP::after_scf(UnitCell& ucell, const int istep, const bool conv_esolver)
 {
     ModuleBase::TITLE("ESolver_FP", "after_scf");
+
+    const bool is_output_rank
+        = this->kv.para_k.my_pool == 0 && this->kv.para_k.rank_in_pool == 0;
+    if (this->solvent.sccs_is_active() && is_output_rank)
+    {
+        this->solvent.write_sccs_diagnostics(std::cout);
+    }
 
     //! Output convergence information
     ModuleIO::output_convergence_after_scf(conv_esolver, this->pelec->f_en.etot);
@@ -238,7 +358,8 @@ void ESolver_FP::before_scf(UnitCell& ucell, const int istep)
 
     //! Evaluate the vdW correction once for this ionic configuration.
     this->vdw_result_.reset();
-    auto vdw_solver = vdw::make_vdw(ucell, *this->inp_, &(GlobalV::ofs_running));
+    std::unique_ptr<vdw::Vdw> vdw_solver
+        = vdw::make_vdw(ucell, *this->inp_, &(GlobalV::ofs_running));
     if (vdw_solver != nullptr)
     {
         const vdw::VdwRequest request(this->inp_->cal_force, this->inp_->cal_stress);
