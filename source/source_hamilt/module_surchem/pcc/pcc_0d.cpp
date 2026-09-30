@@ -1,4 +1,5 @@
 #include "pcc_0d.h"
+#include "../common/lattice_row.h"
 
 #include "source_base/constants.h"
 #include "source_base/matrix3.h"
@@ -24,27 +25,6 @@ double norm_squared(const ModuleBase::Vector3<double>& value)
 double norm(const ModuleBase::Vector3<double>& value)
 {
     return std::sqrt(norm_squared(value));
-}
-
-ModuleBase::Vector3<double> lattice_row(const ModuleBase::Matrix3& lattice,
-                                        const int row,
-                                        const double scale)
-{
-    if (row == 0)
-    {
-        return ModuleBase::Vector3<double>(scale * lattice.e11,
-                                           scale * lattice.e12,
-                                           scale * lattice.e13);
-    }
-    if (row == 1)
-    {
-        return ModuleBase::Vector3<double>(scale * lattice.e21,
-                                           scale * lattice.e22,
-                                           scale * lattice.e23);
-    }
-    return ModuleBase::Vector3<double>(scale * lattice.e31,
-                                       scale * lattice.e32,
-                                       scale * lattice.e33);
 }
 
 ModuleBase::Vector3<double> scaled(const ModuleBase::Vector3<double>& value,
@@ -115,11 +95,11 @@ PccGeometry pcc_geometry(const ModuleBase::Matrix3& lattice_vectors,
             "zero-dimensional PCC geometry requires positive finite scale and tolerance");
     }
     const ModuleBase::Vector3<double> a
-        = lattice_row(lattice_vectors, 0, lattice_scale);
+        = ModuleSurchem::lattice_row(lattice_vectors, 0, lattice_scale);
     const ModuleBase::Vector3<double> b
-        = lattice_row(lattice_vectors, 1, lattice_scale);
+        = ModuleSurchem::lattice_row(lattice_vectors, 1, lattice_scale);
     const ModuleBase::Vector3<double> c
-        = lattice_row(lattice_vectors, 2, lattice_scale);
+        = ModuleSurchem::lattice_row(lattice_vectors, 2, lattice_scale);
     const double length_a = norm(a);
     const double length_b = norm(b);
     const double length_c = norm(c);
@@ -190,7 +170,6 @@ ModuleBase::Vector3<double> pcc_relative_position(
     const ModuleBase::Vector3<double>& position,
     const PccGeometry& geometry)
 {
-    validate_pcc_geometry(geometry);
     if (!finite_vector(position))
     {
         throw std::domain_error("zero-dimensional PCC positions must be finite");
@@ -279,6 +258,7 @@ MultipoleMoments point_charge_moments(const std::vector<PointCharge>& charges,
 MultipoleMoments point_charge_moments(const std::vector<PointCharge>& charges,
                                       const PccGeometry& geometry)
 {
+    validate_pcc_geometry(geometry);
     std::vector<ModuleBase::Vector3<double>> relative_positions(charges.size());
     for (std::size_t index = 0; index < charges.size(); ++index)
     {
@@ -320,6 +300,7 @@ MultipoleMoments density_moments(const std::vector<double>& density,
     {
         throw std::invalid_argument("PCC density and position arrays must have the same size");
     }
+    validate_pcc_geometry(geometry);
     std::vector<ModuleBase::Vector3<double>> relative_positions(positions.size());
     for (std::size_t index = 0; index < positions.size(); ++index)
     {
@@ -380,7 +361,6 @@ double pcc_potential(const MultipoleMoments& moments,
                      const ModuleBase::Vector3<double>& position,
                      const PccParameters& parameters)
 {
-    validate_pcc_parameters(parameters);
     const double volume = parameters.cube_length * parameters.cube_length * parameters.cube_length;
     const double parabolic = moments.charge * norm_squared(position)
                              - 2.0 * dot(moments.dipole, position)
@@ -393,7 +373,6 @@ ModuleBase::Vector3<double> pcc_potential_gradient(const MultipoleMoments& momen
                                                    const ModuleBase::Vector3<double>& position,
                                                    const PccParameters& parameters)
 {
-    validate_pcc_parameters(parameters);
     const double volume = parameters.cube_length * parameters.cube_length * parameters.cube_length;
     const double factor = -4.0 * ModuleBase::PI / (3.0 * volume);
     return ModuleBase::Vector3<double>(factor * (moments.charge * position.x - moments.dipole.x),
@@ -413,6 +392,7 @@ ModuleBase::Vector3<double> pcc_point_charge_force(
     {
         throw std::domain_error("PCC point charge force requires finite charge and coordinates");
     }
+    validate_pcc_parameters(parameters);
     const ModuleBase::Vector3<double> relative(point.position.x - origin.x,
                                                 point.position.y - origin.y,
                                                 point.position.z - origin.z);
@@ -432,6 +412,7 @@ ModuleBase::Vector3<double> pcc_point_charge_force(
     {
         throw std::domain_error("PCC point charge force requires finite charge and coordinates");
     }
+    validate_pcc_geometry(geometry);
     const ModuleBase::Vector3<double> gradient
         = pcc_potential_gradient(total_moments,
                                  pcc_relative_position(point.position, geometry),

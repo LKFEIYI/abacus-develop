@@ -9,6 +9,8 @@
 #include "source_base/tool_title.h"
 
 #include <algorithm>
+#include <cmath>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -155,6 +157,17 @@ void surchem::v_correction_sccs(const UnitCell& cell,
                                        reduction,
                                        this->sccs_state_);
     this->sccs_result_.reused_fixed_sources = reuse_fixed_sources;
+    // v_correction_pcc already reports the same electron-count mismatch.
+    const double electron_count_error
+        = this->sccs_result_.charge.electron_count - this->parameters_.expected_electron_count;
+    if (!this->uses_pcc()
+        && std::abs(electron_count_error) > this->parameters_.normalization_tolerance)
+    {
+        std::ostringstream message;
+        message << "SCCS grid electron count differs from the expected value by "
+                << electron_count_error << " e; the solute charge uses the grid density";
+        ModuleBase::WARNING("surchem::v_correction_sccs", message.str());
+    }
 
     if (this->uses_pcc())
     {
@@ -178,6 +191,17 @@ void surchem::v_correction_sccs(const UnitCell& cell,
         {
             v(spin, ir) = 2.0 * this->sccs_result_.electron_potential_hartree[ir];
         }
+    }
+
+    // The electrostatic output potential adds the reaction potential of the
+    // solute charge to the vacuum PCC term; the cavity derivatives are not
+    // electrostatic and stay out of it.
+    const std::vector<double>& reaction_potential = this->sccs_result_.electrostatic.reaction_potential;
+    this->electrostatic_correction_ry_.resize(rho_basis.nrxx);
+    for (int ir = 0; ir < rho_basis.nrxx; ++ir)
+    {
+        const double pcc_part = this->uses_pcc() ? pcc_potential(0, ir) : 0.0;
+        this->electrostatic_correction_ry_[ir] = pcc_part - 2.0 * reaction_potential[ir];
     }
 
     // The vacuum PCC energy stays in surchem::Epcc, set by v_correction_pcc.
@@ -212,6 +236,7 @@ void surchem::v_correction_solvent(const UnitCell& cell,
                 v.create(nspin, rho_basis.nrxx);
             }
             ModuleBase::GlobalFunc::ZEROS(v.c, nspin * rho_basis.nrxx);
+            this->electrostatic_correction_ry_.assign(rho_basis.nrxx, 0.0);
             surchem::Ael = 0.0;
             surchem::Acav = 0.0;
             surchem::Epcc = 0.0;

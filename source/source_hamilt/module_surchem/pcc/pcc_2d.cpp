@@ -1,4 +1,5 @@
 #include "pcc_2d.h"
+#include "../common/lattice_row.h"
 
 #include "source_base/constants.h"
 #include "source_base/matrix3.h"
@@ -10,27 +11,6 @@ namespace ModulePcc
 {
 namespace
 {
-
-ModuleBase::Vector3<double> lattice_row(const ModuleBase::Matrix3& lattice,
-                                        const int row,
-                                        const double scale)
-{
-    if (row == 0)
-    {
-        return ModuleBase::Vector3<double>(scale * lattice.e11,
-                                           scale * lattice.e12,
-                                           scale * lattice.e13);
-    }
-    if (row == 1)
-    {
-        return ModuleBase::Vector3<double>(scale * lattice.e21,
-                                           scale * lattice.e22,
-                                           scale * lattice.e23);
-    }
-    return ModuleBase::Vector3<double>(scale * lattice.e31,
-                                       scale * lattice.e32,
-                                       scale * lattice.e33);
-}
 
 bool finite_position(const ModuleBase::Vector3<double>& position)
 {
@@ -77,15 +57,6 @@ double wrap_y(const double position_y, const double cell_length_y)
     return position_y - cell_length_y * std::floor(position_y / cell_length_y);
 }
 
-void validate_pcc_2d_geometry(const Pcc2dGeometry& geometry)
-{
-    validate_pcc_2d_parameters(geometry.parameters);
-    if (!std::isfinite(geometry.origin_y))
-    {
-        throw std::invalid_argument("two-dimensional PCC requires a finite y origin");
-    }
-}
-
 } // namespace
 
 Pcc2dGeometry pcc_2d_geometry(const ModuleBase::Matrix3& lattice_vectors,
@@ -100,11 +71,11 @@ Pcc2dGeometry pcc_2d_geometry(const ModuleBase::Matrix3& lattice_vectors,
     }
 
     const ModuleBase::Vector3<double> a
-        = lattice_row(lattice_vectors, 0, lattice_scale);
+        = ModuleSurchem::lattice_row(lattice_vectors, 0, lattice_scale);
     const ModuleBase::Vector3<double> b
-        = lattice_row(lattice_vectors, 1, lattice_scale);
+        = ModuleSurchem::lattice_row(lattice_vectors, 1, lattice_scale);
     const ModuleBase::Vector3<double> c
-        = lattice_row(lattice_vectors, 2, lattice_scale);
+        = ModuleSurchem::lattice_row(lattice_vectors, 2, lattice_scale);
     if (!finite_position(a) || !finite_position(b) || !finite_position(c))
     {
         throw std::invalid_argument("two-dimensional PCC lattice vectors must be finite");
@@ -156,9 +127,17 @@ void validate_pcc_2d_parameters(const Pcc2dParameters& parameters)
     }
 }
 
+void validate_pcc_2d_geometry(const Pcc2dGeometry& geometry)
+{
+    validate_pcc_2d_parameters(geometry.parameters);
+    if (!std::isfinite(geometry.origin_y))
+    {
+        throw std::invalid_argument("two-dimensional PCC requires a finite y origin");
+    }
+}
+
 double pcc_2d_relative_y(const double position_y, const Pcc2dGeometry& geometry)
 {
-    validate_pcc_2d_geometry(geometry);
     if (!std::isfinite(position_y))
     {
         throw std::domain_error("two-dimensional PCC y positions must be finite");
@@ -301,12 +280,6 @@ double pcc_2d_potential(const Pcc2dMoments& moments,
                         const double relative_y,
                         const Pcc2dParameters& parameters)
 {
-    validate_pcc_2d_parameters(parameters);
-    if (!std::isfinite(moments.charge) || !std::isfinite(moments.dipole_y)
-        || !std::isfinite(moments.quadrupole_yy) || !std::isfinite(relative_y))
-    {
-        throw std::domain_error("two-dimensional PCC potential inputs must be finite");
-    }
 
     const double parabolic = moments.charge * relative_y * relative_y
                              - 2.0 * moments.dipole_y * relative_y
@@ -320,12 +293,6 @@ ModuleBase::Vector3<double> pcc_2d_potential_gradient(
     const double relative_y,
     const Pcc2dParameters& parameters)
 {
-    validate_pcc_2d_parameters(parameters);
-    if (!std::isfinite(moments.charge) || !std::isfinite(moments.dipole_y)
-        || !std::isfinite(moments.quadrupole_yy) || !std::isfinite(relative_y))
-    {
-        throw std::domain_error("two-dimensional PCC gradient inputs must be finite");
-    }
 
     const double gradient_y = -2.0 * inverse_volume_factor(parameters)
                               * (moments.charge * relative_y - moments.dipole_y);
@@ -340,6 +307,12 @@ ModuleBase::Vector3<double> pcc_2d_point_charge_force(
     if (!std::isfinite(point.charge) || !finite_position(point.position))
     {
         throw std::domain_error("two-dimensional PCC point charge force inputs must be finite");
+    }
+    validate_pcc_2d_geometry(geometry);
+    if (!std::isfinite(total_moments.charge) || !std::isfinite(total_moments.dipole_y)
+        || !std::isfinite(total_moments.quadrupole_yy))
+    {
+        throw std::domain_error("two-dimensional PCC force moments must be finite");
     }
     const ModuleBase::Vector3<double> gradient
         = pcc_2d_potential_gradient(total_moments,

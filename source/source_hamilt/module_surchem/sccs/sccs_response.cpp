@@ -530,6 +530,8 @@ SccsResponse solve_sccs_response(
     const ModuleSurchem::ChargeReduction& reduction)
 {
     ModuleBase::timer::start("ModuleSccs", "solve_sccs_response");
+    ModuleSccs::validate_cavity_parameters(cavity);
+    ModuleSccs::validate_solvent_aware_parameters(solvent_aware);
     SccsResponse result = prepare_cavity(density, cavity);
     const std::size_t size = density.size();
     const bool filled = uses_solvent_aware(solvent_aware);

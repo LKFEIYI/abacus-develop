@@ -3,14 +3,31 @@
 #include "../common/charge_reduction.h"
 #include "../common/pw_grid.h"
 #include "source_base/timer.h"
+#include "source_base/tool_quit.h"
 #include "source_base/tool_title.h"
 
 #include <cmath>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
 namespace
 {
+
+// The grid density need not integrate to the electron count exactly, e.g.
+// after a very tight CG diagonalization; PCC uses the actual moments, so a
+// mismatch is reported instead of stopping the calculation.
+void warn_charge_mismatch(const double charge_error, const double tolerance)
+{
+    if (std::abs(charge_error) <= tolerance)
+    {
+        return;
+    }
+    std::ostringstream message;
+    message << "PCC net charge differs from the expected value by " << charge_error
+            << " e; the correction uses the grid charge";
+    ModuleBase::WARNING("surchem::v_correction_pcc", message.str());
+}
 
 double ionic_system_center_y(const UnitCell& cell, const double cell_length_y)
 {
@@ -124,12 +141,10 @@ void surchem::v_correction_pcc(const UnitCell& cell,
         const double expected_charge = this->parameters_.expected_ionic_charge
                                        - this->parameters_.expected_electron_count;
         const double charge_error = this->pcc_moments_.charge - expected_charge;
-        if (std::abs(charge_error) > this->parameters_.normalization_tolerance)
-        {
-            throw std::runtime_error("standalone PCC charge does not match the requested electron count");
-        }
+        warn_charge_mismatch(charge_error, this->parameters_.normalization_tolerance);
         energy_hartree = ModulePcc::pcc_self_energy(this->pcc_moments_,
                                                      this->pcc_geometry_.parameters);
+        ModulePcc::validate_pcc_geometry(this->pcc_geometry_);
         for (int ir = 0; ir < rho_basis.nrxx; ++ir)
         {
             const ModuleBase::Vector3<double> relative_position
@@ -162,12 +177,10 @@ void surchem::v_correction_pcc(const UnitCell& cell,
         const double expected_charge = this->parameters_.expected_ionic_charge
                                        - this->parameters_.expected_electron_count;
         const double charge_error = this->pcc_2d_moments_.charge - expected_charge;
-        if (std::abs(charge_error) > this->parameters_.normalization_tolerance)
-        {
-            throw std::runtime_error("standalone PCC charge does not match the requested electron count");
-        }
+        warn_charge_mismatch(charge_error, this->parameters_.normalization_tolerance);
         energy_hartree = ModulePcc::pcc_2d_self_energy(this->pcc_2d_moments_,
                                                         this->pcc_2d_geometry_.parameters);
+        ModulePcc::validate_pcc_2d_geometry(this->pcc_2d_geometry_);
         for (int ir = 0; ir < rho_basis.nrxx; ++ir)
         {
             const double relative_y
@@ -183,6 +196,9 @@ void surchem::v_correction_pcc(const UnitCell& cell,
             }
         }
     }
+    const double* electron_potential_begin = v.c;
+    const double* electron_potential_end = v.c + rho_basis.nrxx;
+    this->electrostatic_correction_ry_.assign(electron_potential_begin, electron_potential_end);
     this->pcc_energy_rydberg_ = 2.0 * energy_hartree;
     surchem::Epcc = this->pcc_energy_rydberg_;
     surchem::Ael = 0.0;
