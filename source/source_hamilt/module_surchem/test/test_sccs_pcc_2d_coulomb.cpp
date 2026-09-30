@@ -24,6 +24,9 @@
 namespace
 {
 
+const ModuleSccs::SolventAwareParameters no_solvent_aware;
+const std::vector<double> no_probe_kernel;
+
 int test_process_count = 1;
 int test_rank = 0;
 
@@ -273,6 +276,8 @@ TEST_F(SccsPcc2dCoulombTest, SqrtCgKeepsChargedUniformDielectricPccGauge)
         = ModuleSccs::solve_sccs_response(cavity_density,
                                           solute_charge,
                                           cavity,
+                                          no_solvent_aware,
+                                          no_probe_kernel,
                                           solver,
                                           cold_start,
                                           basis_,
@@ -381,6 +386,8 @@ TEST(SccsPcc2dSqrtCg, LayeredCavityMatchesOpenOneDimensionalField)
         = ModuleSccs::solve_sccs_response(cavity_density,
                                           solute_charge,
                                           cavity,
+                                          no_solvent_aware,
+                                          no_probe_kernel,
                                           solver,
                                           cold_start,
                                           basis,

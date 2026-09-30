@@ -36,7 +36,17 @@ struct SccsState
     ModulePcc::PccGeometry pcc_geometry;
     ModulePcc::Pcc2dGeometry pcc_2d_geometry;
     CavityParameters cavity;
+    SolventAwareParameters solvent_aware;
     bool valid = false;
+};
+
+// Fixed cavity inputs of one cell, each empty when unused: the ENVIRON 'full'
+// core-electron Gaussians added to the cavity density (config.core_electrons)
+// and the solvent-aware probe kernel (config.solvent_aware).
+struct CavityInputs
+{
+    std::vector<double> core_density;
+    std::vector<double> probe_kernel;
 };
 
 struct SccsResult
@@ -65,13 +75,11 @@ struct SccsResult
     double vacuum_pcc_energy = 0.0;
 };
 
-// cavity_core_density: ENVIRON 'full' core-electron Gaussians added to the
-// electron density that defines the cavity (config.core_electrons), else empty.
 // The reciprocal unit tpiba and the volume element omega/nxyz come from basis.
 SccsResult evaluate_pw_sccs(
     const std::vector<double>& electron_density,
     const std::vector<double>& ionic_density,
-    const std::vector<double>& cavity_core_density,
+    const CavityInputs& cavity_inputs,
     double expected_electron_count,
     double expected_ionic_charge,
     double normalization_tolerance,

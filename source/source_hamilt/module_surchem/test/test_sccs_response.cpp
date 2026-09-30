@@ -21,6 +21,9 @@
 namespace
 {
 
+const ModuleSccs::SolventAwareParameters no_solvent_aware;
+const std::vector<double> no_probe_kernel;
+
 // The SCCS driver's periodic path: plain Coulomb preconditioner, pool reduction.
 ModuleSccs::SccsResponse solve_periodic(const std::vector<double>& cavity_density,
                                               const std::vector<double>& solute_charge,
@@ -35,6 +38,8 @@ ModuleSccs::SccsResponse solve_periodic(const std::vector<double>& cavity_densit
     return ModuleSccs::solve_sccs_response(cavity_density,
                                            solute_charge,
                                            cavity,
+                                           no_solvent_aware,
+                                           no_probe_kernel,
                                            solver,
                                            initial_potential,
                                            basis,

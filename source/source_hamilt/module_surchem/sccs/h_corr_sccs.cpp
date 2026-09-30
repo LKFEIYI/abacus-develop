@@ -61,11 +61,18 @@ bool surchem::update_fixed_sources(const UnitCell& cell,
     cache.local_potential.assign(vlocal, vlocal_end);
     cache.ionic_density
         = ModuleSccs::gaussian_ionic_density(cell, rho_basis, ModuleSccs::gaussian_ion_spread);
-    cache.core_density.clear();
-    if (this->parameters_.sccs_config.core_electrons)
+    const ModuleSccs::SccsConfig& config = this->parameters_.sccs_config;
+    cache.cavity_inputs = ModuleSccs::CavityInputs();
+    if (config.core_electrons)
     {
-        cache.core_density = ModuleSccs::gaussian_core_density(
-            cell, rho_basis, this->parameters_.sccs_config.core_spread);
+        cache.cavity_inputs.core_density
+            = ModuleSccs::gaussian_core_density(cell, rho_basis, config.core_spread);
+    }
+    if (ModuleSccs::uses_solvent_aware(config.solvent_aware))
+    {
+        const ModuleSurchem::PoolChargeReduction reduction(this->parameters_.pool_process_count);
+        cache.cavity_inputs.probe_kernel = ModuleSccs::solvent_probe_kernel(
+            rho_basis, cell.latvec, cell.lat0, config.solvent_aware, reduction);
     }
     cache.positions = ModuleSurchem::pw_grid_positions(rho_basis, cell.latvec, cell.lat0);
     cache.lattice_vectors = cell.latvec;
@@ -116,7 +123,7 @@ void surchem::v_correction_sccs(const UnitCell& cell,
     const bool reuse_fixed_sources = this->update_fixed_sources(cell, rho_basis, vlocal);
     const FixedSourceCache& cache = this->fixed_source_cache_;
     const std::vector<double>& ionic_density = cache.ionic_density;
-    const std::vector<double>& core_density = cache.core_density;
+    const ModuleSccs::CavityInputs& cavity_inputs = cache.cavity_inputs;
     const std::vector<ModuleBase::Vector3<double>>& positions = cache.positions;
     ModuleBase::matrix pcc_potential;
     double vacuum_pcc_energy = 0.0;
@@ -136,7 +143,7 @@ void surchem::v_correction_sccs(const UnitCell& cell,
     this->sccs_result_
         = ModuleSccs::evaluate_pw_sccs(electron_density,
                                        ionic_density,
-                                       core_density,
+                                       cavity_inputs,
                                        this->parameters_.expected_electron_count,
                                        this->parameters_.expected_ionic_charge,
                                        this->parameters_.normalization_tolerance,

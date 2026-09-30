@@ -33,6 +33,8 @@ struct SccsConfig
     // valence charge with core_spread (bohr) on every non-hydrogen atom.
     bool core_electrons = false;
     double core_spread = 0.5;
+    // ENVIRON solvent-aware filling of the cavity; off for solvent_radius 0.
+    SolventAwareParameters solvent_aware;
 };
 
 Preset parse_preset(const std::string& value);

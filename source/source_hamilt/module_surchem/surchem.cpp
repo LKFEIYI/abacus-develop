@@ -197,6 +197,11 @@ void surchem::write_sccs_iteration(std::ostream& output) const
         }
         // Local output-rank FFT counts of the sqrt-CG solve; timings are in
         // the ModuleBase::timer summary.
+        if (!result.response.local_solute.empty())
+        {
+            output << " SCCS_SOLVENT_AWARE FILLED_VOLUME/Bohr3 " << result.response.filled_volume
+                   << '\n';
+        }
         const ModuleSccs::CoulombTransformCounts& counts = result.forward_transforms;
         output << " SCCS_FFT R2G_CALLS " << counts.forward_calls
                << " G2R_CALLS " << counts.inverse_calls

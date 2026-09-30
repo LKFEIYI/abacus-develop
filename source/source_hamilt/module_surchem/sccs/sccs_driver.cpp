@@ -34,6 +34,15 @@ bool same_cavity(const CavityParameters& left, const CavityParameters& right)
            && left.lowpass_p2 == right.lowpass_p2;
 }
 
+bool same_solvent_aware(const SolventAwareParameters& left, const SolventAwareParameters& right)
+{
+    return left.solvent_radius == right.solvent_radius
+           && left.radial_scale == right.radial_scale
+           && left.radial_spread == right.radial_spread
+           && left.filling_threshold == right.filling_threshold
+           && left.filling_spread == right.filling_spread;
+}
+
 bool same_vector(const ModuleBase::Vector3<double>& left,
                  const ModuleBase::Vector3<double>& right)
 {
@@ -100,6 +109,7 @@ bool same_state_signature(const SccsState& state,
                           const ModulePcc::PccGeometry& pcc_geometry,
                           const ModulePcc::Pcc2dGeometry& pcc_2d_geometry,
                           const CavityParameters& cavity,
+                          const SolventAwareParameters& solvent_aware,
                           const ModulePW::PW_Basis& basis,
                           const double tpiba,
                           const double volume_element,
@@ -110,6 +120,7 @@ bool same_state_signature(const SccsState& state,
            && same_pcc_geometry(state.pcc_geometry, pcc_geometry)
            && same_pcc_2d_geometry(state.pcc_2d_geometry, pcc_2d_geometry)
            && same_cavity(state.cavity, cavity)
+           && same_solvent_aware(state.solvent_aware, solvent_aware)
            && state.potential.size() == static_cast<std::size_t>(basis.nrxx);
 }
 
@@ -121,7 +132,7 @@ bool same_state_signature(const SccsState& state,
 SccsResult evaluate_pw_sccs(
     const std::vector<double>& electron_density,
     const std::vector<double>& ionic_density,
-    const std::vector<double>& cavity_core_density,
+    const CavityInputs& cavity_inputs,
     const double expected_electron_count,
     const double expected_ionic_charge,
     const double normalization_tolerance,
@@ -143,9 +154,15 @@ SccsResult evaluate_pw_sccs(
     }
     const std::size_t expected_core_size
         = config.core_electrons ? static_cast<std::size_t>(basis.nrxx) : 0;
-    if (cavity_core_density.size() != expected_core_size)
+    if (cavity_inputs.core_density.size() != expected_core_size)
     {
         throw std::invalid_argument("SCCS core-electron density must be given exactly when core_electrons is set");
+    }
+    const std::size_t expected_kernel_size
+        = uses_solvent_aware(config.solvent_aware) ? static_cast<std::size_t>(basis.npw) : 0;
+    if (cavity_inputs.probe_kernel.size() != expected_kernel_size)
+    {
+        throw std::invalid_argument("SCCS probe kernel must be given exactly when solvent_aware is set");
     }
 
     SccsResult result;
@@ -195,6 +212,7 @@ SccsResult evaluate_pw_sccs(
                                                    pcc_geometry,
                                                    pcc_2d_geometry,
                                                    config.cavity,
+                                                   config.solvent_aware,
                                                    basis,
                                                    tpiba,
                                                    volume_element,
@@ -208,13 +226,15 @@ SccsResult evaluate_pw_sccs(
     // The cavity follows the electrons, plus the core electrons in ENVIRON
     // 'full' mode; the solute charge is unchanged.
     std::vector<double> cavity_density = result.charge.electron;
-    for (std::size_t index = 0; index < cavity_core_density.size(); ++index)
+    for (std::size_t index = 0; index < cavity_inputs.core_density.size(); ++index)
     {
-        cavity_density[index] += cavity_core_density[index];
+        cavity_density[index] += cavity_inputs.core_density[index];
     }
     result.response = solve_sccs_response(cavity_density,
                                           result.charge.solute,
                                           config.cavity,
+                                          config.solvent_aware,
+                                          cavity_inputs.probe_kernel,
                                           solver_parameters,
                                           initial_potential,
                                           basis,
@@ -244,6 +264,8 @@ SccsResult evaluate_pw_sccs(
                                                              reduction);
     const std::vector<double> non_electrostatic_potential
         = boundary_to_density_potential(result.response,
+                                        cavity_inputs.probe_kernel,
+                                        basis,
                                         result.non_electrostatic.boundary_potential);
 
     result.electron_potential_hartree.resize(electron_density.size());
@@ -342,6 +364,7 @@ SccsResult evaluate_pw_sccs(
     state.pcc_geometry = pcc_geometry;
     state.pcc_2d_geometry = pcc_2d_geometry;
     state.cavity = config.cavity;
+    state.solvent_aware = config.solvent_aware;
     state.valid = true;
     ModuleBase::timer::end("ModuleSccs", "evaluate_pw_sccs");
     return result;

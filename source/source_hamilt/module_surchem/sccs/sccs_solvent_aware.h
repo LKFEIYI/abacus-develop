@@ -23,27 +23,7 @@ class ChargeReduction;
 namespace ModuleSccs
 {
 
-// Environ solvent-aware interface (Andreussi et al., JCTC 15, 1996 (2019)):
-// cavity voids too small for a solvent molecule are filled with solute.
-struct SolventAwareParameters
-{
-    // Solvent radius in bohr; zero disables the filling.
-    double solvent_radius = 0.0;
-    // The probe sphere has radius solvent_radius * radial_scale.
-    double radial_scale = 2.0;
-    // erfc spread of the probe sphere, in bohr.
-    double radial_spread = 0.5;
-    // A point is filled when the solute fraction of its probe sphere passes
-    // filling_threshold, over an erfc step of width filling_spread.
-    double filling_threshold = 0.825;
-    double filling_spread = 0.02;
-};
-
-bool uses_solvent_aware(const SolventAwareParameters& parameters);
-
-// Environ's ranges, except that filling_threshold must also be below one:
-// the solute fraction never exceeds one, so a larger threshold fills nothing.
-void validate_solvent_aware_parameters(const SolventAwareParameters& parameters);
+struct SolventAwareParameters;
 
 // Fourier coefficients on the local G vectors of basis of the probe
 // erfc((|r| - R)/radial_spread), R = solvent_radius * radial_scale, cut at

@@ -99,6 +99,7 @@ AddTest(
   SOURCES test_sccs_response.cpp ../sccs/sccs_cavity.cpp
           ../sccs/sccs_pw_coulomb.cpp ../sccs/sccs_response.cpp
           ../common/charge_reduction.cpp
+          ../sccs/sccs_solvent_aware.cpp
 )
 
 AddTest(
@@ -122,6 +123,7 @@ AddTest(
           ../sccs/sccs_cavity.cpp ../sccs/sccs_response.cpp
           ../common/charge_reduction.cpp
           ../pcc/pcc_moments.cpp
+          ../sccs/sccs_solvent_aware.cpp
 )
 
 AddTest(
@@ -133,6 +135,7 @@ AddTest(
           ../sccs/sccs_pcc_2d_coulomb.cpp ../common/pw_grid.cpp
           ../common/charge_reduction.cpp
           ../pcc/pcc_moments.cpp
+          ../sccs/sccs_solvent_aware.cpp
 )
 
 AddTest(
@@ -152,7 +155,7 @@ AddTest(
 AddTest(
   TARGET MODULE_HAMILT_surchem_sccs_solvent_aware
   LIBS planewave device base
-  SOURCES test_sccs_solvent_aware.cpp ../sccs/sccs_solvent_aware.cpp
+  SOURCES test_sccs_solvent_aware.cpp ../sccs/sccs_solvent_aware.cpp ../sccs/sccs_cavity.cpp
           ../sccs/sccs_pw_coulomb.cpp ../common/charge_reduction.cpp
 )
 
@@ -175,6 +178,7 @@ AddTest(
           ../sccs/sccs_pw_coulomb.cpp ../sccs/sccs_pw_nonel.cpp
           ../common/charge_reduction.cpp
           ../pcc/pcc_moments.cpp
+          ../sccs/sccs_solvent_aware.cpp
 )
 
 AddTest(
@@ -190,6 +194,7 @@ AddTest(
           ../common/charge_reduction.cpp
           ../pcc/pcc_moments.cpp
           ../pcc/pcc_boundary.cpp
+          ../sccs/sccs_solvent_aware.cpp
 )
 
 AddTest(
@@ -204,4 +209,5 @@ AddTest(
           ../sccs/sccs_gaussian_ion.cpp ../sccs/sccs_pw_nonel.cpp
           ../common/charge_reduction.cpp
           ../pcc/pcc_moments.cpp
+          ../sccs/sccs_solvent_aware.cpp
 )

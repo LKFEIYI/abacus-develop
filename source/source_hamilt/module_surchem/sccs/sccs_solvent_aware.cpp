@@ -1,6 +1,7 @@
 #include "sccs_solvent_aware.h"
 
 #include "../common/charge_reduction.h"
+#include "sccs_cavity.h"
 
 #include "source_base/constants.h"
 #include "source_base/matrix3.h"
@@ -71,36 +72,6 @@ std::vector<ModuleBase::Vector3<double>> convolve_field(
 }
 
 } // namespace
-
-bool uses_solvent_aware(const SolventAwareParameters& parameters)
-{
-    return parameters.solvent_radius > 0.0;
-}
-
-void validate_solvent_aware_parameters(const SolventAwareParameters& parameters)
-{
-    if (!std::isfinite(parameters.solvent_radius) || parameters.solvent_radius < 0.0)
-    {
-        throw std::invalid_argument("SCCS solvent radius must be finite and non-negative");
-    }
-    if (!std::isfinite(parameters.radial_scale) || parameters.radial_scale < 1.0)
-    {
-        throw std::invalid_argument("SCCS solvent-aware radial scale must be at least one");
-    }
-    if (!std::isfinite(parameters.radial_spread) || parameters.radial_spread <= 0.0)
-    {
-        throw std::invalid_argument("SCCS solvent-aware radial spread must be positive");
-    }
-    if (!std::isfinite(parameters.filling_threshold) || parameters.filling_threshold <= 0.0
-        || parameters.filling_threshold >= 1.0)
-    {
-        throw std::invalid_argument("SCCS filling threshold must lie between zero and one");
-    }
-    if (!std::isfinite(parameters.filling_spread) || parameters.filling_spread <= 0.0)
-    {
-        throw std::invalid_argument("SCCS filling spread must be positive");
-    }
-}
 
 std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
                                          const ModuleBase::Matrix3& lattice_vectors,

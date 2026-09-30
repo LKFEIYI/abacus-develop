@@ -68,6 +68,26 @@ SccsResponse prepare_cavity(const std::vector<double>& density, const CavityPara
     return result;
 }
 
+// Environ solvent_aware_boundary: keep s(n) as local_solute and replace the
+// dielectric boundary by its filling s_sa.
+void fill_cavity(const SolventAwareParameters& solvent_aware,
+                 const std::vector<double>& probe_kernel,
+                 const ModulePW::PW_Basis& basis,
+                 const ModuleSurchem::ChargeReduction& reduction,
+                 SccsResponse& result)
+{
+    result.local_solute = result.solute;
+    result.filling = solvent_aware_boundary(result.local_solute, probe_kernel, solvent_aware, basis);
+    result.solute = result.filling.boundary;
+    double filled_volume = 0.0;
+    for (std::size_t i = 0; i < result.solute.size(); ++i)
+    {
+        filled_volume += result.solute[i] - result.local_solute[i];
+    }
+    reduction.reduce_sum(filled_volume);
+    result.filled_volume = filled_volume * basis.omega / basis.nxyz;
+}
+
 // Pool RMS and maximum absolute value of a distributed grid array.
 void reduced_rms_max(const std::vector<double>& values,
                      const ModuleSurchem::ChargeReduction& reduction,
@@ -474,6 +494,8 @@ void finish_open_boundary_response(const std::vector<double>& charge,
 } // namespace
 
 std::vector<double> boundary_to_density_potential(const SccsResponse& response,
+                                                  const std::vector<double>& probe_kernel,
+                                                  const ModulePW::PW_Basis& basis,
                                                   const std::vector<double>& boundary_potential)
 {
     const std::size_t size = response.dsolute_drho.size();
@@ -481,10 +503,15 @@ std::vector<double> boundary_to_density_potential(const SccsResponse& response,
     {
         throw std::invalid_argument("SCCS boundary potential must match the cavity grid");
     }
-    std::vector<double> density_potential(size);
+    std::vector<double> density_potential = boundary_potential;
+    if (!response.local_solute.empty())
+    {
+        density_potential = solvent_aware_adjoint(response.local_solute, response.filling,
+                                                  probe_kernel, basis, boundary_potential);
+    }
     for (std::size_t i = 0; i < size; ++i)
     {
-        density_potential[i] = boundary_potential[i] * response.dsolute_drho[i];
+        density_potential[i] *= response.dsolute_drho[i];
     }
     return density_potential;
 }
@@ -493,6 +520,8 @@ SccsResponse solve_sccs_response(
     const std::vector<double>& density,
     const std::vector<double>& charge,
     const ModuleSccs::CavityParameters& cavity,
+    const ModuleSccs::SolventAwareParameters& solvent_aware,
+    const std::vector<double>& probe_kernel,
     const ModuleSccs::PolarizationSolverParameters& solver,
     const std::vector<double>& initial_potential,
     const ModulePW::PW_Basis& basis,
@@ -503,6 +532,11 @@ SccsResponse solve_sccs_response(
     ModuleBase::timer::start("ModuleSccs", "solve_sccs_response");
     SccsResponse result = prepare_cavity(density, cavity);
     const std::size_t size = density.size();
+    const bool filled = uses_solvent_aware(solvent_aware);
+    if (filled)
+    {
+        fill_cavity(solvent_aware, probe_kernel, basis, reduction, result);
+    }
     const bool open_boundary = coulomb.has_boundary_correction();
     std::vector<ModuleBase::Vector3<double>> solute_gradient;
     std::vector<double> solute_laplacian;
@@ -510,6 +544,11 @@ SccsResponse solve_sccs_response(
     {
         chain_boundary_derivatives(density, cavity, basis, tpiba, solute_gradient,
                                    solute_laplacian);
+        if (filled)
+        {
+            solvent_aware_chain_derivatives(result.local_solute, result.filling, probe_kernel,
+                                            basis, solute_gradient, solute_laplacian);
+        }
     }
     else
     {
@@ -621,7 +660,8 @@ SccsResponse solve_sccs_response(
     {
         continuum_boundary_potential(cavity, result);
     }
-    result.cavity_potential = boundary_to_density_potential(result, result.boundary_potential);
+    result.cavity_potential
+        = boundary_to_density_potential(result, probe_kernel, basis, result.boundary_potential);
     ModuleBase::timer::end("ModuleSccs", "solve_sccs_response");
     return result;
 }

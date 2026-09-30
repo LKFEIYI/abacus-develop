@@ -3,6 +3,7 @@
 
 #include "sccs_cavity.h"
 #include "sccs_poisson.h"
+#include "sccs_solvent_aware.h"
 
 namespace ModulePW
 {
@@ -22,9 +23,16 @@ namespace ModuleSccs
 struct SccsResponse
 {
     // Dielectric boundary s (one inside the solute) and ds/dn of the cavity
-    // density n; epsilon = exp(ln(eps_bulk) (1 - s)).
+    // density n; epsilon = exp(ln(eps_bulk) (1 - s)). With the solvent-aware
+    // filling, solute is s_sa and dsolute_drho belongs to local_solute.
     std::vector<double> solute;
     std::vector<double> dsolute_drho;
+    // Solvent-aware only: the boundary s(n) before filling and the filling;
+    // empty otherwise.
+    std::vector<double> local_solute;
+    SolventAwareBoundary filling;
+    // Grid integral of s_sa - s, in bohr^3; zero without the filling.
+    double filled_volume = 0.0;
     std::vector<double> epsilon;
     std::vector<ModuleBase::Vector3<double>> grad_log_epsilon;
     PolarizationResult polarization;
@@ -43,9 +51,12 @@ struct SccsResponse
     double far_field_polarization_charge = 0.0;
 };
 
-// Chain a derivative with respect to the boundary s to the cavity density
-// (Environ calculator: de_dboundary * dscaled).
+// Chain a derivative with respect to the boundary to the cavity density
+// (Environ calculator: sa_de_dboundary, then de_dboundary * dscaled).
+// probe_kernel is the solvent-aware probe, empty without the filling.
 std::vector<double> boundary_to_density_potential(const SccsResponse& response,
+                                                  const std::vector<double>& probe_kernel,
+                                                  const ModulePW::PW_Basis& basis,
                                                   const std::vector<double>& boundary_potential);
 
 // ENVIRON dielectric_of_potential polarization density,
@@ -58,11 +69,14 @@ std::vector<double> continuum_polarization_charge(
 // ENVIRON sqrt-preconditioned CG for every boundary: the preconditioner uses
 // coulomb (periodic or PCC-corrected). It stops on the RMS and maximum charge
 // residual and warm-starts from initial_potential (previous solution, or empty)
-// when that helps.
+// when that helps. probe_kernel (solvent_probe_kernel) is empty unless
+// solvent_aware is enabled.
 SccsResponse solve_sccs_response(
     const std::vector<double>& cavity_density,
     const std::vector<double>& solute_charge,
     const CavityParameters& cavity_parameters,
+    const SolventAwareParameters& solvent_aware,
+    const std::vector<double>& probe_kernel,
     const PolarizationSolverParameters& solver_parameters,
     const std::vector<double>& initial_potential,
     const ModulePW::PW_Basis& basis,

@@ -109,6 +109,7 @@ SccsConfig vacuum_preset()
 void validate_config(const SccsConfig& config)
 {
     validate_cavity_parameters(config.cavity);
+    validate_solvent_aware_parameters(config.solvent_aware);
     // The switching lowpass and its exact cavity derivative exist only for the
     // PCC switching-function factsqrt; the periodic path uses the chain rule.
     if (uses_switching_lowpass(config.cavity) && config.boundary == ModulePcc::Boundary::Periodic)

@@ -19,6 +19,9 @@
 namespace
 {
 
+const ModuleSccs::SolventAwareParameters no_solvent_aware;
+const std::vector<double> no_probe_kernel;
+
 // The production sqrt-CG keeps the PCC monopole gauge: no zero-mean shift, and
 // the continuum polarization charge of a uniform dielectric is -(1 - 1/eps) q.
 TEST(SccsPccCoulomb, SqrtCgKeepsChargedUniformDielectricPccGauge)
@@ -67,6 +70,8 @@ TEST(SccsPccCoulomb, SqrtCgKeepsChargedUniformDielectricPccGauge)
         = ModuleSccs::solve_sccs_response(cavity_density,
                                           solute_charge,
                                           cavity,
+                                          no_solvent_aware,
+                                          no_probe_kernel,
                                           solver,
                                           cold_start,
                                           basis,

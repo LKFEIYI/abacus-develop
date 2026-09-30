@@ -4,6 +4,7 @@
 #endif
 
 #include "../common/charge_reduction.h"
+#include "../sccs/sccs_cavity.h"
 #include "../sccs/sccs_pw_coulomb.h"
 #include "../sccs/sccs_solvent_aware.h"
 
