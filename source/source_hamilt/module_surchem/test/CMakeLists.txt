@@ -150,6 +150,13 @@ AddTest(
 )
 
 AddTest(
+  TARGET MODULE_HAMILT_surchem_sccs_solvent_aware
+  LIBS planewave device base
+  SOURCES test_sccs_solvent_aware.cpp ../sccs/sccs_solvent_aware.cpp
+          ../sccs/sccs_pw_coulomb.cpp ../common/charge_reduction.cpp
+)
+
+AddTest(
   TARGET MODULE_HAMILT_surchem_sccs_pw_nonel
   LIBS planewave device base
   SOURCES test_sccs_pw_nonel.cpp ../sccs/sccs_charge.cpp

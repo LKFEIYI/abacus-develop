@@ -30,6 +30,7 @@ add_library(
     sccs/sccs_pw_nonel.cpp
     sccs/sccs_gaussian_ion.cpp
     sccs/sccs_response.cpp
+    sccs/sccs_solvent_aware.cpp
 )
 
 if(ENABLE_COVERAGE)
