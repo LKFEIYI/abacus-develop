@@ -198,6 +198,7 @@ void ReadInput::item_sccs()
                        "")
     ADD_SCCS_REAL_ITEM("sccs_solvent_radius",
                        sccs_solvent_radius,
+                       "solvent radius of the solvent-aware cavity",
                        "Solvent radius of the solvent-aware SCCS cavity, as Environ solvent_radius "
                        "(Andreussi et al., J. Chem. Theory Comput. 15, 1996 (2019)). A positive "
                        "value fills cavity voids and crevices that the solvent cannot enter: a "
@@ -213,6 +214,7 @@ void ReadInput::item_sccs()
                        "bohr")
     ADD_SCCS_REAL_ITEM("sccs_radial_scale",
                        sccs_radial_scale,
+                       "solvent-aware probe radius over sccs_solvent_radius",
                        "Probe radius of the solvent-aware cavity in units of sccs_solvent_radius, "
                        "as Environ radial_scale; at least 1, default 2. Used only when "
                        "sccs_solvent_radius is positive.",
@@ -220,12 +222,14 @@ void ReadInput::item_sccs()
                        "")
     ADD_SCCS_REAL_ITEM("sccs_radial_spread",
                        sccs_radial_spread,
+                       "erfc spread of the solvent-aware probe",
                        "erfc spread of the solvent-aware probe sphere, as Environ radial_spread; "
                        "positive, default 0.5 bohr. Used only when sccs_solvent_radius is positive.",
                        "0.5",
                        "bohr")
     ADD_SCCS_REAL_ITEM("sccs_filling_threshold",
                        sccs_filling_threshold,
+                       "probe solute fraction that fills a point",
                        "Solute fraction of the solvent-aware probe sphere above which a point is "
                        "filled, as Environ filling_threshold; between 0 and 1 (exclusive), default "
                        "0.825. Used only when sccs_solvent_radius is positive.",
@@ -233,6 +237,7 @@ void ReadInput::item_sccs()
                        "")
     ADD_SCCS_REAL_ITEM("sccs_filling_spread",
                        sccs_filling_spread,
+                       "erfc width of the solvent-aware filling",
                        "Width of the erfc step of the solvent-aware filling in the probe solute "
                        "fraction, as Environ filling_spread; positive, default 0.02. Used only "
                        "when sccs_solvent_radius is positive.",
