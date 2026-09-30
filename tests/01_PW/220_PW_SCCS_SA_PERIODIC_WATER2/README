@@ -1,0 +1,19 @@
+PW water dimer, two molecules stacked 7.5 bohr apart along z, with native SCCS in a periodic
+cell (assume_isolated none), the water-neutral preset and the Environ solvent-aware interface
+(sccs_solvent_radius 2, sccs_filling_threshold 0.3). The probe of radius 4 bohr fills the gap
+between the molecules but not the gaps to the periodic images: Environ 'chain' derivatives of
+the filled boundary, the probe adjoint in the electronic potential, energy and ionic force.
+
+Reference provenance (ecutwfc 75 Ry / ecutrho 300 Ry, the cutoffs of the QE-Environ comparison):
+- ABACUS source commit: 4136a53bf (feat(input): add the SCCS solvent-aware INPUT keys)
+- ABACUS version: v3.11.0-beta10
+- executable SHA256: 9c6f666ca6e025e4dd41dc936bfe056aee0b74f4997053ebfeed6355868d72d6
+- parallel layout: 16 MPI ranks x 1 OpenMP thread
+- generated 2026-09-29; two independent check runs passed every comparison.
+- sccs_debug 2 reports SCCS_CAVITY FILLED_VOLUME/Bohr3 104.7 at convergence.
+- result.ref is an ABACUS regression baseline, not an external QE/Environ reference; the
+  solvent-aware kernel was compared with QE-Environ 3.1.1 on Environ's own solvent-aware test
+  system (see the PR description).
+
+Repository harness regeneration command, run from tests/01_PW:
+  OMP_NUM_THREADS=1 bash ../integrate/Autotest.sh -a /path/to/abacus -n 16 -o 1 -r '^220_PW_SCCS_SA_PERIODIC_WATER2$' -g
