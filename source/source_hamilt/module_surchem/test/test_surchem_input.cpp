@@ -65,6 +65,33 @@ TEST(SurchemInput, TransfersFullSolventModeCoreElectrons)
     EXPECT_THROW(ModuleSurchem::make_parameters(input, cell, 0.0, false, 1), std::invalid_argument);
 }
 
+// The solvent-aware filling is user-controlled for every preset and off by default.
+TEST(SurchemInput, TransfersSolventAwareParameters)
+{
+    Input_para input;
+    UnitCell cell;
+    input.imp_sol = 2;
+    input.sccs_preset = "water-neutral";
+    const SurchemParameters local = ModuleSurchem::make_parameters(input, cell, 0.0, false, 1);
+    EXPECT_FALSE(ModuleSccs::uses_solvent_aware(local.sccs_config.solvent_aware));
+    input.sccs_solvent_radius = 3.0;
+    input.sccs_radial_scale = 1.5;
+    input.sccs_radial_spread = 0.4;
+    input.sccs_filling_threshold = 0.3;
+    input.sccs_filling_spread = 0.05;
+    const SurchemParameters filled = ModuleSurchem::make_parameters(input, cell, 0.0, false, 1);
+    const ModuleSccs::SolventAwareParameters& solvent_aware = filled.sccs_config.solvent_aware;
+    EXPECT_TRUE(ModuleSccs::uses_solvent_aware(solvent_aware));
+    EXPECT_DOUBLE_EQ(solvent_aware.solvent_radius, 3.0);
+    EXPECT_DOUBLE_EQ(solvent_aware.radial_scale, 1.5);
+    EXPECT_DOUBLE_EQ(solvent_aware.radial_spread, 0.4);
+    EXPECT_DOUBLE_EQ(solvent_aware.filling_threshold, 0.3);
+    EXPECT_DOUBLE_EQ(solvent_aware.filling_spread, 0.05);
+    EXPECT_DOUBLE_EQ(filled.sccs_config.cavity.density_max, 5.0e-3);
+    input.sccs_filling_threshold = 1.0;
+    EXPECT_THROW(ModuleSurchem::make_parameters(input, cell, 0.0, false, 1), std::invalid_argument);
+}
+
 // The switching lowpass follows the preset and exists only with PCC.
 TEST(SurchemInput, TransfersSwitchingLowpassOnlyWithPcc)
 {

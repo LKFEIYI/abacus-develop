@@ -383,6 +383,14 @@ TEST_F(InputParaTest, ParaRead)
     EXPECT_DOUBLE_EQ(param.inp.sccs_corespread, 0.5);
     EXPECT_DOUBLE_EQ(param.inp.sccs_lowpass_p1, -1.0);
     EXPECT_DOUBLE_EQ(param.inp.sccs_lowpass_p2, -1.0);
+    EXPECT_DOUBLE_EQ(param.inp.sccs_solvent_radius, 3.0);
+    EXPECT_DOUBLE_EQ(param.inp.sccs_radial_scale, 2.0);
+    EXPECT_DOUBLE_EQ(param.inp.sccs_radial_spread, 0.5);
+    EXPECT_DOUBLE_EQ(param.inp.sccs_filling_threshold, 0.3);
+    EXPECT_DOUBLE_EQ(param.inp.sccs_filling_spread, 0.02);
+    const Input_para default_solvent_aware;
+    EXPECT_DOUBLE_EQ(default_solvent_aware.sccs_solvent_radius, 0.0);
+    EXPECT_DOUBLE_EQ(default_solvent_aware.sccs_filling_threshold, 0.825);
     EXPECT_EQ(param.inp.sccs_maxiter, 200);
     EXPECT_DOUBLE_EQ(param.inp.sccs_start_drho, 0.0);
     EXPECT_EQ(param.inp.sccs_start_nmax, 30);

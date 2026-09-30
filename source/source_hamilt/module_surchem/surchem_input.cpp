@@ -82,6 +82,11 @@ SurchemParameters make_parameters(const Input_para& inp,
     parameters.sccs_config.core_spread = inp.sccs_corespread;
     parameters.sccs_config.cavity.lowpass_p1 = inp.sccs_lowpass_p1;
     parameters.sccs_config.cavity.lowpass_p2 = inp.sccs_lowpass_p2;
+    parameters.sccs_config.solvent_aware.solvent_radius = inp.sccs_solvent_radius;
+    parameters.sccs_config.solvent_aware.radial_scale = inp.sccs_radial_scale;
+    parameters.sccs_config.solvent_aware.radial_spread = inp.sccs_radial_spread;
+    parameters.sccs_config.solvent_aware.filling_threshold = inp.sccs_filling_threshold;
+    parameters.sccs_config.solvent_aware.filling_spread = inp.sccs_filling_spread;
     parameters.sccs_config.max_iterations = inp.sccs_maxiter;
     parameters.sccs_config.tolerance_rms = inp.sccs_tol_rms;
     parameters.sccs_config.tolerance_max = inp.sccs_tol_max;

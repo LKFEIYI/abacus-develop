@@ -78,6 +78,24 @@ void check_sccs_solvent_mode(const Input_para& input)
     }
 }
 
+// Environ's ranges; the filling threshold must also be below one, where the
+// solute fraction of the probe never reaches it.
+void check_sccs_solvent_aware(const Input_para& input)
+{
+    if (!std::isfinite(input.sccs_solvent_radius) || input.sccs_solvent_radius < 0.0
+        || !std::isfinite(input.sccs_radial_scale) || input.sccs_radial_scale < 1.0
+        || !std::isfinite(input.sccs_radial_spread) || input.sccs_radial_spread <= 0.0
+        || !std::isfinite(input.sccs_filling_threshold) || input.sccs_filling_threshold <= 0.0
+        || input.sccs_filling_threshold >= 1.0 || !std::isfinite(input.sccs_filling_spread)
+        || input.sccs_filling_spread <= 0.0)
+    {
+        ModuleBase::WARNING_QUIT("ReadInput",
+                                 "SCCS solvent-aware parameters need sccs_solvent_radius >= 0, "
+                                 "sccs_radial_scale >= 1, sccs_radial_spread > 0, "
+                                 "0 < sccs_filling_threshold < 1 and sccs_filling_spread > 0");
+    }
+}
+
 void check_sccs_numerical_parameters(const Input_para& input)
 {
     if (input.sccs_maxiter <= 0 || !std::isfinite(input.sccs_epsilon)
@@ -96,6 +114,7 @@ void check_sccs_numerical_parameters(const Input_para& input)
     }
     check_sccs_lowpass(input);
     check_sccs_solvent_mode(input);
+    check_sccs_solvent_aware(input);
 }
 } // namespace
 
@@ -165,6 +184,48 @@ void ReadInput::item_sccs()
                        "non-positive. Default -1 (off).",
                        "-1",
                        "")
+    ADD_SCCS_REAL_ITEM("sccs_solvent_radius",
+                       sccs_solvent_radius,
+                       "Solvent radius of the solvent-aware SCCS cavity, as Environ solvent_radius "
+                       "(Andreussi et al., J. Chem. Theory Comput. 15, 1996 (2019)). A positive "
+                       "value fills cavity voids and crevices that the solvent cannot enter: a "
+                       "point becomes solute when the solute fraction of the probe sphere of "
+                       "radius sccs_solvent_radius*sccs_radial_scale around it exceeds "
+                       "sccs_filling_threshold. The dielectric, surface and volume then follow the "
+                       "filled cavity, and the potential and forces include the filling. Default "
+                       "0 (off); Environ's water example uses 3 bohr. User-controlled for every "
+                       "sccs_preset; the published presets were fitted without the filling. The "
+                       "probe includes all periodic images, so cells narrower than its diameter "
+                       "are handled, unlike Environ's minimum-image probe.",
+                       "0.0",
+                       "bohr")
+    ADD_SCCS_REAL_ITEM("sccs_radial_scale",
+                       sccs_radial_scale,
+                       "Probe radius of the solvent-aware cavity in units of sccs_solvent_radius, "
+                       "as Environ radial_scale; at least 1, default 2. Used only when "
+                       "sccs_solvent_radius is positive.",
+                       "2.0",
+                       "")
+    ADD_SCCS_REAL_ITEM("sccs_radial_spread",
+                       sccs_radial_spread,
+                       "erfc spread of the solvent-aware probe sphere, as Environ radial_spread; "
+                       "positive, default 0.5 bohr. Used only when sccs_solvent_radius is positive.",
+                       "0.5",
+                       "bohr")
+    ADD_SCCS_REAL_ITEM("sccs_filling_threshold",
+                       sccs_filling_threshold,
+                       "Solute fraction of the solvent-aware probe sphere above which a point is "
+                       "filled, as Environ filling_threshold; between 0 and 1 (exclusive), default "
+                       "0.825. Used only when sccs_solvent_radius is positive.",
+                       "0.825",
+                       "")
+    ADD_SCCS_REAL_ITEM("sccs_filling_spread",
+                       sccs_filling_spread,
+                       "Width of the erfc step of the solvent-aware filling in the probe solute "
+                       "fraction, as Environ filling_spread; positive, default 0.02. Used only "
+                       "when sccs_solvent_radius is positive.",
+                       "0.02",
+                       "")
 #undef ADD_SCCS_REAL_ITEM
     {
         Input_Item item("sccs_start_drho");
@@ -201,7 +262,7 @@ void ReadInput::item_sccs()
         item.annotation = "detailed SCCS diagnostics";
         item.category = "Implicit solvation model";
         item.type = "Integer";
-        item.description = "SCCS/PCC output level: 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, FFT-count, Gauss-law (PCC), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation. Applies to standalone PCC as well as SCCS. Timings appear in the standard ABACUS timer summary.";
+        item.description = "SCCS/PCC output level: 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface (with the solvent-aware filled volume), FFT-count, Gauss-law (PCC), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation. Applies to standalone PCC as well as SCCS. Timings appear in the standard ABACUS timer summary.";
         item.default_value = "0";
         item.unit = "";
         read_sync_int(input.sccs_debug);

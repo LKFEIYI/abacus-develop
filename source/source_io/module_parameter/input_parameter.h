@@ -586,6 +586,11 @@ struct Input_para
     double sccs_corespread = 0.5;                 ///< Environ corespread of the full-mode core Gaussians, bohr
     double sccs_lowpass_p1 = -1.0;                ///< Environ deriv_lowpass_p1; PCC only, off unless both are positive
     double sccs_lowpass_p2 = -1.0;                ///< Environ deriv_lowpass_p2; PCC only, off unless both are positive
+    double sccs_solvent_radius = 0.0;             ///< Environ solvent_radius of the solvent-aware cavity, bohr; 0 is off
+    double sccs_radial_scale = 2.0;               ///< Environ radial_scale: probe radius over sccs_solvent_radius
+    double sccs_radial_spread = 0.5;              ///< Environ radial_spread of the probe sphere, bohr
+    double sccs_filling_threshold = 0.825;        ///< Environ filling_threshold: probe solute fraction that fills a point
+    double sccs_filling_spread = 0.02;            ///< Environ filling_spread of the filling step
     double sccs_start_drho = 0.0;                 ///< delayed-start density threshold; zero starts immediately
     int sccs_start_nmax = 30;                     ///< forced delayed-start electronic iteration
     int sccs_debug = 0;                           ///< 0: silent, 1: iteration summary, 2: full diagnostics

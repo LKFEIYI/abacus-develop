@@ -160,6 +160,8 @@ TEST(HCorrSccs, PeriodicDebugReportsResidualAndFixedPointWithoutKernelOutput)
     const std::string iteration_text = iteration_output.str();
     EXPECT_NE(iteration_text.find("SCCS_RESIDUAL RMS "), std::string::npos);
     EXPECT_NE(iteration_text.find("SCCS_CG_FIXED_POINT_DEFECT RMS "), std::string::npos);
+    EXPECT_NE(iteration_text.find("SCCS_CAVITY VOLUME/Bohr3 "), std::string::npos);
+    EXPECT_EQ(iteration_text.find("FILLED_VOLUME"), std::string::npos);
 }
 
 TEST(HCorrSccs, DispatchesDeferredSummaryOnlyWhenRequested)

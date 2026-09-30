@@ -369,6 +369,11 @@ sccs_solvent_mode              electronic
 sccs_corespread                0.5
 sccs_lowpass_p1                -1
 sccs_lowpass_p2                -1
+sccs_solvent_radius            3.0
+sccs_radial_scale              2.0
+sccs_radial_spread             0.5
+sccs_filling_threshold         0.3
+sccs_filling_spread            0.02
 sccs_start_drho                0.0
 sccs_start_nmax                30
 sccs_debug                     1
