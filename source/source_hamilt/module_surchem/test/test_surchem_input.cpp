@@ -1,10 +1,12 @@
 #include "../surchem_input.h"
 #include "../surchem.h"
 #include "source_io/module_parameter/input_parameter.h"
+#include "source_cell/module_symmetry/symmetry.h"
 
 #include <gtest/gtest.h>
 
 #include <stdexcept>
+#include <string>
 
 TEST(SurchemInput, SelectsVacuumPccIndependentlyOfSolvent)
 {
@@ -19,6 +21,18 @@ TEST(SurchemInput, SelectsVacuumPccIndependentlyOfSolvent)
     EXPECT_EQ(parameters.pool_process_count, 4);
     EXPECT_TRUE(input.uses_surchem_correction());
     EXPECT_TRUE(input.uses_pcc_correction());
+}
+
+// pcc_2d_axis defaults to the third lattice vector and is passed through.
+TEST(SurchemInput, TransfersPcc2dOpenAxis)
+{
+    Input_para input;
+    UnitCell cell;
+    input.imp_sol = 0;
+    input.assume_isolated = "pcc_2d";
+    EXPECT_EQ(ModuleSurchem::make_parameters(input, cell, 0.0, false, 1).pcc_2d_axis, 2);
+    input.pcc_2d_axis = 0;
+    EXPECT_EQ(ModuleSurchem::make_parameters(input, cell, 0.0, false, 1).pcc_2d_axis, 0);
 }
 
 TEST(SurchemInput, TransfersPresetAndSolverControls)
@@ -204,4 +218,120 @@ TEST(SurchemInput, PresetsOverrideOnlyPhysicalParameters)
         EXPECT_DOUBLE_EQ(parameters.sccs_config.pressure, pressure);
         EXPECT_DOUBLE_EQ(parameters.sccs_config.surface_regularization, 2.0e-8);
     }
+}
+
+namespace
+{
+
+void set_operation(ModuleSymmetry::Symmetry& symmetry,
+                   const int index,
+                   const ModuleBase::Matrix3& rotation,
+                   const ModuleBase::Vector3<double>& translation)
+{
+    symmetry.gmatrix[index] = rotation;
+    symmetry.gtrans[index] = translation;
+}
+
+} // namespace
+
+// Operations act on direct coordinates as r' = r G + t.
+TEST(SurchemInput, Pcc2dAcceptsOperationsThatKeepTheOpenAxis)
+{
+    SurchemParameters parameters;
+    parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+    parameters.pcc_2d_axis = 2;
+    ModuleSymmetry::Symmetry symmetry;
+    symmetry.nrotk = 4;
+    const ModuleBase::Vector3<double> zero(0.0, 0.0, 0.0);
+    set_operation(symmetry, 0, ModuleBase::Matrix3(), zero);
+    // Mirror through a plane normal to the open axis, anywhere along it.
+    set_operation(symmetry, 1, ModuleBase::Matrix3(1, 0, 0, 0, 1, 0, 0, 0, -1),
+                  ModuleBase::Vector3<double>(0.0, 0.0, 0.3));
+    // Four-fold rotation about the open axis, with an in-plane glide.
+    set_operation(symmetry, 2, ModuleBase::Matrix3(0, 1, 0, -1, 0, 0, 0, 0, 1),
+                  ModuleBase::Vector3<double>(0.5, 0.0, 0.0));
+    // Two-fold rotation about an in-plane axis.
+    set_operation(symmetry, 3, ModuleBase::Matrix3(1, 0, 0, 0, -1, 0, 0, 0, -1), zero);
+    EXPECT_EQ(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry), "");
+}
+
+TEST(SurchemInput, Pcc2dRejectsOperationsThatMoveTheOpenAxis)
+{
+    SurchemParameters parameters;
+    parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+    parameters.pcc_2d_axis = 2;
+    ModuleSymmetry::Symmetry symmetry;
+    symmetry.nrotk = 2;
+    const ModuleBase::Vector3<double> zero(0.0, 0.0, 0.0);
+    set_operation(symmetry, 0, ModuleBase::Matrix3(), zero);
+    // Exchanges the second and third lattice vectors.
+    set_operation(symmetry, 1, ModuleBase::Matrix3(1, 0, 0, 0, 0, 1, 0, 1, 0), zero);
+    EXPECT_NE(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry).find("mixes"), std::string::npos);
+    // The same operation keeps the first lattice vector, so axis 0 accepts it.
+    parameters.pcc_2d_axis = 0;
+    EXPECT_EQ(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry), "");
+
+    // A screw along the open axis copies the slab within the cell.
+    parameters.pcc_2d_axis = 2;
+    set_operation(symmetry, 1, ModuleBase::Matrix3(-1, 0, 0, 0, -1, 0, 0, 0, 1),
+                  ModuleBase::Vector3<double>(0.0, 0.0, 0.5));
+    EXPECT_NE(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry).find("translates"),
+              std::string::npos);
+    // A whole lattice vector is not a fractional translation.
+    set_operation(symmetry, 1, ModuleBase::Matrix3(-1, 0, 0, 0, -1, 0, 0, 0, 1),
+                  ModuleBase::Vector3<double>(0.0, 0.0, 1.0));
+    EXPECT_EQ(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry), "");
+}
+
+TEST(SurchemInput, Pcc2dChecksPrimitiveCellTranslationsAndAntiunitaryOperations)
+{
+    SurchemParameters parameters;
+    parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+    parameters.pcc_2d_axis = 2;
+    ModuleSymmetry::Symmetry symmetry;
+    symmetry.nrotk = 1;
+    const ModuleBase::Vector3<double> zero(0.0, 0.0, 0.0);
+    set_operation(symmetry, 0, ModuleBase::Matrix3(), zero);
+    const bool previous_pricell_loop = ModuleSymmetry::Symmetry::pricell_loop;
+    ModuleSymmetry::Symmetry::pricell_loop = true;
+    // An in-plane supercell translation keeps the slab.
+    symmetry.ptrans.push_back(zero);
+    symmetry.ptrans.push_back(ModuleBase::Vector3<double>(0.5, 0.0, 0.0));
+    EXPECT_EQ(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry), "");
+    // Half the open vector would copy the slab within the cell.
+    symmetry.ptrans.push_back(ModuleBase::Vector3<double>(0.0, 0.0, 0.5));
+    const std::string translation_violation = ModuleSurchem::pcc_symmetry_violation(parameters, symmetry);
+    // rhog_symmetry uses the primitive-cell translations only with pricell_loop.
+    ModuleSymmetry::Symmetry::pricell_loop = false;
+    const std::string translation_without_loop = ModuleSurchem::pcc_symmetry_violation(parameters, symmetry);
+    ModuleSymmetry::Symmetry::pricell_loop = previous_pricell_loop;
+    EXPECT_NE(translation_violation.find("translates"), std::string::npos);
+    EXPECT_EQ(translation_without_loop, "");
+
+    // Antiunitary operations must keep the open axis as well.
+    symmetry.ptrans.clear();
+    symmetry.nrotk_anti = 1;
+    symmetry.gmatrix_anti[0] = ModuleBase::Matrix3(1, 0, 0, 0, 0, 1, 0, 1, 0);
+    symmetry.gtrans_anti[0] = zero;
+    EXPECT_NE(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry).find("mixes"), std::string::npos);
+    symmetry.gmatrix_anti[0] = ModuleBase::Matrix3(1, 0, 0, 0, 1, 0, 0, 0, -1);
+    EXPECT_EQ(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry), "");
+}
+
+TEST(SurchemInput, Pcc0dRejectsOnlyPureFractionalTranslations)
+{
+    SurchemParameters parameters;
+    parameters.pcc_boundary = ModulePcc::Boundary::Pcc0d;
+    ModuleSymmetry::Symmetry symmetry;
+    symmetry.nrotk = 2;
+    const ModuleBase::Vector3<double> zero(0.0, 0.0, 0.0);
+    set_operation(symmetry, 0, ModuleBase::Matrix3(), zero);
+    set_operation(symmetry, 1, ModuleBase::Matrix3(0, 1, 0, 1, 0, 0, 0, 0, 1), zero);
+    EXPECT_EQ(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry), "");
+    set_operation(symmetry, 1, ModuleBase::Matrix3(), ModuleBase::Vector3<double>(0.5, 0.0, 0.0));
+    EXPECT_NE(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry).find("not primitive"),
+              std::string::npos);
+    // Periodic boundaries impose no restriction.
+    parameters.pcc_boundary = ModulePcc::Boundary::Periodic;
+    EXPECT_EQ(ModuleSurchem::pcc_symmetry_violation(parameters, symmetry), "");
 }

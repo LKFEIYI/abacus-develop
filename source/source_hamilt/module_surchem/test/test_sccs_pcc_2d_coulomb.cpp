@@ -82,9 +82,9 @@ class SccsPcc2dCoulombTest : public testing::Test
         basis_.initparameters(false, 80.0, 1, false);
         basis_.setuptransform();
         basis_.collect_local_pw();
-        geometry_ = ModulePcc::pcc_2d_geometry(lattice, lattice_scale_, 1.0e-10);
+        geometry_ = ModulePcc::pcc_2d_geometry(lattice, lattice_scale_, 1, 1.0e-10);
         volume_ = geometry_.parameters.periodic_area
-                  * geometry_.parameters.cell_length_y;
+                  * geometry_.parameters.cell_length;
         volume_element_ = volume_ / static_cast<double>(basis_.nxyz);
         positions_ = ModuleSurchem::pw_grid_positions(basis_, lattice, lattice_scale_);
     }
@@ -98,7 +98,7 @@ class SccsPcc2dCoulombTest : public testing::Test
     ModuleSurchem::PoolChargeReduction reduction_;
 };
 
-TEST_F(SccsPcc2dCoulombTest, ReducesYMoments)
+TEST_F(SccsPcc2dCoulombTest, ReducesNormalMoments)
 {
     const std::vector<double> uniform(basis_.nrxx, 1.0 / volume_);
     const ModulePcc::Pcc2dMoments moments
@@ -108,18 +108,21 @@ TEST_F(SccsPcc2dCoulombTest, ReducesYMoments)
                                                      geometry_,
                                                      reduction_);
     EXPECT_NEAR(moments.charge, 1.0, 1.0e-12);
-    // Integer FFT nodes sample [0, Ly), so their mean is half a step below Ly/2.
-    const double uniform_dipole = -geometry_.parameters.cell_length_y / (2.0 * basis_.ny);
-    EXPECT_NEAR(moments.dipole_y, uniform_dipole, 1.0e-14);
+    // Integer FFT nodes sample [0, L), so their mean is half a step below L/2.
+    const double uniform_dipole = -geometry_.parameters.cell_length / (2.0 * basis_.ny);
+    EXPECT_NEAR(moments.dipole, uniform_dipole, 1.0e-14);
 }
 
 TEST_F(SccsPcc2dCoulombTest, CombinesDistributedZFragmentMoments)
 {
+    // Open along y, while the grid is distributed over z planes.
     const auto fragment_geometry = [](const double origin_y) {
         ModulePcc::Pcc2dGeometry value;
         value.parameters.periodic_area = 10.0;
-        value.parameters.cell_length_y = 20.0;
-        value.origin_y = origin_y;
+        value.parameters.cell_length = 20.0;
+        value.axis = 1;
+        value.normal = ModuleBase::Vector3<double>(0.0, 1.0, 0.0);
+        value.origin = origin_y;
         return value;
     };
     std::vector<double> local_density;
@@ -161,8 +164,8 @@ TEST_F(SccsPcc2dCoulombTest, CombinesDistributedZFragmentMoments)
                                              fragment_volume_element,
                                              fragment_geometry(3.0));
     const std::vector<double> remote_values{remote_moments.charge,
-                                            remote_moments.dipole_y,
-                                            remote_moments.quadrupole_yy};
+                                            remote_moments.dipole,
+                                            remote_moments.quadrupole};
     const PresetArrayReduction moment_reduction(remote_values);
     const ModulePcc::Pcc2dMoments reduced
         = ModulePcc::reduced_pcc_2d_density_moments(local_density,
@@ -180,8 +183,8 @@ TEST_F(SccsPcc2dCoulombTest, CombinesDistributedZFragmentMoments)
                                              fragment_volume_element,
                                              fragment_geometry(3.0));
     EXPECT_NEAR(reduced.charge, expected.charge, 1.0e-12);
-    EXPECT_NEAR(reduced.dipole_y, expected.dipole_y, 1.0e-12);
-    EXPECT_NEAR(reduced.quadrupole_yy, expected.quadrupole_yy, 1.0e-11);
+    EXPECT_NEAR(reduced.dipole, expected.dipole, 1.0e-12);
+    EXPECT_NEAR(reduced.quadrupole, expected.quadrupole, 1.0e-11);
 }
 
 TEST_F(SccsPcc2dCoulombTest, PotentialUsesOnePeriodicTransformPair)
@@ -207,7 +210,7 @@ TEST_F(SccsPcc2dCoulombTest, AddsCorrectionFromCurrentChargeOnEveryApplication)
     std::vector<double> charge(basis_.nrxx);
     for (int ir = 0; ir < basis_.nrxx; ++ir)
     {
-        const double relative_y = ModulePcc::pcc_2d_relative_y(positions_[ir].y, geometry_);
+        const double relative_y = ModulePcc::pcc_2d_relative_coordinate(positions_[ir], geometry_);
         charge[ir] = 2.0e-3 * std::exp(-relative_y * relative_y / 3.0)
                      - 7.0e-4 * relative_y * std::exp(-relative_y * relative_y / 2.0);
     }
@@ -231,7 +234,7 @@ TEST_F(SccsPcc2dCoulombTest, AddsCorrectionFromCurrentChargeOnEveryApplication)
                                                      reduction_);
     for (int ir = 0; ir < basis_.nrxx; ++ir)
     {
-        const double relative_y = ModulePcc::pcc_2d_relative_y(positions_[ir].y, geometry_);
+        const double relative_y = ModulePcc::pcc_2d_relative_coordinate(positions_[ir], geometry_);
         const double correction = ModulePcc::pcc_2d_potential(moments, relative_y, geometry_.parameters);
         EXPECT_NEAR(potential[ir] - periodic_potential[ir], correction, 2.0e-12);
     }
@@ -306,7 +309,7 @@ TEST_F(SccsPcc2dCoulombTest, SqrtCgKeepsChargedUniformDielectricPccGauge)
                     -(1.0 - 1.0 / cavity.epsilon_bulk) * solute_charge[ir],
                     1.0e-14);
     }
-    // The ENVIRON monopole constant keeps a nonzero cell average, so a
+    // The monopole constant of the open planar gauge keeps a nonzero cell average, so a
     // periodic zero-mean shift would fail the pointwise comparison above.
     reduction_.reduce_sum(local_mean);
     const double mean = local_mean / static_cast<double>(basis_.nxyz);
@@ -340,8 +343,8 @@ TEST(SccsPcc2dSqrtCg, LayeredCavityMatchesOpenOneDimensionalField)
     basis.initparameters(false, 320.0, 1, false);
     basis.setuptransform();
     basis.collect_local_pw();
-    const ModulePcc::Pcc2dGeometry geometry = ModulePcc::pcc_2d_geometry(lattice, scale, 1.0e-10);
-    const double volume = geometry.parameters.periodic_area * geometry.parameters.cell_length_y;
+    const ModulePcc::Pcc2dGeometry geometry = ModulePcc::pcc_2d_geometry(lattice, scale, 1, 1.0e-10);
+    const double volume = geometry.parameters.periodic_area * geometry.parameters.cell_length;
     const double volume_element = volume / static_cast<double>(basis.nxyz);
     const std::vector<ModuleBase::Vector3<double>> positions
         = ModuleSurchem::pw_grid_positions(basis, lattice, scale);
@@ -360,7 +363,7 @@ TEST(SccsPcc2dSqrtCg, LayeredCavityMatchesOpenOneDimensionalField)
     const double density_width = 2.0;
     const double source_width = 1.3;
     const double amplitude = 3.0e-3;
-    const double half_length = 0.5 * geometry.parameters.cell_length_y;
+    const double half_length = 0.5 * geometry.parameters.cell_length;
     const double boundary_exponential
         = std::exp(-half_length * half_length / (source_width * source_width));
     std::vector<double> cavity_density(basis.nrxx);
@@ -368,7 +371,7 @@ TEST(SccsPcc2dSqrtCg, LayeredCavityMatchesOpenOneDimensionalField)
     std::vector<double> reference_gradient(basis.nrxx);
     for (int ir = 0; ir < basis.nrxx; ++ir)
     {
-        const double y = ModulePcc::pcc_2d_relative_y(positions[ir].y, geometry);
+        const double y = ModulePcc::pcc_2d_relative_coordinate(positions[ir], geometry);
         cavity_density[ir] = density_peak * std::exp(-y * y / (density_width * density_width));
         const double source_exponential = std::exp(-y * y / (source_width * source_width));
         solute_charge[ir] = amplitude * y * source_exponential;
@@ -397,7 +400,7 @@ TEST(SccsPcc2dSqrtCg, LayeredCavityMatchesOpenOneDimensionalField)
     EXPECT_GT(result.polarization.iterations, 1);
 
     // The potential depends on y only; grid index = (ix ny + iy) nplane + iz.
-    const double step_y = geometry.parameters.cell_length_y / static_cast<double>(basis.ny);
+    const double step_y = geometry.parameters.cell_length / static_cast<double>(basis.ny);
     const double interior = half_length - 2.5 * step_y;
     double maximum_difference_error = 0.0;
     double maximum_gradient = 0.0;
@@ -405,7 +408,7 @@ TEST(SccsPcc2dSqrtCg, LayeredCavityMatchesOpenOneDimensionalField)
     double maximum_transition_fft_error = 0.0;
     for (int ir = 0; ir < basis.nrxx; ++ir)
     {
-        const double y = ModulePcc::pcc_2d_relative_y(positions[ir].y, geometry);
+        const double y = ModulePcc::pcc_2d_relative_coordinate(positions[ir], geometry);
         maximum_gradient = std::max(maximum_gradient, std::abs(reference_gradient[ir]));
         const double transverse = std::max(std::abs(result.polarization.field.gradient[ir].x),
                                            std::abs(result.polarization.field.gradient[ir].z));
@@ -441,6 +444,71 @@ TEST(SccsPcc2dSqrtCg, LayeredCavityMatchesOpenOneDimensionalField)
     // The open boundary only weakly pins the constant potential mode; rounding
     // in the source leaves a gauge offset whose far-field trace is 3.4e-5 here.
     EXPECT_NEAR(result.far_field_polarization_charge, 0.0, 1.0e-4);
+}
+
+// Periodic Coulomb energy plus the 2D PCC of a charged Gaussian layer in a
+// cell of length cell_length along the open y axis, per cell, in Ha.
+double charged_layer_energy(const double cell_length, const double width, double& layer_charge)
+{
+    ModulePW::PW_Basis basis("cpu", "double");
+#ifdef __MPI
+    basis.initmpi(test_process_count, test_rank, POOL_WORLD);
+#endif
+    const double in_plane = 8.0;
+    const ModuleBase::Matrix3 lattice(in_plane, 0.0, 0.0,
+                                      0.0, cell_length, 0.0,
+                                      0.0, 0.0, in_plane);
+    basis.initgrids(1.0, lattice, 80.0);
+    basis.initparameters(false, 80.0, 1, false);
+    basis.setuptransform();
+    basis.collect_local_pw();
+    const double tpiba = ModuleBase::TWO_PI;
+    const double volume_element = in_plane * cell_length * in_plane / static_cast<double>(basis.nxyz);
+    const std::vector<ModuleBase::Vector3<double>> positions
+        = ModuleSurchem::pw_grid_positions(basis, lattice, 1.0);
+    ModulePcc::Pcc2dGeometry geometry = ModulePcc::pcc_2d_geometry(lattice, 1.0, 1, 1.0e-10);
+    geometry.origin = 0.5 * cell_length;
+    const double area = in_plane * in_plane;
+    std::vector<double> charge(basis.nrxx);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        const double u = ModulePcc::pcc_2d_relative_coordinate(positions[ir], geometry);
+        charge[ir] = std::exp(-u * u / (width * width)) / (std::sqrt(ModuleBase::PI) * width * area);
+    }
+    const ModuleSurchem::PoolChargeReduction reduction(test_process_count);
+    const ModuleSccs::Pcc2dCoulombOperator coulomb(basis, tpiba, positions, volume_element, geometry,
+                                                   reduction);
+    std::vector<double> potential;
+    coulomb.apply_potential(charge, potential);
+    double energy = 0.0;
+    layer_charge = 0.0;
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        energy += 0.5 * charge[ir] * potential[ir] * volume_element;
+        layer_charge += charge[ir] * volume_element;
+    }
+    reduction.reduce_sum(energy);
+    reduction.reduce_sum(layer_charge);
+    return energy;
+}
+
+// With the open planar kernel -2*pi*|u|/A (zero on the source plane) the
+// corrected energy of a charged layer is its open-boundary energy
+// -q^2 w sqrt(2 pi)/A for every cell length; the ENVIRON constant
+// -pi*q/(3*L) would add 0.5*q^2*(pi*L/(3*A) - pi/(3*L)).
+TEST(SccsPcc2dCoulombGauge, ChargedLayerEnergyIsIndependentOfCellLength)
+{
+    const double width = 1.0;
+    const double area = 64.0;
+    for (const double cell_length : {12.0, 20.0, 32.0})
+    {
+        double layer_charge = 0.0;
+        const double energy = charged_layer_energy(cell_length, width, layer_charge);
+        const double open_energy
+            = -layer_charge * layer_charge * width * std::sqrt(ModuleBase::TWO_PI) / area;
+        EXPECT_NEAR(layer_charge, 1.0, 1.0e-10) << cell_length;
+        EXPECT_NEAR(energy, open_energy, 1.0e-9) << cell_length;
+    }
 }
 
 } // namespace

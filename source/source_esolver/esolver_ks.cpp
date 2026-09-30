@@ -270,12 +270,19 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
 {
     const bool is_output_rank
         = this->kv.para_k.my_pool == 0 && this->kv.para_k.rank_in_pool == 0;
-    // chgmixing_ks broadcasts drho only later; decide the delayed SCCS start
-    // on the root value so every rank enters the SCCS reductions together.
     double sccs_start_drho = this->drho;
-    Parallel_Common::bcast_double(sccs_start_drho);
-    const bool sccs_activated_this_iteration
-        = this->solvent.try_activate_sccs(iter, sccs_start_drho);
+    bool sccs_activated_this_iteration = false;
+    const bool awaiting_sccs
+        = this->solvent.uses_sccs() && !this->solvent.sccs_is_active();
+    if (awaiting_sccs)
+    {
+        // Configuration and synchronized activation keep this guard identical on
+        // every rank. chgmixing_ks broadcasts drho only later, so use the root
+        // value here before any rank enters the SCCS reductions.
+        Parallel_Common::bcast_double(sccs_start_drho);
+        sccs_activated_this_iteration
+            = this->solvent.try_activate_sccs(iter, sccs_start_drho);
+    }
     if (sccs_activated_this_iteration)
     {
         this->p_chgmix->mix_reset();
@@ -327,6 +334,8 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
 
     module_charge::ScfMixingCtx ctx;
     ctx.hsolver_error = hsolver_error;
+    // Activation changes the potential; require another iteration with SCCS
+    // before accepting convergence, even if the vacuum density was converged.
     ctx.scf_thr = sccs_activated_this_iteration ? -1.0 : this->scf_thr;
     ctx.scf_ene_thr = this->scf_ene_thr;
     ctx.converged_u = converged_u;
@@ -354,17 +363,34 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     // 2.3) Update potentials (should be done every SF iter)
     elecstate::update_pot(ucell, this->pelec, this->chr, conv_esolver);
 
+    // Debug summaries are printed on one rank only. Validate in the computation
+    // path so a missing PCC result makes every rank take the same failure path.
+    const bool validate_correction_summary
+        = this->inp_->sccs_debug > 0 && (this->solvent.uses_sccs() || this->solvent.uses_pcc());
+    if (validate_correction_summary)
+    {
+        const bool correction_result_valid = this->solvent.validate_iteration_result();
+        if (!correction_result_valid)
+        {
+            ModuleBase::WARNING_QUIT("ESolver_KS::iter_finish",
+                                     "correction summary requires a current PCC result on every rank");
+        }
+    }
+
     // 3.1) calculate energies
+    const double pcc_energy_rydberg = this->pelec->pot->pcc_energy_rydberg();
     this->pelec->cal_energies(1,
                               this->inp_->imp_sol,
                               this->inp_->sc_mag_switch,
                               this->inp_->dft_plus_u,
-                              this->inp_->assume_isolated); // Harris-Foulkes functional
+                              this->inp_->assume_isolated,
+                              pcc_energy_rydberg); // Harris-Foulkes functional
     this->pelec->cal_energies(2,
                               this->inp_->imp_sol,
                               this->inp_->sc_mag_switch,
                               this->inp_->dft_plus_u,
-                              this->inp_->assume_isolated); // Kohn-Sham functional
+                              this->inp_->assume_isolated,
+                              pcc_energy_rydberg); // Kohn-Sham functional
 
     if (iter == 1)
     {

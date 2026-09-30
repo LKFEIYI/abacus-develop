@@ -2,6 +2,7 @@
 
 #include "source_hamilt/module_xc/xc_functional.h"
 #include "source_io/module_parameter/parameter.h"
+#include "source_basis/module_pw/pw_basis_sup.h"
 
 #include "gtest/gtest.h"
 #include <memory>
@@ -71,6 +72,10 @@ surchem::surchem()
 }
 surchem::~surchem()
 {
+}
+double surchem::pcc_energy_rydberg() const
+{
+    return 0.0;
 }
 
 int XC_Functional::func_type = 1;

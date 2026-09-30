@@ -1,12 +1,13 @@
 #include "surchem.h"
+#include "source_base/parallel_reduce.h"
 
 #include <iomanip>
 #include <cmath>
 #include <ostream>
+#include <stdexcept>
 
 double surchem::Acav = 0;
 double surchem::Ael = 0;
-double surchem::Epcc = 0;
 
 surchem::surchem()
 {
@@ -61,6 +62,19 @@ bool surchem::uses_pcc() const
            && this->parameters_.pcc_boundary != ModulePcc::Boundary::Periodic;
 }
 
+double surchem::pcc_energy_rydberg() const
+{
+    if (!this->uses_pcc())
+    {
+        return 0.0;
+    }
+    if (!this->pcc_result_valid_)
+    {
+        throw std::logic_error("PCC energy requires a valid potential update for this solvent instance");
+    }
+    return this->pcc_energy_rydberg_;
+}
+
 bool surchem::sccs_is_active() const
 {
     return this->uses_sccs() && this->sccs_active_;
@@ -99,6 +113,17 @@ const ModuleSccs::SccsResult& surchem::sccs_result() const
     return this->sccs_result_;
 }
 
+bool surchem::validate_iteration_result() const
+{
+    int invalid_result = 0;
+    if (this->uses_pcc() && !this->pcc_result_valid_)
+    {
+        invalid_result = 1;
+    }
+    Parallel_Reduce::reduce_all(invalid_result);
+    return invalid_result == 0;
+}
+
 void surchem::write_iteration(std::ostream& output, const double drho) const
 {
     if (this->parameters_.debug == 0)
@@ -127,7 +152,9 @@ void surchem::write_sccs_iteration(std::ostream& output) const
     {
         if (!this->uses_pcc() || !this->pcc_result_valid_)
         {
-            throw std::logic_error("correction summary requires a current SCCS or PCC result");
+            // Computation validates collectively. Printing can also be called
+            // before an update or after clear, so skip unavailable results.
+            return;
         }
         const std::streamsize precision = output.precision();
         const std::ios_base::fmtflags flags = output.flags();
@@ -147,10 +174,11 @@ void surchem::write_sccs_iteration(std::ostream& output) const
             }
             else
             {
-                output << " PCC2D_ORIGIN Y/Bohr " << this->pcc_2d_geometry_.origin_y << '\n'
+                output << " PCC2D_ORIGIN AXIS " << this->pcc_2d_geometry_.axis
+                       << " COORDINATE/Bohr " << this->pcc_2d_geometry_.origin << '\n'
                        << " PCC2D_MOMENTS Q_POINT/e " << this->pcc_2d_moments_.charge
-                       << " PY_POINT/eBohr " << this->pcc_2d_moments_.dipole_y
-                       << " QYY_POINT/eBohr2 " << this->pcc_2d_moments_.quadrupole_yy << '\n';
+                       << " PN_POINT/eBohr " << this->pcc_2d_moments_.dipole
+                       << " QNN_POINT/eBohr2 " << this->pcc_2d_moments_.quadrupole << '\n';
             }
             output << " PCC_ENERGY PCC_POINT/Ha " << 0.5 * this->pcc_energy_rydberg_
                    << " PCC_USED/Ry " << this->pcc_energy_rydberg_ << '\n';
@@ -159,7 +187,7 @@ void surchem::write_sccs_iteration(std::ostream& output) const
         output.precision(precision);
         return;
     }
-    const ModuleSccs::SccsResult& result = this->sccs_result();
+    const ModuleSccs::SccsResult& result = this->sccs_result_;
     const double solvation_energy_rydberg
         = 2.0 * (result.electrostatic.reaction_energy
                  + result.non_electrostatic.surface_energy
@@ -256,11 +284,11 @@ void surchem::write_sccs_iteration(std::ostream& output) const
         output << std::setprecision(12)
                << " PCC2D_MOMENTS"
                << " Q_SMOOTH/e " << result.solute_moments_2d.charge
-               << " PY_SMOOTH/eBohr " << result.solute_moments_2d.dipole_y
-               << " QYY_SMOOTH/eBohr2 " << result.solute_moments_2d.quadrupole_yy
+               << " PN_SMOOTH/eBohr " << result.solute_moments_2d.dipole
+               << " QNN_SMOOTH/eBohr2 " << result.solute_moments_2d.quadrupole
                << " Q_POINT/e " << result.point_solute_moments_2d.charge
-               << " PY_POINT/eBohr " << result.point_solute_moments_2d.dipole_y
-               << " QYY_POINT/eBohr2 " << result.point_solute_moments_2d.quadrupole_yy
+               << " PN_POINT/eBohr " << result.point_solute_moments_2d.dipole
+               << " QNN_POINT/eBohr2 " << result.point_solute_moments_2d.quadrupole
                << '\n';
         output << " PCC2D_ENERGY"
                << " REACTION/Ha " << result.electrostatic.reaction_energy
@@ -275,11 +303,11 @@ void surchem::write_sccs_iteration(std::ostream& output) const
 
 void surchem::write_sccs_diagnostics(std::ostream& output) const
 {
-    if (this->parameters_.debug < 2)
+    if (this->parameters_.debug < 2 || !this->sccs_is_active())
     {
         return;
     }
-    const ModuleSccs::SccsResult& result = this->sccs_result();
+    const ModuleSccs::SccsResult& result = this->sccs_result_;
     const std::streamsize previous_precision = output.precision();
     output << std::setprecision(16);
     output << " SCCS_DIAGNOSTIC reaction_energy_hartree "
@@ -297,30 +325,30 @@ void surchem::write_sccs_diagnostics(std::ostream& output) const
     {
         output << " SCCS_DIAGNOSTIC smooth_solute_charge "
                << result.solute_moments_2d.charge << '\n';
-        output << " SCCS_DIAGNOSTIC smooth_solute_dipole_y "
-               << result.solute_moments_2d.dipole_y << '\n';
-        output << " SCCS_DIAGNOSTIC smooth_solute_quadrupole_yy "
-               << result.solute_moments_2d.quadrupole_yy << '\n';
+        output << " SCCS_DIAGNOSTIC smooth_solute_dipole_normal "
+               << result.solute_moments_2d.dipole << '\n';
+        output << " SCCS_DIAGNOSTIC smooth_solute_quadrupole_normal "
+               << result.solute_moments_2d.quadrupole << '\n';
         output << " SCCS_DIAGNOSTIC point_solute_charge "
                << result.point_solute_moments_2d.charge << '\n';
-        output << " SCCS_DIAGNOSTIC point_solute_dipole_y "
-               << result.point_solute_moments_2d.dipole_y << '\n';
-        output << " SCCS_DIAGNOSTIC point_solute_quadrupole_yy "
-               << result.point_solute_moments_2d.quadrupole_yy << '\n';
+        output << " SCCS_DIAGNOSTIC point_solute_dipole_normal "
+               << result.point_solute_moments_2d.dipole << '\n';
+        output << " SCCS_DIAGNOSTIC point_solute_quadrupole_normal "
+               << result.point_solute_moments_2d.quadrupole << '\n';
         output << " SCCS_DIAGNOSTIC polarization_charge "
                << result.polarization_moments_2d.charge << '\n';
         output << " SCCS_DIAGNOSTIC far_field_polarization_charge "
                << result.response.far_field_polarization_charge << '\n';
-        output << " SCCS_DIAGNOSTIC polarization_dipole_y "
-               << result.polarization_moments_2d.dipole_y << '\n';
-        output << " SCCS_DIAGNOSTIC polarization_quadrupole_yy "
-               << result.polarization_moments_2d.quadrupole_yy << '\n';
+        output << " SCCS_DIAGNOSTIC polarization_dipole_normal "
+               << result.polarization_moments_2d.dipole << '\n';
+        output << " SCCS_DIAGNOSTIC polarization_quadrupole_normal "
+               << result.polarization_moments_2d.quadrupole << '\n';
         output << " SCCS_DIAGNOSTIC screened_charge "
                << result.screened_moments_2d.charge << '\n';
-        output << " SCCS_DIAGNOSTIC screened_dipole_y "
-               << result.screened_moments_2d.dipole_y << '\n';
-        output << " SCCS_DIAGNOSTIC screened_quadrupole_yy "
-               << result.screened_moments_2d.quadrupole_yy << '\n';
+        output << " SCCS_DIAGNOSTIC screened_dipole_normal "
+               << result.screened_moments_2d.dipole << '\n';
+        output << " SCCS_DIAGNOSTIC screened_quadrupole_normal "
+               << result.screened_moments_2d.quadrupole << '\n';
     }
     output.precision(previous_precision);
 }

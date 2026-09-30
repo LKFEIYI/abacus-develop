@@ -1,4 +1,4 @@
-The water dimer of case 220 in a slab cell open along y (16 bohr), with assume_isolated pcc_2d
+The water dimer of case 227 in a slab cell open along y (16 bohr), with assume_isolated pcc_2d, pcc_2d_axis 1
 and sccs_lowpass_p1 10 / sccs_lowpass_p2 5: FFT derivatives of the filled solvent-aware
 boundary, and the electronic cavity potential as the exact derivative of the discrete energy
 through the probe adjoint. (pcc_0d would need a cubic cell.)
@@ -13,4 +13,4 @@ Reference provenance (ecutwfc 75 Ry / ecutrho 300 Ry):
 - result.ref is an ABACUS regression baseline, not an external QE/Environ reference.
 
 Repository harness regeneration command, run from tests/01_PW:
-  OMP_NUM_THREADS=1 bash ../integrate/Autotest.sh -a /path/to/abacus -n 16 -o 1 -r '^221_PW_SCCS_SA_PCC2D_WATER2_LOWPASS$' -g
+  OMP_NUM_THREADS=1 bash ../integrate/Autotest.sh -a /path/to/abacus -n 16 -o 1 -r '^228_PW_SCCS_SA_PCC2D_WATER2_LOWPASS$' -g

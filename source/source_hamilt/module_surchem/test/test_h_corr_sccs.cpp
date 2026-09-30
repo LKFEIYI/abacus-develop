@@ -21,6 +21,29 @@
 namespace
 {
 
+int iteration_validation_rank = 0;
+
+TEST(HCorrSccs, InvalidIterationResultIsReportedOnEveryRank)
+{
+    SurchemParameters parameters;
+    parameters.debug = 2;
+    // Only rank zero lacks a required PCC result. Other ranks have no PCC
+    // requirement, but the collective validation must report failure to all.
+    if (iteration_validation_rank == 0)
+    {
+        parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+    }
+    surchem solvent;
+    solvent.set_parameters(parameters);
+    EXPECT_FALSE(solvent.validate_iteration_result());
+    std::ostringstream summary;
+    EXPECT_NO_THROW(solvent.write_iteration(summary, 0.1));
+    EXPECT_TRUE(summary.str().empty());
+    std::ostringstream diagnostics;
+    EXPECT_NO_THROW(solvent.write_sccs_diagnostics(diagnostics));
+    EXPECT_TRUE(diagnostics.str().empty());
+}
+
 // One unit ion at the center of a 10 bohr cubic cell on a 20 Ry grid.
 void setup_single_ion_cell(ModulePW::PW_Basis& basis, UnitCell& cell)
 {
@@ -87,7 +110,6 @@ TEST(HCorrSccs, SolventDispatchReturnsZeroBeforeDelayedActivation)
     }
     surchem::Ael = 1.0;
     surchem::Acav = 1.0;
-    surchem::Epcc = 1.0;
     solvent.v_correction_solvent(cell,
                                  basis,
                                  1,
@@ -100,7 +122,7 @@ TEST(HCorrSccs, SolventDispatchReturnsZeroBeforeDelayedActivation)
     }
     EXPECT_EQ(surchem::Ael, 0.0);
     EXPECT_EQ(surchem::Acav, 0.0);
-    EXPECT_EQ(surchem::Epcc, 0.0);
+    EXPECT_EQ(solvent.pcc_energy_rydberg(), 0.0);
     const std::vector<double>& electrostatic = solvent.electrostatic_correction();
     ASSERT_EQ(electrostatic.size(), static_cast<std::size_t>(basis.nrxx));
     for (int ir = 0; ir < basis.nrxx; ++ir)
@@ -318,7 +340,7 @@ TEST(HCorrSccs, ConvertsHartreeResultToRydbergPotentialAndEnergy)
                 0.5 * 2.837297479480619 / length,
                 1.0e-12);
     EXPECT_NEAR(surchem::Ael, 2.0 * result.electrostatic.reaction_energy, 1.0e-14);
-    EXPECT_NEAR(surchem::Epcc, 2.0 * result.vacuum_pcc_energy, 1.0e-14);
+    EXPECT_NEAR(solvent.pcc_energy_rydberg(), 2.0 * result.vacuum_pcc_energy, 1.0e-14);
     EXPECT_NEAR(surchem::Acav,
                 2.0 * (result.non_electrostatic.surface_energy
                        + result.non_electrostatic.volume_energy),
@@ -460,6 +482,7 @@ TEST(HCorrSccs, AppliesNeutralPcc2dPointIonEnergyAndPotential)
     parameters.sccs_config.surface_regularization = 1.0e-6;
     parameters.sccs_config.boundary = ModulePcc::Boundary::Pcc2d;
     parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+    parameters.pcc_2d_axis = 1;
     parameters.sccs_config.max_iterations = 100;
     parameters.sccs_config.tolerance_rms = 1.0e-14;
     parameters.sccs_config.tolerance_max = 1.0e-14;
@@ -492,22 +515,22 @@ TEST(HCorrSccs, AppliesNeutralPcc2dPointIonEnergyAndPotential)
 
     const ModuleSccs::SccsResult& result = solvent.sccs_result();
     ModulePcc::Pcc2dGeometry geometry
-        = ModulePcc::pcc_2d_geometry(cell.latvec, cell.lat0, 1.0e-10);
-    geometry.origin_y = cell.atoms[0].tau[0].y * cell.lat0;
+        = ModulePcc::pcc_2d_geometry(cell.latvec, cell.lat0, 1, 1.0e-10);
+    geometry.origin = cell.atoms[0].tau[0].y * cell.lat0;
     const double electron_y
-        = geometry.parameters.cell_length_y
+        = geometry.parameters.cell_length
           * static_cast<double>(electron_plane_y)
           / static_cast<double>(basis.ny);
     const double dipole_y
-        = -ModulePcc::pcc_2d_relative_y(electron_y, geometry);
+        = -ModulePcc::pcc_2d_relative_coordinate(ModuleBase::Vector3<double>(0.0, electron_y, 0.0), geometry);
     const double expected_energy = 2.0 * ModuleBase::PI * dipole_y * dipole_y / volume;
     EXPECT_NEAR(result.charge.net_charge, 0.0, 1.0e-12);
     EXPECT_NEAR(result.point_solute_moments_2d.charge, 0.0, 1.0e-12);
-    EXPECT_NEAR(result.point_solute_moments_2d.dipole_y, dipole_y, 1.0e-12);
+    EXPECT_NEAR(result.point_solute_moments_2d.dipole, dipole_y, 1.0e-12);
     EXPECT_NEAR(result.vacuum_pcc_energy, expected_energy, 1.0e-12);
     EXPECT_NEAR(result.electrostatic.reaction_energy, 0.0, 1.0e-14);
     EXPECT_NEAR(surchem::Ael, 0.0, 1.0e-13);
-    EXPECT_NEAR(surchem::Epcc, 2.0 * expected_energy, 1.0e-12);
+    EXPECT_NEAR(solvent.pcc_energy_rydberg(), 2.0 * expected_energy, 1.0e-12);
     for (int ir = 0; ir < basis.nrxx; ++ir)
     {
         EXPECT_TRUE(std::isfinite(potential(0, ir)));
@@ -559,6 +582,7 @@ TEST(HCorrSccs, AppliesChargedPcc2dEnergyAndPotential)
     parameters.sccs_config.surface_regularization = 1.0e-6;
     parameters.sccs_config.boundary = ModulePcc::Boundary::Pcc2d;
     parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+    parameters.pcc_2d_axis = 1;
     parameters.sccs_config.max_iterations = 100;
     parameters.sccs_config.tolerance_rms = 1.0e-14;
     parameters.sccs_config.tolerance_max = 1.0e-14;
@@ -584,16 +608,16 @@ TEST(HCorrSccs, AppliesChargedPcc2dEnergyAndPotential)
     EXPECT_NEAR(result.screened_moments_2d.charge, 0.04, 1.0e-12);
     EXPECT_TRUE(std::isfinite(result.vacuum_pcc_energy));
     EXPECT_TRUE(std::isfinite(result.electrostatic.reaction_energy));
-    // Point-ion vacuum PCC in the ENVIRON monopole gauge; no Gaussian-ion shape
+    // Point-ion vacuum PCC in the open planar gauge; no Gaussian-ion shape
     // term is added because the reaction energy does not depend on the ion width.
     const ModulePcc::Pcc2dGeometry pcc_geometry
-        = ModulePcc::pcc_2d_geometry(cell.latvec, cell.lat0, 1.0e-10);
+        = ModulePcc::pcc_2d_geometry(cell.latvec, cell.lat0, 1, 1.0e-10);
     const double expected_vacuum_energy
         = ModulePcc::pcc_2d_self_energy(result.point_solute_moments_2d,
                                          pcc_geometry.parameters);
     EXPECT_NEAR(result.vacuum_pcc_energy, expected_vacuum_energy, 1.0e-14);
     EXPECT_NEAR(surchem::Ael, 2.0 * result.electrostatic.reaction_energy, 1.0e-14);
-    EXPECT_NEAR(surchem::Epcc, 2.0 * result.vacuum_pcc_energy, 1.0e-14);
+    EXPECT_NEAR(solvent.pcc_energy_rydberg(), 2.0 * result.vacuum_pcc_energy, 1.0e-14);
     std::ostringstream diagnostics;
     solvent.write_sccs_diagnostics(diagnostics);
     const std::string diagnostic_text = diagnostics.str();
@@ -625,11 +649,11 @@ TEST(HCorrSccs, AppliesChargedPcc2dEnergyAndPotential)
     EXPECT_NE(iteration_text.find("Q_POL_EXPECTED/e "), std::string::npos);
     EXPECT_NE(iteration_text.find("PCC2D_MOMENTS "), std::string::npos);
     EXPECT_NE(iteration_text.find("Q_SMOOTH/e "), std::string::npos);
-    EXPECT_NE(iteration_text.find("PY_SMOOTH/eBohr "), std::string::npos);
-    EXPECT_NE(iteration_text.find("QYY_SMOOTH/eBohr2 "), std::string::npos);
+    EXPECT_NE(iteration_text.find("PN_SMOOTH/eBohr "), std::string::npos);
+    EXPECT_NE(iteration_text.find("QNN_SMOOTH/eBohr2 "), std::string::npos);
     EXPECT_NE(iteration_text.find("Q_POINT/e "), std::string::npos);
-    EXPECT_NE(iteration_text.find("PY_POINT/eBohr "), std::string::npos);
-    EXPECT_NE(iteration_text.find("QYY_POINT/eBohr2 "), std::string::npos);
+    EXPECT_NE(iteration_text.find("PN_POINT/eBohr "), std::string::npos);
+    EXPECT_NE(iteration_text.find("QNN_POINT/eBohr2 "), std::string::npos);
     EXPECT_NE(iteration_text.find("PCC2D_ENERGY "), std::string::npos);
     EXPECT_NE(iteration_text.find("REACTION/Ha "), std::string::npos);
     EXPECT_NE(iteration_text.find("PCC_SMOOTH/Ha "), std::string::npos);
@@ -699,6 +723,7 @@ int main(int argc, char** argv)
     int thread_count = 1;
     int rank = 0;
     Parallel_Global::read_pal_param(argc, argv, process_count, thread_count, rank);
+    iteration_validation_rank = rank;
     POOL_WORLD = MPI_COMM_WORLD;
     KP_WORLD = MPI_COMM_NULL;
     INT_BGROUP = MPI_COMM_NULL;

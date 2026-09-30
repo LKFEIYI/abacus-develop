@@ -16,4 +16,4 @@ Reference provenance (ecutwfc 75 Ry / ecutrho 300 Ry, the cutoffs of the QE-Envi
   system (see the PR description).
 
 Repository harness regeneration command, run from tests/01_PW:
-  OMP_NUM_THREADS=1 bash ../integrate/Autotest.sh -a /path/to/abacus -n 16 -o 1 -r '^220_PW_SCCS_SA_PERIODIC_WATER2$' -g
+  OMP_NUM_THREADS=1 bash ../integrate/Autotest.sh -a /path/to/abacus -n 16 -o 1 -r '^227_PW_SCCS_SA_PERIODIC_WATER2$' -g

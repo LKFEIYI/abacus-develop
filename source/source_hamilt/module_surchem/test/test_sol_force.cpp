@@ -241,6 +241,7 @@ TEST(SolForce, ConvertsPointIonPcc2dForceFromHartreeToRydberg)
     parameters.sccs_config.surface_regularization = 1.0e-6;
     parameters.sccs_config.boundary = ModulePcc::Boundary::Pcc2d;
     parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+    parameters.pcc_2d_axis = 1;
     parameters.sccs_config.max_iterations = 20;
     parameters.sccs_config.tolerance_rms = 1.0e-14;
     parameters.sccs_config.tolerance_max = 1.0e-14;
@@ -263,13 +264,13 @@ TEST(SolForce, ConvertsPointIonPcc2dForceFromHartreeToRydberg)
     solvent.cal_force_sol(cell, &basis, unused_vloc, 1, force);
 
     ModulePcc::Pcc2dGeometry geometry
-        = ModulePcc::pcc_2d_geometry(lattice, length, 1.0e-10);
+        = ModulePcc::pcc_2d_geometry(lattice, length, 1, 1.0e-10);
     const std::vector<double> positions_y{4.0, 6.0};
     const std::vector<double> masses{1.0, 1.0};
-    geometry.origin_y = ModulePcc::pcc_2d_system_center_y(
+    geometry.origin = ModulePcc::pcc_2d_system_center(
         positions_y,
         masses,
-        geometry.parameters.cell_length_y);
+        geometry.parameters.cell_length);
     for (int atom = 0; atom < 2; ++atom)
     {
         ModulePcc::PointCharge point;
@@ -501,6 +502,7 @@ TEST(SolForce, NeutralAndChargedPcc2dMatchFixedDensityTotalEnergyDerivativeInXyz
         parameters.sccs_config.surface_regularization = 1.0e-6;
         parameters.sccs_config.boundary = ModulePcc::Boundary::Pcc2d;
         parameters.pcc_boundary = ModulePcc::Boundary::Pcc2d;
+        parameters.pcc_2d_axis = 1;
         parameters.sccs_config.max_iterations = 500;
         parameters.sccs_config.tolerance_rms = 1.0e-12;
         parameters.sccs_config.tolerance_max = 1.0e-10;

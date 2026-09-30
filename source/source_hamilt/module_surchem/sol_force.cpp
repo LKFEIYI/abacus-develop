@@ -87,9 +87,9 @@ void surchem::force_cor_two(const UnitCell& cell,
     ModuleBase::GlobalFunc::ZEROS(Vcav_g, rho_basis->npw);
     ModuleBase::GlobalFunc::ZEROS(Vel_g, rho_basis->npw);
     for(int is=0; is<nspin; is++)
-	{
-		for (int ir=0; ir<rho_basis->nrxx; ir++)
-		{
+    {
+        for (int ir=0; ir<rho_basis->nrxx; ir++)
+        {
             Vcav_sum[ir] += this->Vcav(is, ir);
         }
     }
@@ -181,7 +181,8 @@ void surchem::cal_force_sol(const UnitCell& cell,
             }
             else
             {
-                ModuleBase::GlobalFunc::ZEROS(forcesol.c, forcesol.nr * forcesol.nc);
+                const int force_size = forcesol.nr * forcesol.nc;
+                ModuleBase::GlobalFunc::ZEROS(forcesol.c, force_size);
                 this->cal_force_pcc(cell, forcesol);
             }
         }
@@ -194,7 +195,7 @@ void surchem::cal_force_sol(const UnitCell& cell,
     }
 
     int nat = cell.nat;
-	ModuleBase::matrix force1(nat, 3);
+    ModuleBase::matrix force1(nat, 3);
     ModuleBase::matrix force2(nat, 3);
     
     force_cor_one(cell, rho_basis, vloc, force1);
@@ -202,15 +203,15 @@ void surchem::cal_force_sol(const UnitCell& cell,
     
     int iat = 0;
     for (int it = 0;it < cell.ntype;it++)
-	{
-		for (int ia = 0;ia < cell.atoms[it].na;ia++)
-		{
+    {
+        for (int ia = 0;ia < cell.atoms[it].na;ia++)
+        {
             for(int ipol = 0; ipol < 3; ipol++)
             {
                 forcesol(iat, ipol) = 0.5*force1(iat, ipol) + force2 (iat, ipol);
             }
-				
-		    ++iat;
+                
+            ++iat;
         }
     }
     
@@ -273,7 +274,8 @@ void surchem::cal_force_sccs(const UnitCell& cell,
             }
         }
     }
-    Parallel_Reduce::reduce_pool(forcesol.c, forcesol.nr * forcesol.nc);
+    const int force_size = forcesol.nr * forcesol.nc;
+    Parallel_Reduce::reduce_pool(forcesol.c, force_size);
     if (config.boundary == ModulePcc::Boundary::Periodic)
     {
         return;

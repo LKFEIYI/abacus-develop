@@ -14,6 +14,10 @@
 namespace
 {
 
+// Relative tolerance for the open lattice vector being perpendicular to the
+// periodic plane; loose enough for lattice vectors typed with rounded digits.
+const double pcc_2d_alignment_tolerance = 1.0e-6;
+
 // The grid density need not integrate to the electron count exactly, e.g.
 // after a very tight CG diagonalization; PCC uses the actual moments, so a
 // mismatch is reported instead of stopping the calculation.
@@ -29,24 +33,26 @@ void warn_charge_mismatch(const double charge_error, const double tolerance)
     ModuleBase::WARNING("surchem::v_correction_pcc", message.str());
 }
 
-double ionic_system_center_y(const UnitCell& cell, const double cell_length_y)
+// Mass-weighted ionic center along the slab normal.
+double ionic_system_center_2d(const UnitCell& cell, const ModulePcc::Pcc2dGeometry& geometry)
 {
-    std::vector<double> positions_y;
+    std::vector<double> coordinates;
     std::vector<double> masses;
-    positions_y.reserve(cell.nat);
+    coordinates.reserve(cell.nat);
     masses.reserve(cell.nat);
     for (int atom_type = 0; atom_type < cell.ntype; ++atom_type)
     {
         for (int atom = 0; atom < cell.atoms[atom_type].na; ++atom)
         {
-            const double y = cell.atoms[atom_type].tau[atom].y * cell.lat0;
-            positions_y.push_back(y);
+            const ModuleBase::Vector3<double> position = cell.atoms[atom_type].tau[atom] * cell.lat0;
+            const double coordinate = ModulePcc::pcc_2d_coordinate(position, geometry);
+            coordinates.push_back(coordinate);
             masses.push_back(cell.atoms[atom_type].mass);
         }
     }
-    return ModulePcc::pcc_2d_system_center_y(positions_y,
-                                               masses,
-                                               cell_length_y);
+    return ModulePcc::pcc_2d_system_center(coordinates,
+                                           masses,
+                                           geometry.parameters.cell_length);
 }
 
 ModuleBase::Vector3<double> ionic_system_center(
@@ -162,9 +168,11 @@ void surchem::v_correction_pcc(const UnitCell& cell,
     }
     else
     {
-        this->pcc_2d_geometry_ = ModulePcc::pcc_2d_geometry(cell.latvec, cell.lat0, 1.0e-10);
-        this->pcc_2d_geometry_.origin_y
-            = ionic_system_center_y(cell, this->pcc_2d_geometry_.parameters.cell_length_y);
+        this->pcc_2d_geometry_ = ModulePcc::pcc_2d_geometry(cell.latvec,
+                                                            cell.lat0,
+                                                            this->parameters_.pcc_2d_axis,
+                                                            pcc_2d_alignment_tolerance);
+        this->pcc_2d_geometry_.origin = ionic_system_center_2d(cell, this->pcc_2d_geometry_);
         const ModulePcc::Pcc2dMoments electronic_moments
             = ModulePcc::reduced_pcc_2d_density_moments(electronic_charge,
                                                          positions,
@@ -183,12 +191,12 @@ void surchem::v_correction_pcc(const UnitCell& cell,
         ModulePcc::validate_pcc_2d_geometry(this->pcc_2d_geometry_);
         for (int ir = 0; ir < rho_basis.nrxx; ++ir)
         {
-            const double relative_y
-                = ModulePcc::pcc_2d_relative_y(positions[ir].y, this->pcc_2d_geometry_);
+            const double relative
+                = ModulePcc::pcc_2d_relative_coordinate(positions[ir], this->pcc_2d_geometry_);
             const double electron_potential
                 = -2.0 * ModulePcc::pcc_2d_potential(
                     this->pcc_2d_moments_,
-                    relative_y,
+                    relative,
                     this->pcc_2d_geometry_.parameters);
             for (int spin = 0; spin < nspin; ++spin)
             {
@@ -200,7 +208,6 @@ void surchem::v_correction_pcc(const UnitCell& cell,
     const double* electron_potential_end = v.c + rho_basis.nrxx;
     this->electrostatic_correction_ry_.assign(electron_potential_begin, electron_potential_end);
     this->pcc_energy_rydberg_ = 2.0 * energy_hartree;
-    surchem::Epcc = this->pcc_energy_rydberg_;
     surchem::Ael = 0.0;
     surchem::Acav = 0.0;
     this->pcc_result_valid_ = true;

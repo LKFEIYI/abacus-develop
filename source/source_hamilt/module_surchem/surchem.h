@@ -33,6 +33,7 @@ struct SurchemParameters
     bool use_sccs = false;
     bool use_legacy_solvent = false;
     ModulePcc::Boundary pcc_boundary = ModulePcc::Boundary::Periodic;
+    int pcc_2d_axis = 2;  ///< open lattice vector (0, 1 or 2) of pcc_2d
     ModuleSccs::SccsConfig sccs_config;
     double expected_electron_count = 0.0;
     double expected_ionic_charge = 0.0;
@@ -58,9 +59,6 @@ class surchem
 
     static double Acav;
     static double Ael;
-    // PCC open-boundary correction energy (Ry), reported separately from
-    // the solvation terms Ael and Acav; zero without assume_isolated pcc_*.
-    static double Epcc;
 
     // get atom info
     atom_in GetAtom;
@@ -75,11 +73,17 @@ class surchem
     bool uses_sccs() const;
     bool uses_pcc() const;
 
+    // Last PCC energy (Ry); zero without PCC, throws if PCC has no valid result.
+    double pcc_energy_rydberg() const;
+
     bool sccs_is_active() const;
 
     bool try_activate_sccs(int electronic_iteration, double drho);
 
     const ModuleSccs::SccsResult& sccs_result() const;
+
+    // Collective over all ranks; call in the computation path, never while printing.
+    bool validate_iteration_result() const;
 
     void write_iteration(std::ostream& output, const double drho) const;
     void write_sccs_iteration(std::ostream& output) const;
