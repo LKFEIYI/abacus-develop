@@ -1,6 +1,7 @@
 #include "sccs_solvent_aware.h"
 
 #include "../common/charge_reduction.h"
+#include "../common/lattice_row.h"
 #include "sccs_cavity.h"
 
 #include "source_base/constants.h"
@@ -21,21 +22,6 @@ namespace
 const double filling_argument_cutoff = 6.0;
 // Environ function_erfc cuts the probe at width + 5 spread.
 const double probe_cutoff_spreads = 5.0;
-
-ModuleBase::Vector3<double> lattice_row(const ModuleBase::Matrix3& lattice,
-                                        const int row,
-                                        const double scale)
-{
-    if (row == 0)
-    {
-        return ModuleBase::Vector3<double>(lattice.e11, lattice.e12, lattice.e13) * scale;
-    }
-    if (row == 1)
-    {
-        return ModuleBase::Vector3<double>(lattice.e21, lattice.e22, lattice.e23) * scale;
-    }
-    return ModuleBase::Vector3<double>(lattice.e31, lattice.e32, lattice.e33) * scale;
-}
 
 // Fractional grid coordinate folded into [-1/2, 1/2).
 double folded_fraction(const int index, const int count)
@@ -90,9 +76,12 @@ std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
     {
         throw std::invalid_argument("SCCS solvent probe requires an initialized grid and lattice");
     }
-    const ModuleBase::Vector3<double> a1 = lattice_row(lattice_vectors, 0, lattice_scale);
-    const ModuleBase::Vector3<double> a2 = lattice_row(lattice_vectors, 1, lattice_scale);
-    const ModuleBase::Vector3<double> a3 = lattice_row(lattice_vectors, 2, lattice_scale);
+    const ModuleBase::Vector3<double> a1
+        = ModuleSurchem::lattice_row(lattice_vectors, 0, lattice_scale);
+    const ModuleBase::Vector3<double> a2
+        = ModuleSurchem::lattice_row(lattice_vectors, 1, lattice_scale);
+    const ModuleBase::Vector3<double> a3
+        = ModuleSurchem::lattice_row(lattice_vectors, 2, lattice_scale);
     const double volume = std::abs(a1 * (a2 ^ a3));
     const double width = parameters.solvent_radius * parameters.radial_scale;
     const double spread = parameters.radial_spread;
