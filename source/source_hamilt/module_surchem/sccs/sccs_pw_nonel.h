@@ -12,13 +12,14 @@ class PW_Basis;
 namespace ModuleSccs
 {
 
+// Surface and volume of the boundary s and their energies; the potential is
+// the derivative with respect to s.
 NonElectrostaticResult evaluate_pw_non_electrostatic(
     const ModulePW::PW_Basis& basis,
     double tpiba,
     double volume_element,
     const NonElectrostaticParameters& parameters,
     const std::vector<double>& solute,
-    const std::vector<double>& dsolute_drho,
     const ModuleSurchem::ChargeReduction& reduction);
 
 } // namespace ModuleSccs

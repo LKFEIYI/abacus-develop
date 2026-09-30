@@ -21,19 +21,19 @@ namespace ModuleSccs
 // sqrt-CG solution for the solute charge.
 struct SccsResponse
 {
+    // Dielectric boundary s (one inside the solute) and ds/dn of the cavity
+    // density n; epsilon = exp(ln(eps_bulk) (1 - s)).
     std::vector<double> solute;
     std::vector<double> dsolute_drho;
     std::vector<double> epsilon;
-    std::vector<double> depsilon_drho;
-    // Unscaled Dn from this response's cavity density. Keep it for the
-    // discrete derivative, including points where epsilon' is zero.
-    std::vector<ModuleBase::Vector3<double>> density_gradient;
     std::vector<ModuleBase::Vector3<double>> grad_log_epsilon;
     PolarizationResult polarization;
-    // Derivative of the reaction energy with respect to the cavity density
-    // through epsilon, in Ha. With the switching lowpass (PCC only) it is the
-    // exact derivative of the discrete sqrt-CG energy; otherwise it is the
-    // continuum -eps'|grad v|^2/(8 pi) of Environ.
+    // Derivative of the reaction energy with respect to the boundary s, in
+    // Ha. With the switching lowpass (PCC only) it is the exact derivative of
+    // the discrete sqrt-CG energy; otherwise it is the continuum
+    // L eps |grad v|^2/(8 pi) of Environ, L = ln(eps_bulk).
+    std::vector<double> boundary_potential;
+    // The same derivative with respect to the cavity density.
     std::vector<double> cavity_potential;
     // Unshifted sqrt-CG solution: the fixed point used for the next warm start.
     std::vector<double> restart_potential;
@@ -42,6 +42,11 @@ struct SccsResponse
     // sqrt(eps) v = C_PCC(s) with s = (q - f v)/sqrt(eps). Zero when periodic.
     double far_field_polarization_charge = 0.0;
 };
+
+// Chain a derivative with respect to the boundary s to the cavity density
+// (Environ calculator: de_dboundary * dscaled).
+std::vector<double> boundary_to_density_potential(const SccsResponse& response,
+                                                  const std::vector<double>& boundary_potential);
 
 // ENVIRON dielectric_of_potential polarization density,
 // grad(ln eps).grad(v)/(4 pi) + q (1/eps - 1). On a finite grid it need not

@@ -48,6 +48,9 @@ struct SccsResult
     ElectrostaticFunctionalResult electrostatic;
     NonElectrostaticResult non_electrostatic;
     std::vector<double> electron_potential_hartree;
+    // Derivative of the reaction, surface and volume energies with respect to
+    // the cavity density, for the 'full'-mode core-electron force.
+    std::vector<double> cavity_potential;
     // PCC0D moments about the PCC origin; zero for other boundaries.
     ModulePcc::MultipoleMoments solute_moments;
     ModulePcc::MultipoleMoments polarization_moments;

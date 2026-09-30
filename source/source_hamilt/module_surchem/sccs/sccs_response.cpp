@@ -51,34 +51,19 @@ std::vector<double> continuum_polarization_charge(
 namespace
 {
 
-SccsResponse prepare_cavity(
-    const std::vector<double>& density,
-    const CavityParameters& cavity,
-    const ModulePW::PW_Basis& basis,
-    const double tpiba)
+// Environ boundary_of_density: the boundary s(n) of the cavity density and
+// ds/dn. The dielectric follows from s in dielectric_of_boundary.
+SccsResponse prepare_cavity(const std::vector<double>& density, const CavityParameters& cavity)
 {
     SccsResponse result;
-    const std::vector<ModuleBase::Vector3<double>> density_gradient
-        = ModuleSccs::periodic_gradient(density, basis, tpiba);
-    result.density_gradient = density_gradient;
     const std::size_t size = density.size();
     result.solute.resize(size);
     result.dsolute_drho.resize(size);
-    result.epsilon.resize(size);
-    result.depsilon_drho.resize(size);
-    result.grad_log_epsilon.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
         const CavityPoint point = ModuleSccs::evaluate_cavity(density[i], cavity);
         result.solute[i] = point.solute;
         result.dsolute_drho[i] = point.dsolute_drho;
-        result.epsilon[i] = point.epsilon;
-        result.depsilon_drho[i] = point.depsilon_drho;
-        const double coefficient = point.depsilon_drho / point.epsilon;
-        for (int d = 0; d < 3; ++d)
-        {
-            result.grad_log_epsilon[i][d] = coefficient * density_gradient[i][d];
-        }
     }
     return result;
 }
@@ -169,46 +154,68 @@ class SqrtPreconditioner
     std::vector<double> potential_;
 };
 
-// Environ dielectric::factsqrt for electronic chain derivatives, in Ha units.
-void chain_factsqrt(const std::vector<double>& density,
-                    const CavityParameters& cavity,
-                    const SccsResponse& result,
-                    const ModulePW::PW_Basis& basis,
-                    const double tpiba,
-                    std::vector<double>& coefficient)
+// Environ boundary_of_density with deriv_method 'chain': grad s = s' grad n
+// and lapl s = s' lapl n + s'' |grad n|^2 from the spectral density derivatives.
+void chain_boundary_derivatives(const std::vector<double>& density,
+                                const CavityParameters& cavity,
+                                const ModulePW::PW_Basis& basis,
+                                const double tpiba,
+                                std::vector<ModuleBase::Vector3<double>>& gradient,
+                                std::vector<double>& laplacian)
 {
     const std::size_t size = density.size();
-    const std::vector<ModuleBase::Vector3<double>>& density_gradient = result.density_gradient;
+    const std::vector<ModuleBase::Vector3<double>> density_gradient
+        = ModuleSccs::periodic_gradient(density, basis, tpiba);
     std::vector<std::complex<double>> density_g(basis.npw);
     basis.real2recip(density.data(), density_g.data());
     for (int ig = 0; ig < basis.npw; ++ig)
     {
         density_g[ig] *= -tpiba * tpiba * basis.gg[ig];
     }
-    std::vector<double> laplacian(size);
-    basis.recip2real(density_g.data(), laplacian.data());
-    const double density_ratio = cavity.density_max / cavity.density_min;
-    const double width = std::log(density_ratio);
-    const double log_bulk = std::log(cavity.epsilon_bulk);
+    std::vector<double> density_laplacian(size);
+    basis.recip2real(density_g.data(), density_laplacian.data());
+    gradient.resize(size);
+    laplacian.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
-        double second_log = 0.0;
-        if (density[i] > cavity.density_min && density[i] < cavity.density_max)
-        {
-            const double local_density_ratio = cavity.density_max / density[i];
-            const double x = std::log(local_density_ratio) / width;
-            const double angle = ModuleBase::TWO_PI * x;
-            second_log = log_bulk * (1.0 - std::cos(angle) + ModuleBase::TWO_PI * std::sin(angle) / width)
-                         / (width * density[i] * density[i]);
-        }
-        const double first_log = result.depsilon_drho[i] / result.epsilon[i];
+        const CavityPoint point = ModuleSccs::evaluate_cavity(density[i], cavity);
         double gradient_square = 0.0;
         for (int d = 0; d < 3; ++d)
         {
+            gradient[i][d] = point.dsolute_drho * density_gradient[i][d];
             gradient_square += density_gradient[i][d] * density_gradient[i][d];
         }
-        const double lap_log = first_log * laplacian[i] + second_log * gradient_square;
-        coefficient[i] = result.epsilon[i] * (0.5 * lap_log + 0.25 * first_log * first_log * gradient_square)
+        laplacian[i] = point.dsolute_drho * density_laplacian[i]
+                       + point.d2solute_drho2 * gradient_square;
+    }
+}
+
+// Environ dielectric_of_boundary for an electronic boundary, in Ha units:
+// eps = exp(L (1 - s)) with L = ln(eps_bulk), grad ln eps = -L grad s, and the
+// sqrt-CG coefficient eps (lapl ln eps / 2 + |grad ln eps|^2 / 4) / (4 pi).
+void dielectric_of_boundary(const CavityParameters& cavity,
+                            const std::vector<ModuleBase::Vector3<double>>& gradient,
+                            const std::vector<double>& laplacian,
+                            SccsResponse& result,
+                            std::vector<double>& coefficient)
+{
+    const std::size_t size = result.solute.size();
+    const double log_bulk = std::log(cavity.epsilon_bulk);
+    result.epsilon.resize(size);
+    result.grad_log_epsilon.resize(size);
+    coefficient.resize(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        result.epsilon[i] = std::exp(log_bulk * (1.0 - result.solute[i]));
+        double gradient_square = 0.0;
+        for (int d = 0; d < 3; ++d)
+        {
+            result.grad_log_epsilon[i][d] = -log_bulk * gradient[i][d];
+            gradient_square += gradient[i][d] * gradient[i][d];
+        }
+        const double lap_log = -log_bulk * laplacian[i];
+        coefficient[i] = result.epsilon[i]
+                         * (0.5 * lap_log + 0.25 * log_bulk * log_bulk * gradient_square)
                          / ModuleBase::FOUR_PI;
     }
 }
@@ -311,49 +318,34 @@ void switching_divergence(const std::vector<ModuleBase::Vector3<double>>& field,
 // With PCC the potential at the cavity edge carries the open-boundary monopole
 // and dipole. The chain-rule f drops steeply to zero at density_min, and the
 // sampled f v source then fails to converge with the grid. Differentiate the
-// switching function s on the FFT grid instead (Environ deriv_method 'fft'):
-// ln eps = ln(eps_bulk) (1 - s). grad ln(eps) is replaced consistently, and
-// grad s is returned for the cavity derivative.
-void switching_fft_factsqrt(const CavityParameters& cavity,
-                            const ModulePW::PW_Basis& basis,
-                            const double tpiba,
-                            SccsResponse& result,
-                            std::vector<double>& coefficient,
-                            std::vector<ModuleBase::Vector3<double>>& solute_gradient)
+// boundary s on the FFT grid instead (Environ deriv_method 'fft'); the filtered
+// grad s is also the one of the exact cavity derivative.
+void switching_boundary_derivatives(const std::vector<double>& boundary,
+                                    const CavityParameters& cavity,
+                                    const ModulePW::PW_Basis& basis,
+                                    const double tpiba,
+                                    std::vector<ModuleBase::Vector3<double>>& gradient,
+                                    std::vector<double>& laplacian)
 {
-    const std::size_t size = result.solute.size();
-    const double log_bulk = std::log(cavity.epsilon_bulk);
-    solute_gradient = switching_gradient(result.solute, cavity, basis, tpiba);
-    std::vector<double> solute_laplacian;
-    switching_laplacian(result.solute, cavity, basis, tpiba, solute_laplacian);
-    for (std::size_t i = 0; i < size; ++i)
-    {
-        double gradient_square = 0.0;
-        for (int d = 0; d < 3; ++d)
-        {
-            result.grad_log_epsilon[i][d] = -log_bulk * solute_gradient[i][d];
-            gradient_square += solute_gradient[i][d] * solute_gradient[i][d];
-        }
-        const double lap_log = -log_bulk * solute_laplacian[i];
-        coefficient[i] = result.epsilon[i]
-                         * (0.5 * lap_log + 0.25 * log_bulk * log_bulk * gradient_square)
-                         / ModuleBase::FOUR_PI;
-    }
+    gradient = switching_gradient(boundary, cavity, basis, tpiba);
+    switching_laplacian(boundary, cavity, basis, tpiba, laplacian);
 }
 
-// Continuum cavity potential -eps'|grad v|^2/(8 pi) of Environ
-// dielectric::de_dboundary, with grad v from the solved potential.
-void continuum_cavity_potential(SccsResponse& result)
+// Continuum boundary potential -(deps/ds)|grad v|^2/(8 pi) of Environ
+// dielectric::de_dboundary, with deps/ds = -L eps and grad v from the solved
+// potential.
+void continuum_boundary_potential(const CavityParameters& cavity, SccsResponse& result)
 {
-    const std::size_t size = result.depsilon_drho.size();
-    result.cavity_potential.resize(size);
+    const std::size_t size = result.epsilon.size();
+    const double log_bulk = std::log(cavity.epsilon_bulk);
+    result.boundary_potential.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
         const ModuleBase::Vector3<double>& gradient = result.polarization.field.gradient[i];
         const double gradient_square
             = gradient.x * gradient.x + gradient.y * gradient.y + gradient.z * gradient.z;
-        result.cavity_potential[i]
-            = -(result.depsilon_drho[i] * gradient_square / (8.0 * ModuleBase::PI));
+        result.boundary_potential[i]
+            = log_bulk * result.epsilon[i] * gradient_square / (8.0 * ModuleBase::PI);
     }
 }
 
@@ -365,10 +357,10 @@ void continuum_cavity_potential(SccsResponse& result)
 // sqrt(eps) term and the pointwise part of dF add up to q v / 2, and the
 // transposes of the filtered lapl and grad in F give
 // dE/ds = L/2 (q v + lapl b + L div(b grad s)).
-// Its continuum limit is -eps'|grad v|^2/(8 pi). Without the filter the
+// Its continuum limit is L eps |grad v|^2/(8 pi). Without the filter the
 // discrete derivative is not grid-converged at the cavity edge and its
 // grid-scale oscillations drive the electronic SCF to diverge.
-void switching_cavity_potential(const std::vector<double>& charge,
+void switching_boundary_potential(const std::vector<double>& charge,
                                 const std::vector<double>& potential,
                                 const std::vector<ModuleBase::Vector3<double>>& solute_gradient,
                                 const CavityParameters& cavity,
@@ -392,13 +384,12 @@ void switching_cavity_potential(const std::vector<double>& charge,
     switching_laplacian(weight, cavity, basis, tpiba, weight_laplacian);
     std::vector<double> weighted_divergence;
     switching_divergence(weighted_gradient, cavity, basis, tpiba, weighted_divergence);
-    result.cavity_potential.resize(size);
+    result.boundary_potential.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
-        const double derivative = 0.5 * log_bulk
-                                  * (charge[i] * potential[i] + weight_laplacian[i]
-                                     + log_bulk * weighted_divergence[i]);
-        result.cavity_potential[i] = derivative * result.dsolute_drho[i];
+        result.boundary_potential[i] = 0.5 * log_bulk
+                                       * (charge[i] * potential[i] + weight_laplacian[i]
+                                          + log_bulk * weighted_divergence[i]);
     }
 }
 
@@ -482,6 +473,22 @@ void finish_open_boundary_response(const std::vector<double>& charge,
 
 } // namespace
 
+std::vector<double> boundary_to_density_potential(const SccsResponse& response,
+                                                  const std::vector<double>& boundary_potential)
+{
+    const std::size_t size = response.dsolute_drho.size();
+    if (boundary_potential.size() != size)
+    {
+        throw std::invalid_argument("SCCS boundary potential must match the cavity grid");
+    }
+    std::vector<double> density_potential(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        density_potential[i] = boundary_potential[i] * response.dsolute_drho[i];
+    }
+    return density_potential;
+}
+
 SccsResponse solve_sccs_response(
     const std::vector<double>& density,
     const std::vector<double>& charge,
@@ -494,23 +501,27 @@ SccsResponse solve_sccs_response(
     const ModuleSurchem::ChargeReduction& reduction)
 {
     ModuleBase::timer::start("ModuleSccs", "solve_sccs_response");
-    SccsResponse result = prepare_cavity(density, cavity, basis, tpiba);
+    SccsResponse result = prepare_cavity(density, cavity);
     const std::size_t size = density.size();
-    std::vector<double> coefficient(size);
+    const bool open_boundary = coulomb.has_boundary_correction();
+    std::vector<ModuleBase::Vector3<double>> solute_gradient;
+    std::vector<double> solute_laplacian;
+    if (!open_boundary)
+    {
+        chain_boundary_derivatives(density, cavity, basis, tpiba, solute_gradient,
+                                   solute_laplacian);
+    }
+    else
+    {
+        switching_boundary_derivatives(result.solute, cavity, basis, tpiba, solute_gradient,
+                                       solute_laplacian);
+    }
+    std::vector<double> coefficient;
+    dielectric_of_boundary(cavity, solute_gradient, solute_laplacian, result, coefficient);
     std::vector<double> invsqrt(size);
     for (std::size_t i = 0; i < size; ++i)
     {
         invsqrt[i] = 1.0 / std::sqrt(result.epsilon[i]);
-    }
-    const bool open_boundary = coulomb.has_boundary_correction();
-    std::vector<ModuleBase::Vector3<double>> solute_gradient;
-    if (!open_boundary)
-    {
-        chain_factsqrt(density, cavity, result, basis, tpiba, coefficient);
-    }
-    else
-    {
-        switching_fft_factsqrt(cavity, basis, tpiba, result, coefficient, solute_gradient);
     }
     SqrtPreconditioner preconditioner(invsqrt, coulomb);
     std::vector<double> residual = charge;
@@ -603,13 +614,14 @@ SccsResponse solve_sccs_response(
     }
     if (uses_switching_lowpass(cavity))
     {
-        switching_cavity_potential(charge, potential, solute_gradient, cavity, basis, tpiba,
-                                   result);
+        switching_boundary_potential(charge, potential, solute_gradient, cavity, basis, tpiba,
+                                     result);
     }
     else
     {
-        continuum_cavity_potential(result);
+        continuum_boundary_potential(cavity, result);
     }
+    result.cavity_potential = boundary_to_density_potential(result, result.boundary_potential);
     ModuleBase::timer::end("ModuleSccs", "solve_sccs_response");
     return result;
 }

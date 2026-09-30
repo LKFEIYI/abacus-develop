@@ -262,15 +262,9 @@ void surchem::cal_force_sccs(const UnitCell& cell,
     // density, with the Gaussian derivative (ENVIRON dboundary_dions).
     if (config.core_electrons)
     {
-        const std::vector<double>& electrostatic_cavity = this->sccs_result_.response.cavity_potential;
-        const std::vector<double>& non_electrostatic = this->sccs_result_.non_electrostatic.density_potential;
-        std::vector<double> cavity_potential(electrostatic_cavity.size());
-        for (std::size_t index = 0; index < cavity_potential.size(); ++index)
-        {
-            cavity_potential[index] = electrostatic_cavity[index] + non_electrostatic[index];
-        }
         const ModuleBase::matrix core_force_hartree
-            = ModuleSccs::gaussian_core_force(cell, rho_basis, config.core_spread, cavity_potential);
+            = ModuleSccs::gaussian_core_force(cell, rho_basis, config.core_spread,
+                                              this->sccs_result_.cavity_potential);
         for (int atom = 0; atom < cell.nat; ++atom)
         {
             for (int direction = 0; direction < 3; ++direction)

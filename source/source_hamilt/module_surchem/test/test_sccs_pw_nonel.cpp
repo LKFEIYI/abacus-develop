@@ -63,14 +63,12 @@ TEST(SccsPwNonel, EnergyDerivativeMatchesPotential)
     parameters.pressure = -0.04;
     parameters.surface_regularization = 1.0e-3;
     const ModuleSurchem::SerialChargeReduction reduction;
-    const std::vector<double> derivative(solute.size(), 1.0);
     const ModuleSccs::NonElectrostaticResult center
         = ModuleSccs::evaluate_pw_non_electrostatic(basis,
                                                     ModuleBase::TWO_PI / length,
                                                     volume_element,
                                                     parameters,
                                                     solute,
-                                                    derivative,
                                                     reduction);
 
     const double step = 1.0e-5;
@@ -81,7 +79,7 @@ TEST(SccsPwNonel, EnergyDerivativeMatchesPotential)
     {
         plus[index] = solute[index] + step * direction[index];
         minus[index] = solute[index] - step * direction[index];
-        analytic += center.density_potential[index] * direction[index] * volume_element;
+        analytic += center.boundary_potential[index] * direction[index] * volume_element;
     }
     const ModuleSccs::NonElectrostaticResult plus_result
         = ModuleSccs::evaluate_pw_non_electrostatic(basis,
@@ -89,7 +87,6 @@ TEST(SccsPwNonel, EnergyDerivativeMatchesPotential)
                                                     volume_element,
                                                     parameters,
                                                     plus,
-                                                    derivative,
                                                     reduction);
     const ModuleSccs::NonElectrostaticResult minus_result
         = ModuleSccs::evaluate_pw_non_electrostatic(basis,
@@ -97,7 +94,6 @@ TEST(SccsPwNonel, EnergyDerivativeMatchesPotential)
                                                     volume_element,
                                                     parameters,
                                                     minus,
-                                                    derivative,
                                                     reduction);
     const double finite_difference
         = ((plus_result.surface_energy + plus_result.volume_energy)
@@ -133,14 +129,12 @@ TEST(SccsPwNonel, UniformSoluteHasNoRegularizedSurface)
     parameters.surface_regularization = 1.0e-6;
     const ModuleSurchem::SerialChargeReduction reduction;
     const std::vector<double> solute(basis.nrxx, 1.0);
-    const std::vector<double> derivative(basis.nrxx, 0.0);
     const ModuleSccs::NonElectrostaticResult result
         = ModuleSccs::evaluate_pw_non_electrostatic(basis,
                                                     ModuleBase::TWO_PI / length,
                                                     volume_element,
                                                     parameters,
                                                     solute,
-                                                    derivative,
                                                     reduction);
     EXPECT_NEAR(result.surface, 0.0, 1.0e-12);
     EXPECT_NEAR(result.volume, volume, 1.0e-9);
@@ -148,7 +142,7 @@ TEST(SccsPwNonel, UniformSoluteHasNoRegularizedSurface)
     EXPECT_NEAR(result.volume_energy, parameters.pressure * volume, 1.0e-10);
     for (int ir = 0; ir < basis.nrxx; ++ir)
     {
-        EXPECT_EQ(result.density_potential[ir], 0.0);
+        EXPECT_NEAR(result.boundary_potential[ir], parameters.pressure, 1.0e-14);
     }
 }
 
@@ -161,24 +155,21 @@ TEST(SccsPwNonel, RejectsMismatchedArraysAndRegularization)
     ModuleSccs::NonElectrostaticParameters parameters;
     parameters.surface_regularization = 1.0e-6;
     const ModuleSurchem::SerialChargeReduction reduction;
-    const std::vector<double> solute(basis.nrxx, 1.0);
-    const std::vector<double> short_derivative(basis.nrxx - 1, 0.0);
+    const std::vector<double> short_solute(basis.nrxx - 1, 1.0);
     EXPECT_THROW(ModuleSccs::evaluate_pw_non_electrostatic(basis,
                                                            ModuleBase::TWO_PI / length,
                                                            volume_element,
                                                            parameters,
-                                                           solute,
-                                                           short_derivative,
+                                                           short_solute,
                                                            reduction),
                  std::invalid_argument);
-    const std::vector<double> derivative(basis.nrxx, 0.0);
+    const std::vector<double> solute(basis.nrxx, 1.0);
     parameters.surface_regularization = 0.0;
     EXPECT_THROW(ModuleSccs::evaluate_pw_non_electrostatic(basis,
                                                            ModuleBase::TWO_PI / length,
                                                            volume_element,
                                                            parameters,
                                                            solute,
-                                                           derivative,
                                                            reduction),
                  std::invalid_argument);
 }

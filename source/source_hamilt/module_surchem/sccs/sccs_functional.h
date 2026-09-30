@@ -20,7 +20,7 @@ struct ElectrostaticFunctionalResult
 
 // Reaction energy 1/2 integral q (phi_dielectric - phi_vacuum), in Ha.
 // The returned electronic potential is -(phi_dielectric - phi_vacuum) plus
-// cavity_potential, the solver's derivative through the dielectric cavity.
+// cavity_potential, its derivative through the dielectric cavity density.
 ElectrostaticFunctionalResult evaluate_electrostatic_functional(
     const std::vector<double>& solute_charge,
     const std::vector<double>& dielectric_potential,

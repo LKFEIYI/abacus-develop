@@ -19,7 +19,8 @@ struct NonElectrostaticResult
     double volume = 0.0;
     double surface_energy = 0.0;
     double volume_energy = 0.0;
-    std::vector<double> density_potential;
+    // Derivative of the surface and volume energies with respect to the boundary.
+    std::vector<double> boundary_potential;
 };
 
 } // namespace ModuleSccs

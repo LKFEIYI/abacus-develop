@@ -241,10 +241,13 @@ SccsResult evaluate_pw_sccs(
                                                              volume_element,
                                                              non_electrostatic_parameters,
                                                              result.response.solute,
-                                                             result.response.dsolute_drho,
                                                              reduction);
+    const std::vector<double> non_electrostatic_potential
+        = boundary_to_density_potential(result.response,
+                                        result.non_electrostatic.boundary_potential);
 
     result.electron_potential_hartree.resize(electron_density.size());
+    result.cavity_potential.resize(electron_density.size());
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
@@ -252,7 +255,9 @@ SccsResult evaluate_pw_sccs(
     {
         result.electron_potential_hartree[index]
             = result.electrostatic.electron_potential[index]
-              + result.non_electrostatic.density_potential[index];
+              + non_electrostatic_potential[index];
+        result.cavity_potential[index]
+            = result.response.cavity_potential[index] + non_electrostatic_potential[index];
     }
 
     // PCC moments of the smooth solute and of the polarization density, for

@@ -525,6 +525,9 @@ CationSolute make_cation_solute(const std::vector<ModuleBase::Vector3<double>>& 
     return solute;
 }
 
+// Permittivity of the evaluate_cation cavity.
+const double cation_epsilon_bulk = 78.3;
+
 ModuleSccs::SccsResult evaluate_cation(const std::vector<double>& electron_density,
                                        const std::vector<double>& ionic_density,
                                        const ModulePcc::Boundary boundary,
@@ -540,7 +543,7 @@ ModuleSccs::SccsResult evaluate_cation(const std::vector<double>& electron_densi
     ModuleSccs::SccsConfig config;
     config.cavity.density_min = 2.0e-4;
     config.cavity.density_max = 3.5e-3;
-    config.cavity.epsilon_bulk = 78.3;
+    config.cavity.epsilon_bulk = cation_epsilon_bulk;
     config.cavity.lowpass_p1 = lowpass_p1;
     config.cavity.lowpass_p2 = lowpass_p2;
     config.surface_regularization = 1.0e-8;
@@ -572,6 +575,16 @@ ModuleSccs::SccsResult evaluate_cation(const std::vector<double>& electron_densi
 // Environ deriv_lowpass 10/5, validated at ecutrho 300-500 Ry.
 const double test_lowpass_p1 = 10.0;
 const double test_lowpass_p2 = 5.0;
+// Environ continuum cavity potential L eps |grad v|^2/(8 pi) ds/dn with
+// L = ln(eps_bulk), given the squared potential gradient.
+double continuum_cavity_potential(const ModuleSccs::SccsResponse& response,
+                                  const std::size_t ir,
+                                  const double gradient_square)
+{
+    const double boundary_potential = std::log(cation_epsilon_bulk) * response.epsilon[ir]
+                                      * gradient_square / (8.0 * ModuleBase::PI);
+    return boundary_potential * response.dsolute_drho[ir];
+}
 
 void make_basis(const ModuleBase::Matrix3& lattice,
                 const double scale,
@@ -616,7 +629,7 @@ void check_cation_cavity_derivative(const ModulePcc::Boundary boundary,
     {
         const double gradient_square = result.response.polarization.field.gradient[ir].norm2();
         const double continuum_cavity
-            = -result.response.depsilon_drho[ir] * gradient_square / (8.0 * ModuleBase::PI);
+            = continuum_cavity_potential(result.response, ir, gradient_square);
         exact_maximum = std::max(exact_maximum, std::abs(result.response.cavity_potential[ir]));
         continuum_maximum = std::max(continuum_maximum, std::abs(continuum_cavity));
     }
@@ -645,7 +658,7 @@ void check_cation_cavity_derivative(const ModulePcc::Boundary boundary,
             const double gradient_square = result.response.polarization.field.gradient[ir].norm2();
             const double continuum_potential
                 = -result.electrostatic.reaction_potential[ir]
-                  - result.response.depsilon_drho[ir] * gradient_square / (8.0 * ModuleBase::PI);
+                  + continuum_cavity_potential(result.response, ir, gradient_square);
             continuum += continuum_potential * direction[ir] * volume_element;
         }
         const double energy_plus
@@ -711,9 +724,11 @@ TEST(SccsDriver, Pcc0dDefaultCavityPotentialIsEnvironContinuum)
     for (std::size_t ir = 0; ir < positions.size(); ++ir)
     {
         const double gradient_square = gradient[ir].norm2();
-        const double expected
-            = -(result.response.depsilon_drho[ir] * gradient_square / (8.0 * ModuleBase::PI));
+        const double expected_boundary = std::log(cation_epsilon_bulk) * result.response.epsilon[ir]
+                                         * gradient_square / (8.0 * ModuleBase::PI);
+        const double expected = expected_boundary * result.response.dsolute_drho[ir];
         const double expected_electron = -result.electrostatic.reaction_potential[ir] + expected;
+        EXPECT_DOUBLE_EQ(result.response.boundary_potential[ir], expected_boundary);
         EXPECT_DOUBLE_EQ(result.response.cavity_potential[ir], expected);
         EXPECT_DOUBLE_EQ(result.electrostatic.electron_potential[ir], expected_electron);
         maximum_cavity = std::max(maximum_cavity, std::abs(expected));

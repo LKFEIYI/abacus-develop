@@ -19,12 +19,10 @@ NonElectrostaticResult evaluate_pw_non_electrostatic(
     const double volume_element,
     const NonElectrostaticParameters& parameters,
     const std::vector<double>& solute,
-    const std::vector<double>& dsolute_drho,
     const ModuleSurchem::ChargeReduction& reduction)
 {
     ModuleBase::timer::start("ModuleSccs", "evaluate_pw_non_electrostatic");
-    if (solute.size() != static_cast<std::size_t>(basis.nrxx)
-        || dsolute_drho.size() != solute.size() || solute.empty())
+    if (solute.size() != static_cast<std::size_t>(basis.nrxx) || solute.empty())
     {
         throw std::invalid_argument("SCCS PW non-electrostatic arrays must match the local real-space grid");
     }
@@ -41,10 +39,10 @@ NonElectrostaticResult evaluate_pw_non_electrostatic(
         = periodic_gradient(solute, basis, tpiba);
     std::vector<ModuleBase::Vector3<double>> unit_gradient(solute.size());
     NonElectrostaticResult result;
-    result.density_potential.resize(solute.size());
+    result.boundary_potential.resize(solute.size());
     for (std::size_t index = 0; index < solute.size(); ++index)
     {
-        if (!std::isfinite(solute[index]) || !std::isfinite(dsolute_drho[index]))
+        if (!std::isfinite(solute[index]))
         {
             throw std::domain_error("SCCS PW non-electrostatic inputs must be finite");
         }
@@ -94,9 +92,8 @@ NonElectrostaticResult evaluate_pw_non_electrostatic(
 #endif
     for (std::size_t index = 0; index < solute.size(); ++index)
     {
-        result.density_potential[index]
-            = (parameters.pressure - parameters.surface_tension * divergence[index])
-              * dsolute_drho[index];
+        result.boundary_potential[index]
+            = parameters.pressure - parameters.surface_tension * divergence[index];
     }
     ModuleBase::timer::end("ModuleSccs", "evaluate_pw_non_electrostatic");
     return result;

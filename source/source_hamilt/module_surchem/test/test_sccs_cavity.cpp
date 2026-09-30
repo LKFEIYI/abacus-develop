@@ -60,8 +60,10 @@ TEST(SccsCavity, AnalyticDerivativesMatchCentralDifferences)
     const ModuleSccs::CavityPoint minus = ModuleSccs::evaluate_cavity(density - step, parameters);
 
     const double finite_solute = (plus.solute - minus.solute) / (2.0 * step);
+    const double finite_second = (plus.dsolute_drho - minus.dsolute_drho) / (2.0 * step);
     const double finite_epsilon = (plus.epsilon - minus.epsilon) / (2.0 * step);
     EXPECT_NEAR(center.dsolute_drho, finite_solute, std::abs(finite_solute) * 1.0e-9);
+    EXPECT_NEAR(center.d2solute_drho2, finite_second, std::abs(finite_second) * 1.0e-8);
     EXPECT_NEAR(center.depsilon_drho, finite_epsilon, std::abs(finite_epsilon) * 1.0e-9);
     EXPECT_GT(center.dsolute_drho, 0.0);
     EXPECT_LT(center.depsilon_drho, 0.0);
