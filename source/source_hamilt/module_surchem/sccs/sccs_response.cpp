@@ -229,7 +229,8 @@ void dielectric_of_boundary(const CavityParameters& cavity,
     coefficient.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
-        result.epsilon[i] = std::exp(log_bulk * (1.0 - result.solute[i]));
+        const double log_epsilon = log_bulk * (1.0 - result.solute[i]);
+        result.epsilon[i] = std::exp(log_epsilon);
         double gradient_square = 0.0;
         for (int d = 0; d < 3; ++d)
         {

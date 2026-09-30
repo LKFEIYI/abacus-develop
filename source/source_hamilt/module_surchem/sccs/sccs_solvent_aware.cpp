@@ -82,15 +82,19 @@ std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
         = ModuleSurchem::lattice_row(lattice_vectors, 1, lattice_scale);
     const ModuleBase::Vector3<double> a3
         = ModuleSurchem::lattice_row(lattice_vectors, 2, lattice_scale);
-    const double volume = std::abs(a1 * (a2 ^ a3));
+    const double triple_product = a1 * (a2 ^ a3);
+    const double volume = std::abs(triple_product);
     const double width = parameters.solvent_radius * parameters.radial_scale;
     const double spread = parameters.radial_spread;
     const double cutoff = width + probe_cutoff_spreads * spread;
     // Images n with |r0 + n a| <= cutoff for r0 in the folded cell; the cell
     // height along a_k is the volume over the area of the other two vectors.
-    const int image_count_1 = static_cast<int>(std::ceil(cutoff * (a2 ^ a3).norm() / volume + 0.5));
-    const int image_count_2 = static_cast<int>(std::ceil(cutoff * (a3 ^ a1).norm() / volume + 0.5));
-    const int image_count_3 = static_cast<int>(std::ceil(cutoff * (a1 ^ a2).norm() / volume + 0.5));
+    const double image_reach_1 = cutoff * (a2 ^ a3).norm() / volume + 0.5;
+    const double image_reach_2 = cutoff * (a3 ^ a1).norm() / volume + 0.5;
+    const double image_reach_3 = cutoff * (a1 ^ a2).norm() / volume + 0.5;
+    const int image_count_1 = static_cast<int>(std::ceil(image_reach_1));
+    const int image_count_2 = static_cast<int>(std::ceil(image_reach_2));
+    const int image_count_3 = static_cast<int>(std::ceil(image_reach_3));
 
     std::vector<double> probe(basis.nrxx, 0.0);
     double integral = 0.0;
@@ -115,7 +119,8 @@ std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
                     const double distance = image.norm();
                     if (distance <= cutoff)
                     {
-                        value += std::erfc((distance - width) / spread);
+                        const double argument = (distance - width) / spread;
+                        value += std::erfc(argument);
                     }
                 }
             }
@@ -185,7 +190,8 @@ SolventAwareBoundary solvent_aware_boundary(const std::vector<double>& local,
         filled.filling[i] = 1.0 - 0.5 * std::erfc(argument);
         if (std::abs(argument) <= filling_argument_cutoff)
         {
-            const double gaussian = std::exp(-argument * argument) / sqrt_pi;
+            const double exponent = -argument * argument;
+            const double gaussian = std::exp(exponent) / sqrt_pi;
             filled.dfilling[i] = gaussian / spread;
             filled.d2filling[i] = -2.0 * argument * gaussian / (spread * spread);
         }
