@@ -762,6 +762,7 @@ TEST(HCorrSccs, SolventOutputFieldsFollowTheLastCorrection)
     parameters.sccs_config.solvent_aware.solvent_radius = 1.0;
     parameters.sccs_config.solvent_aware.filling_threshold = 0.45;
     parameters.sccs_config.solvent_aware.filling_spread = 0.1;
+    parameters.debug = 2;
     surchem filled;
     filled.set_parameters(parameters);
     filled.v_correction_sccs(cell, basis, 1, density_channels, local_potential.data(), potential);
@@ -774,6 +775,20 @@ TEST(HCorrSccs, SolventOutputFieldsFollowTheLastCorrection)
     EXPECT_EQ(filled_fields[2].values, response.local_solute);
     EXPECT_EQ(filled_fields[3].values, response.filling.fraction);
     EXPECT_GT(response.filled_volume, 0.0);
+
+    // sccs_debug 2 reports the filled part of the cavity volume.
+    std::ostringstream iteration_output;
+    filled.write_sccs_iteration(iteration_output);
+    const std::string iteration_text = iteration_output.str();
+    const std::string label = " FILLED_VOLUME/Bohr3 ";
+    const std::size_t position = iteration_text.find(label);
+    ASSERT_NE(position, std::string::npos);
+    const std::size_t value_start = position + label.size();
+    const std::string value_text = iteration_text.substr(value_start);
+    std::istringstream value_stream(value_text);
+    double printed_volume = 0.0;
+    value_stream >> printed_volume;
+    EXPECT_NEAR(printed_volume, response.filled_volume, 1.0e-8 * response.filled_volume);
 }
 
 } // namespace

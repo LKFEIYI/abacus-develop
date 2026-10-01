@@ -333,6 +333,39 @@ TEST_F(InputTest, Item_test)
         param.input.scf_nmax = 100;
     }
 
+    { // SCCS solvent-aware ranges, checked with the SCCS numerical parameters
+        auto it = find_label("sccs_maxiter", readinput.input_lists);
+        param.input.sccs_solvent_radius = 3.0;
+        param.input.sccs_filling_threshold = 0.3;
+        EXPECT_NO_THROW(it->second.check_value(it->second, param));
+        const auto expect_rejected = [&]() {
+            testing::internal::CaptureStdout();
+            EXPECT_EXIT(it->second.check_value(it->second, param), ::testing::ExitedWithCode(1), "");
+            const std::string range_output = testing::internal::GetCapturedStdout();
+            EXPECT_THAT(range_output, testing::HasSubstr("SCCS solvent-aware parameters need"));
+        };
+        param.input.sccs_solvent_radius = -1.0;
+        expect_rejected();
+        param.input.sccs_solvent_radius = 3.0;
+        param.input.sccs_radial_scale = 0.5;
+        expect_rejected();
+        param.input.sccs_radial_scale = 2.0;
+        param.input.sccs_radial_spread = 0.0;
+        expect_rejected();
+        param.input.sccs_radial_spread = 0.5;
+        // The probe solute fraction never exceeds one, so a threshold of one fills nothing.
+        param.input.sccs_filling_threshold = 1.0;
+        expect_rejected();
+        param.input.sccs_filling_threshold = 0.0;
+        expect_rejected();
+        param.input.sccs_filling_threshold = 0.825;
+        param.input.sccs_filling_spread = 0.0;
+        expect_rejected();
+        param.input.sccs_filling_spread = 0.02;
+        param.input.sccs_solvent_radius = 0.0;
+        EXPECT_NO_THROW(it->second.check_value(it->second, param));
+    }
+
     { // socket_driver
         auto it = find_label("socket_driver", readinput.input_lists);
         param.input.socket_driver = true;
