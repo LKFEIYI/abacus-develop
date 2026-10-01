@@ -4,7 +4,8 @@ boundary, and the electronic cavity potential as the exact derivative of the dis
 through the probe adjoint. (pcc_0d would need a cubic cell.)
 
 Reference provenance (ecutwfc 75 Ry / ecutrho 300 Ry):
-- ABACUS source commit: 4136a53bf (feat(input): add the SCCS solvent-aware INPUT keys)
+- ABACUS source commit: 1a7794b63 (feat(input): add the SCCS solvent-aware INPUT keys;
+  the executable was built before a message-only history rewrite and reports 4136a53bf, same tree)
 - ABACUS version: v3.11.0-beta10
 - executable SHA256: 9c6f666ca6e025e4dd41dc936bfe056aee0b74f4997053ebfeed6355868d72d6
 - parallel layout: 16 MPI ranks x 1 OpenMP thread

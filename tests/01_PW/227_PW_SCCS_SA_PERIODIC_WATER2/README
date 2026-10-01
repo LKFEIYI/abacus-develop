@@ -2,15 +2,20 @@ PW water dimer, two molecules stacked 7.5 bohr apart along z, with native SCCS i
 cell (assume_isolated none), the water-neutral preset and the Environ solvent-aware interface
 (sccs_solvent_radius 2, sccs_filling_threshold 0.3). The probe of radius 4 bohr fills the gap
 between the molecules but not the gaps to the periodic images: Environ 'chain' derivatives of
-the filled boundary, the probe adjoint in the electronic potential, energy and ionic force.
+the filled boundary and of its surface (gradient and Hessian, as Environ need_hessian), the
+probe adjoint in the electronic potential, energy and ionic force.
 
 Reference provenance (ecutwfc 75 Ry / ecutrho 300 Ry, the cutoffs of the QE-Environ comparison):
-- ABACUS source commit: 4136a53bf (feat(input): add the SCCS solvent-aware INPUT keys)
+- ABACUS source commit: bf66e1d58 (fix(surchem): use the chain surface of the periodic solvent-aware boundary;
+  the executable was built before a message-only history rewrite and reports e40515a45, same tree)
 - ABACUS version: v3.11.0-beta10
-- executable SHA256: 9c6f666ca6e025e4dd41dc936bfe056aee0b74f4997053ebfeed6355868d72d6
+- executable SHA256: 3c97ec43a21ae82301947b4974dbec14adeb9da38db053345e6c3976b065fac1
 - parallel layout: 16 MPI ranks x 1 OpenMP thread
-- generated 2026-09-29; two independent check runs passed every comparison.
-- sccs_debug 2 reports SCCS_CAVITY FILLED_VOLUME/Bohr3 104.7 at convergence.
+- generated 2026-10-01; two independent check runs passed every comparison.
+- sccs_debug 2 reports SCCS_CAVITY SURFACE/Bohr2 365.7 and FILLED_VOLUME/Bohr3 104.8 at
+  convergence. The earlier baseline (1a7794b63) took the surface from the spectral gradient of
+  the filled boundary, which rings at this low sccs_filling_threshold: surface 410.5 bohr^2,
+  E_sol_cav 0.0378 eV higher.
 - result.ref is an ABACUS regression baseline, not an external QE/Environ reference; the
   solvent-aware kernel was compared with QE-Environ 3.1.1 on Environ's own solvent-aware test
   system (see the PR description).
