@@ -287,8 +287,6 @@ void surchem::write_sccs_iteration(std::ostream& output) const
                    << " Q_POL_DENSITY/e " << density_charge
                    << " Q_POL_EXPECTED/e " << expected_charge << '\n';
         }
-        // Local output-rank FFT counts of the sqrt-CG solve; timings are in
-        // the ModuleBase::timer summary.
         // Environ boundary volume and surface; FILLED is the solvent-aware
         // part of the volume.
         output << " SCCS_CAVITY VOLUME/Bohr3 " << result.non_electrostatic.volume
@@ -298,6 +296,8 @@ void surchem::write_sccs_iteration(std::ostream& output) const
             output << " FILLED_VOLUME/Bohr3 " << result.response.filled_volume;
         }
         output << '\n';
+        // Local output-rank FFT counts of the sqrt-CG solve; timings are in
+        // the ModuleBase::timer summary.
         const ModuleSccs::CoulombTransformCounts& counts = result.forward_transforms;
         output << " SCCS_FFT R2G_CALLS " << counts.forward_calls
                << " G2R_CALLS " << counts.inverse_calls

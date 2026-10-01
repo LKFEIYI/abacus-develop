@@ -16,6 +16,13 @@
 class Parallel_Grid;
 class Structure_Factor;
 
+// One real-space field of the last solvent correction on the local grid.
+struct SolventGridField
+{
+    std::string name;
+    std::vector<double> values;
+};
+
 /**
  * @brief Implicit-solvent settings, injected at the ESolver boundary.
  *
@@ -25,13 +32,6 @@ class Structure_Factor;
  * copy that could silently drift out of sync with input_parameter.h. Callers that
  * need specific values (unit tests included) must state them explicitly.
  */
-// One real-space field of the last solvent correction on the local grid.
-struct SolventGridField
-{
-    std::string name;
-    std::vector<double> values;
-};
-
 struct SurchemParameters
 {
     double eb_k = 0.0;    ///< relative permittivity of the bulk solvent
