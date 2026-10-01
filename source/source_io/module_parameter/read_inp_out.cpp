@@ -176,7 +176,7 @@ In molecular dynamics calculations, the output frequency is controlled by out_fr
  * `sol_eps.cube`: the dielectric function epsilon(r), 1 in the solute and the bulk permittivity in the solvent. An isosurface such as epsilon = 15 shows where the continuum is.
  * `sol_cavity.cube`: the solute boundary s(r), 1 in the solute and 0 in the solvent; for imp_sol 1 it is 1 minus the solvent shape function (written only when eb_k > 1).
  * With the SCCS solvent-aware cavity (sccs_solvent_radius > 0), `sol_cavity.cube` holds the filled boundary, and two more files are written: `sol_cavity_local.cube`, the boundary before the filling, and `sol_filled_fraction.cube`, the fraction of the probe sphere around each point that is filled with solute, which the filling compares with sccs_filling_threshold.
- With out_freq_ion > 0 the files are written every out_freq_ion ionic steps with the geometry index in the name, e.g. `sol_epsg1.cube`; with out_freq_ion = 0 they are overwritten at every step. Nothing is written while SCCS waits for its delayed start (sccs_start_drho) or with PCC alone.
+ With out_freq_ion > 0 the files are written every out_freq_ion ionic steps with the geometry index in the name, e.g. `sol_epsg1.cube`; with out_freq_ion = 0 they are overwritten at every step. Nothing is written while SCCS waits for its delayed start (sccs_start_drho).
 
 The optional second integer controls the output precision. If not provided, the default precision is 8.)";
         item.default_value = "0";
