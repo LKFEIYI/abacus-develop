@@ -1,17 +1,3 @@
-The water dimer of case 227 in a slab cell open along y (16 bohr), with assume_isolated pcc_2d, pcc_2d_axis 1
-and sccs_lowpass_p1 10 / sccs_lowpass_p2 5: FFT derivatives of the filled solvent-aware
-boundary, and the electronic cavity potential as the exact derivative of the discrete energy
-through the probe adjoint. (pcc_0d would need a cubic cell.)
-
-Reference provenance (ecutwfc 75 Ry / ecutrho 300 Ry):
-- ABACUS source commit: 1a7794b63 (feat(input): add the SCCS solvent-aware INPUT keys;
-  the executable was built before a message-only history rewrite and reports 4136a53bf, same tree)
-- ABACUS version: v3.11.0-beta10
-- executable SHA256: 9c6f666ca6e025e4dd41dc936bfe056aee0b74f4997053ebfeed6355868d72d6
-- parallel layout: 16 MPI ranks x 1 OpenMP thread
-- generated 2026-09-29; two independent check runs passed every comparison.
-- sccs_debug 2 reports SCCS_CAVITY FILLED_VOLUME/Bohr3 104.5 at convergence.
-- result.ref is an ABACUS regression baseline, not an external QE/Environ reference.
-
-Repository harness regeneration command, run from tests/01_PW:
-  OMP_NUM_THREADS=1 bash ../integrate/Autotest.sh -a /path/to/abacus -n 16 -o 1 -r '^228_PW_SCCS_SA_PCC2D_WATER2_LOWPASS$' -g
+Case 227_PW_SCCS_SA_PERIODIC_WATER2 in a slab open along y (pcc_2d_axis 1) with the
+cavity low-pass filter (p1 10, p2 5). Checks total energy, forces and SCCS/PCC energy
+terms with FFT derivatives of the filled boundary.
