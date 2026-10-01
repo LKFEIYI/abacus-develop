@@ -94,6 +94,31 @@ std::vector<double> spectral_laplacian(const std::vector<double>& values,
     return laplacian;
 }
 
+// Spectral Hessian components of values in the hessian_axes order.
+std::vector<std::vector<double>> spectral_hessian(const std::vector<double>& values,
+                                                  const ModulePW::PW_Basis& basis,
+                                                  const double tpiba)
+{
+    std::vector<std::complex<double>> values_g(basis.npw);
+    basis.real2recip(values.data(), values_g.data());
+    std::vector<std::vector<double>> hessian(ModuleSccs::hessian_component_count);
+    std::vector<std::complex<double>> component_g(basis.npw);
+    for (int component = 0; component < ModuleSccs::hessian_component_count; ++component)
+    {
+        int first = 0;
+        int second = 0;
+        ModuleSccs::hessian_axes(component, first, second);
+        for (int ig = 0; ig < basis.npw; ++ig)
+        {
+            component_g[ig] = -tpiba * tpiba * basis.gcar[ig][first] * basis.gcar[ig][second]
+                              * values_g[ig];
+        }
+        hessian[component].resize(values.size());
+        basis.recip2real(component_g.data(), hessian[component].data());
+    }
+    return hessian;
+}
+
 double grid_sum(const std::vector<double>& left, const std::vector<double>& right)
 {
     double sum = 0.0;
@@ -449,6 +474,85 @@ TEST(SccsSolventAware, ChainDerivativesMatchSpectralDerivativesOfTheFilledBounda
     // Measured 8e-6 and 1e-4 of the maxima.
     EXPECT_LT(gradient_error, 5.0e-5 * gradient_scale);
     EXPECT_LT(laplacian_error, 5.0e-4 * laplacian_scale);
+}
+
+// The chain Hessian of s_sa gives the surface derivative -div(g/|g|_r) of a
+// well-resolved filled boundary; compare with spectral derivatives of s_sa.
+TEST(SccsSolventAware, ChainSurfaceMatchesSpectralSurfaceOfTheFilledBoundary)
+{
+    const double length = 16.0;
+    ModulePW::PW_Basis basis("cpu", "double");
+    setup_cubic_basis(basis, length, 80.0);
+    const double tpiba = ModuleBase::TWO_PI / length;
+    const double volume_element = length * length * length / static_cast<double>(basis.nxyz);
+    ModuleSccs::SolventAwareParameters parameters = probe_parameters(1.5);
+    parameters.filling_threshold = 0.45;
+    parameters.filling_spread = 0.3;
+    const double regularization = 1.0e-8;
+    const ModuleSurchem::SerialChargeReduction reduction;
+    const std::vector<double> kernel
+        = ModuleSccs::solvent_probe_kernel(basis, cubic_lattice, length, parameters, reduction);
+    const std::vector<double> local
+        = sphere(basis, length, ModuleBase::Vector3<double>(0.0, 0.0, 0.0), 3.5, 1.5);
+    const ModuleSccs::SolventAwareBoundary filled
+        = ModuleSccs::solvent_aware_boundary(local, kernel, parameters, basis);
+    const std::vector<ModuleBase::Vector3<double>> local_gradient
+        = ModuleSccs::periodic_gradient(local, basis, tpiba);
+    const std::vector<std::vector<double>> local_hessian = spectral_hessian(local, basis, tpiba);
+    const ModuleSccs::SolventAwareSurface surface = ModuleSccs::solvent_aware_surface(
+        local, filled, kernel, basis, local_gradient, local_hessian, regularization);
+
+    const std::vector<ModuleBase::Vector3<double>> expected_gradient
+        = ModuleSccs::periodic_gradient(filled.boundary, basis, tpiba);
+    const std::vector<std::vector<double>> expected_hessian
+        = spectral_hessian(filled.boundary, basis, tpiba);
+    double chain_surface = 0.0;
+    double spectral_surface = 0.0;
+    double gradient_error = 0.0;
+    double gradient_scale = 0.0;
+    double derivative_error = 0.0;
+    double derivative_scale = 0.0;
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        const ModuleBase::Vector3<double>& g = expected_gradient[ir];
+        double projected = 0.0;
+        double trace = 0.0;
+        for (int component = 0; component < ModuleSccs::hessian_component_count; ++component)
+        {
+            int first = 0;
+            int second = 0;
+            ModuleSccs::hessian_axes(component, first, second);
+            const double weight = first == second ? 1.0 : 2.0;
+            projected += weight * g[first] * g[second] * expected_hessian[component][ir];
+            if (first == second)
+            {
+                trace += expected_hessian[component][ir];
+            }
+        }
+        const double norm_square = g.norm2() + regularization * regularization;
+        const double norm = std::sqrt(norm_square);
+        chain_surface += surface.gradient[ir].norm() * volume_element;
+        spectral_surface += g.norm() * volume_element;
+        gradient_error = std::max(gradient_error, (surface.gradient[ir] - g).norm());
+        gradient_scale = std::max(gradient_scale, g.norm());
+        // Weight by |g| as the surface energy does; the curvature itself is
+        // ill-conditioned where the boundary is flat.
+        const double expected_derivative = (projected - norm_square * trace) / (norm_square * norm);
+        derivative_error = std::max(derivative_error,
+                                    norm * std::abs(surface.surface_derivative[ir] - expected_derivative));
+        derivative_scale = std::max(derivative_scale, norm * std::abs(expected_derivative));
+    }
+    std::cout << std::setprecision(12) << "SCCS_SA_SURFACE chain " << chain_surface << " spectral "
+              << spectral_surface << " gradient " << gradient_error << " / " << gradient_scale
+              << " derivative " << derivative_error << " / " << derivative_scale << std::endl;
+    EXPECT_GT(spectral_surface, 1.0);
+    EXPECT_NEAR(chain_surface, spectral_surface, 1.0e-5 * spectral_surface);
+    EXPECT_LT(gradient_error, 5.0e-5 * gradient_scale);
+    EXPECT_LT(derivative_error, 5.0e-4 * derivative_scale);
+    int first = 0;
+    int second = 0;
+    EXPECT_THROW(ModuleSccs::hessian_axes(ModuleSccs::hessian_component_count, first, second),
+                 std::invalid_argument);
 }
 
 } // namespace

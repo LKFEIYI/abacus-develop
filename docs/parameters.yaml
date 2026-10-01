@@ -4703,7 +4703,7 @@ parameters:
     category: Implicit solvation model
     type: Real
     description: |
-      Width of the erfc step of the solvent-aware filling in the probe solute fraction, as Environ filling_spread; positive, default 0.02. Used only when sccs_solvent_radius is positive.
+      Width of the erfc step of the solvent-aware filling in the probe solute fraction, as Environ filling_spread; positive, default 0.02. Used only when sccs_solvent_radius is positive. With assume_isolated none the filled boundary, its surface and their potentials use the analytic gradient and Hessian of Environ deriv_method chain, which stay accurate when the default step is narrower than the grid spacing. With pcc_0d or pcc_2d the filled boundary is differentiated on the FFT grid (Environ deriv_method fft); a step narrower than the grid spacing then rings, mostly at low sccs_filling_threshold, so check the surface against a larger ecutrho or sccs_filling_spread.
     default_value: "0.02"
     unit: ""
     availability: imp_sol==2

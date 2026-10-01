@@ -72,6 +72,36 @@ void solvent_aware_chain_derivatives(const std::vector<double>& local,
                                      std::vector<ModuleBase::Vector3<double>>& gradient,
                                      std::vector<double>& laplacian);
 
+// Number of independent components of a symmetric 3x3 Hessian; hessian_axes
+// gives the two Cartesian axes of component k in the order xx, yy, zz, xy, xz, yz.
+const int hessian_component_count = 6;
+void hessian_axes(int component, int& first, int& second);
+
+// Gradient g of s_sa and the derivative of its surface int(|g|_r - r) with
+// respect to s_sa, -div(g/|g|_r) = (g.H.g - |g|_r^2 tr H)/|g|_r^3, where
+// |g|_r = sqrt(|g|^2 + r^2) and H is the Hessian of s_sa (Environ
+// calc_dsurface_no_pre for r -> 0).
+struct SolventAwareSurface
+{
+    std::vector<ModuleBase::Vector3<double>> gradient;
+    std::vector<double> surface_derivative;
+};
+
+// Environ solvent_aware_boundary with deriv_method 'chain' and need_hessian:
+// from grad s and the components of H s (local_hessian, hessian_axes order),
+// grad c = p * grad s, H c = p * H s and
+// H s_sa = (1 - f) H s - f' (grad s grad c^T + grad c grad s^T)
+//          + (1 - s) (f'' grad c grad c^T + f' H c).
+// Unlike a spectral gradient of s_sa, these stay smooth when the filling
+// switches within a grid spacing.
+SolventAwareSurface solvent_aware_surface(const std::vector<double>& local,
+                                          const SolventAwareBoundary& filled,
+                                          const std::vector<double>& kernel,
+                                          const ModulePW::PW_Basis& basis,
+                                          const std::vector<ModuleBase::Vector3<double>>& local_gradient,
+                                          const std::vector<std::vector<double>>& local_hessian,
+                                          double regularization);
+
 // Environ calc_solvent_aware_de_dboundary: from dE/ds_sa to dE/ds,
 // (1 - f) dE/ds_sa + p * ((1 - s) f' dE/ds_sa). The probe is even, so the
 // convolution is its own transpose and the result is the exact adjoint.

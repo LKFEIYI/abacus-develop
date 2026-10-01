@@ -59,6 +59,18 @@ std::vector<double> boundary_to_density_potential(const SccsResponse& response,
                                                   const ModulePW::PW_Basis& basis,
                                                   const std::vector<double>& boundary_potential);
 
+// Periodic solvent-aware path (Environ boundary_of_density with deriv_method
+// 'chain' and need_hessian): grad s = s' grad n and
+// H s = s' H n + s'' grad n grad n^T from the spectral density derivatives,
+// passed to solvent_aware_surface for the filled boundary of response.
+SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& density,
+                                                     const CavityParameters& cavity,
+                                                     const SccsResponse& response,
+                                                     const std::vector<double>& probe_kernel,
+                                                     const ModulePW::PW_Basis& basis,
+                                                     double tpiba,
+                                                     double regularization);
+
 // ENVIRON dielectric_of_potential polarization density,
 // grad(ln eps).grad(v)/(4 pi) + q (1/eps - 1). On a finite grid it need not
 // equal -laplacian(v)/(4 pi) - q; ABACUS uses it only for PCC diagnostics.

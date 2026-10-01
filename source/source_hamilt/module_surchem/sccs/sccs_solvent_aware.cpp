@@ -230,6 +230,89 @@ void solvent_aware_chain_derivatives(const std::vector<double>& local,
     }
 }
 
+void hessian_axes(const int component, int& first, int& second)
+{
+    static const int axes[hessian_component_count][2] = {{0, 0}, {1, 1}, {2, 2}, {0, 1}, {0, 2}, {1, 2}};
+    if (component < 0 || component >= hessian_component_count)
+    {
+        throw std::invalid_argument("SCCS Hessian component index out of range");
+    }
+    first = axes[component][0];
+    second = axes[component][1];
+}
+
+SolventAwareSurface solvent_aware_surface(const std::vector<double>& local,
+                                          const SolventAwareBoundary& filled,
+                                          const std::vector<double>& kernel,
+                                          const ModulePW::PW_Basis& basis,
+                                          const std::vector<ModuleBase::Vector3<double>>& local_gradient,
+                                          const std::vector<std::vector<double>>& local_hessian,
+                                          const double regularization)
+{
+    ModuleBase::timer::start("ModuleSccs", "solvent_aware_surface");
+    const std::size_t size = local.size();
+    if (local_gradient.size() != size || filled.boundary.size() != size
+        || local_hessian.size() != static_cast<std::size_t>(hessian_component_count))
+    {
+        throw std::invalid_argument("SCCS solvent-aware surface arrays must match the grid");
+    }
+    const std::vector<ModuleBase::Vector3<double>> fraction_gradient
+        = convolve_field(kernel, basis, local_gradient);
+    SolventAwareSurface surface;
+    surface.gradient.resize(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        const double empty = 1.0 - filled.filling[i];
+        const double solvent = 1.0 - local[i];
+        surface.gradient[i] = local_gradient[i] * empty
+                              + fraction_gradient[i] * (solvent * filled.dfilling[i]);
+    }
+    // Accumulate g.H.g and tr H one Hessian component at a time.
+    std::vector<double> projected(size, 0.0);
+    std::vector<double> trace(size, 0.0);
+    for (int component = 0; component < hessian_component_count; ++component)
+    {
+        if (local_hessian[component].size() != size)
+        {
+            throw std::invalid_argument("SCCS solvent-aware Hessian must match the grid");
+        }
+        int first = 0;
+        int second = 0;
+        hessian_axes(component, first, second);
+        const std::vector<double> fraction_hessian
+            = convolve_probe(kernel, basis, local_hessian[component]);
+        const double weight = first == second ? 1.0 : 2.0;
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            const double empty = 1.0 - filled.filling[i];
+            const double solvent = 1.0 - local[i];
+            const double cross = local_gradient[i][first] * fraction_gradient[i][second]
+                                 + fraction_gradient[i][first] * local_gradient[i][second];
+            const double fraction_outer = fraction_gradient[i][first] * fraction_gradient[i][second];
+            const double hessian = local_hessian[component][i] * empty - filled.dfilling[i] * cross
+                                   + solvent
+                                         * (filled.d2filling[i] * fraction_outer
+                                            + filled.dfilling[i] * fraction_hessian[i]);
+            projected[i] += weight * surface.gradient[i][first] * surface.gradient[i][second] * hessian;
+            if (first == second)
+            {
+                trace[i] += hessian;
+            }
+        }
+    }
+    surface.surface_derivative.resize(size);
+    const double regularization_square = regularization * regularization;
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        const double norm_square = surface.gradient[i].norm2() + regularization_square;
+        const double norm = std::sqrt(norm_square);
+        surface.surface_derivative[i]
+            = (projected[i] - norm_square * trace[i]) / (norm_square * norm);
+    }
+    ModuleBase::timer::end("ModuleSccs", "solvent_aware_surface");
+    return surface;
+}
+
 std::vector<double> solvent_aware_adjoint(const std::vector<double>& local,
                                           const SolventAwareBoundary& filled,
                                           const std::vector<double>& kernel,

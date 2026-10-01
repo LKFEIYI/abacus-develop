@@ -13,6 +13,22 @@
 
 namespace ModuleSccs
 {
+namespace
+{
+
+void validate_non_electrostatic(const double volume_element,
+                                const NonElectrostaticParameters& parameters)
+{
+    if (!std::isfinite(volume_element) || volume_element <= 0.0
+        || !std::isfinite(parameters.surface_tension) || !std::isfinite(parameters.pressure)
+        || !std::isfinite(parameters.surface_regularization)
+        || parameters.surface_regularization <= 0.0)
+    {
+        throw std::invalid_argument("SCCS PW non-electrostatic parameters must be finite and valid");
+    }
+}
+
+} // namespace
 
 NonElectrostaticResult evaluate_pw_non_electrostatic(
     const ModulePW::PW_Basis& basis,
@@ -27,14 +43,11 @@ NonElectrostaticResult evaluate_pw_non_electrostatic(
     {
         throw std::invalid_argument("SCCS PW non-electrostatic arrays must match the local real-space grid");
     }
-    if (!std::isfinite(tpiba) || tpiba <= 0.0 || !std::isfinite(volume_element)
-        || volume_element <= 0.0 || !std::isfinite(parameters.surface_tension)
-        || !std::isfinite(parameters.pressure)
-        || !std::isfinite(parameters.surface_regularization)
-        || parameters.surface_regularization <= 0.0)
+    if (!std::isfinite(tpiba) || tpiba <= 0.0)
     {
         throw std::invalid_argument("SCCS PW non-electrostatic parameters must be finite and valid");
     }
+    validate_non_electrostatic(volume_element, parameters);
 
     const std::vector<ModuleBase::Vector3<double>> gradient
         = periodic_gradient(solute, basis, tpiba);
@@ -98,6 +111,46 @@ NonElectrostaticResult evaluate_pw_non_electrostatic(
             = parameters.pressure - parameters.surface_tension * divergence[index];
     }
     ModuleBase::timer::end("ModuleSccs", "evaluate_pw_non_electrostatic");
+    return result;
+}
+
+NonElectrostaticResult evaluate_chain_non_electrostatic(
+    const double volume_element,
+    const NonElectrostaticParameters& parameters,
+    const std::vector<double>& solute,
+    const std::vector<ModuleBase::Vector3<double>>& gradient,
+    const std::vector<double>& surface_derivative,
+    const ModuleSurchem::ChargeReduction& reduction)
+{
+    ModuleBase::timer::start("ModuleSccs", "evaluate_chain_non_electrostatic");
+    const std::size_t size = solute.size();
+    if (size == 0 || gradient.size() != size || surface_derivative.size() != size)
+    {
+        throw std::invalid_argument("SCCS non-electrostatic arrays must match the local real-space grid");
+    }
+    validate_non_electrostatic(volume_element, parameters);
+    NonElectrostaticResult result;
+    result.boundary_potential.resize(size);
+    const double regularization_square
+        = parameters.surface_regularization * parameters.surface_regularization;
+    for (std::size_t index = 0; index < size; ++index)
+    {
+        if (!std::isfinite(solute[index]) || !std::isfinite(surface_derivative[index]))
+        {
+            throw std::domain_error("SCCS PW non-electrostatic inputs must be finite");
+        }
+        const double norm_squared = gradient[index].norm2() + regularization_square;
+        const double norm = std::sqrt(norm_squared);
+        result.surface += (norm - parameters.surface_regularization) * volume_element;
+        result.volume += solute[index] * volume_element;
+        result.boundary_potential[index]
+            = parameters.pressure + parameters.surface_tension * surface_derivative[index];
+    }
+    reduction.reduce_sum(result.surface);
+    reduction.reduce_sum(result.volume);
+    result.surface_energy = parameters.surface_tension * result.surface;
+    result.volume_energy = parameters.pressure * result.volume;
+    ModuleBase::timer::end("ModuleSccs", "evaluate_chain_non_electrostatic");
     return result;
 }
 

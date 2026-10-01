@@ -520,6 +520,70 @@ std::vector<double> boundary_to_density_potential(const SccsResponse& response,
     return density_potential;
 }
 
+SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& density,
+                                                     const CavityParameters& cavity,
+                                                     const SccsResponse& response,
+                                                     const std::vector<double>& probe_kernel,
+                                                     const ModulePW::PW_Basis& basis,
+                                                     const double tpiba,
+                                                     const double regularization)
+{
+    ModuleBase::timer::start("ModuleSccs", "solvent_aware_surface_of_density");
+    const std::size_t size = density.size();
+    if (response.local_solute.size() != size)
+    {
+        throw std::invalid_argument("SCCS solvent-aware surface requires the filled boundary");
+    }
+    const std::vector<ModuleBase::Vector3<double>> density_gradient
+        = ModuleSccs::periodic_gradient(density, basis, tpiba);
+    std::vector<std::complex<double>> density_g(basis.npw);
+    basis.real2recip(density.data(), density_g.data());
+    std::vector<double> dsolute(size);
+    std::vector<double> d2solute(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        const CavityPoint point = ModuleSccs::evaluate_cavity(density[i], cavity);
+        dsolute[i] = point.dsolute_drho;
+        d2solute[i] = point.d2solute_drho2;
+    }
+    std::vector<ModuleBase::Vector3<double>> local_gradient(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        local_gradient[i] = density_gradient[i] * dsolute[i];
+    }
+    std::vector<std::vector<double>> local_hessian(hessian_component_count);
+    std::vector<std::complex<double>> hessian_g(basis.npw);
+    const double tpiba_square = tpiba * tpiba;
+    for (int component = 0; component < hessian_component_count; ++component)
+    {
+        int first = 0;
+        int second = 0;
+        hessian_axes(component, first, second);
+        for (int ig = 0; ig < basis.npw; ++ig)
+        {
+            hessian_g[ig] = -tpiba_square * basis.gcar[ig][first] * basis.gcar[ig][second]
+                            * density_g[ig];
+        }
+        std::vector<double>& hessian = local_hessian[component];
+        hessian.resize(size);
+        basis.recip2real(hessian_g.data(), hessian.data());
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            const double outer = density_gradient[i][first] * density_gradient[i][second];
+            hessian[i] = dsolute[i] * hessian[i] + d2solute[i] * outer;
+        }
+    }
+    SolventAwareSurface surface = solvent_aware_surface(response.local_solute,
+                                                        response.filling,
+                                                        probe_kernel,
+                                                        basis,
+                                                        local_gradient,
+                                                        local_hessian,
+                                                        regularization);
+    ModuleBase::timer::end("ModuleSccs", "solvent_aware_surface_of_density");
+    return surface;
+}
+
 SccsResponse solve_sccs_response(
     const std::vector<double>& density,
     const std::vector<double>& charge,

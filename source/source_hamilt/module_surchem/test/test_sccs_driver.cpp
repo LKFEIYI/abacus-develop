@@ -805,14 +805,14 @@ ModuleSccs::SccsConfig filled_cation_config(const double epsilon_bulk)
     return config;
 }
 
-// With eps_bulk = 1 only the surface and volume terms remain. They are exact
-// functions of the discrete filled boundary, so the electronic potential,
-// chained through the probe adjoint, is their exact density derivative.
-TEST(SccsDriver, SolventAwareNonElectrostaticPotentialIsExactDensityDerivative)
+// Breathing-mode derivative of the eps_bulk = 1 (surface and volume only)
+// energy of the filled cation: centered finite difference and the electronic
+// potential projected on the mode.
+void filled_nonel_derivative(const double ecut, double& finite_difference, double& analytic)
 {
     const double scale = 12.0;
     ModulePW::PW_Basis basis("cpu", "double");
-    make_basis(cubic_lattice(), scale, 120.0, basis);
+    make_basis(cubic_lattice(), scale, ecut, basis);
     const double volume_element = scale * scale * scale / static_cast<double>(basis.nxyz);
     const std::vector<ModuleBase::Vector3<double>> positions
         = ModuleSurchem::pw_grid_positions(basis, cubic_lattice(), scale);
@@ -825,40 +825,56 @@ TEST(SccsDriver, SolventAwareNonElectrostaticPotentialIsExactDensityDerivative)
     EXPECT_GT(result.response.filled_volume, 0.5);
     EXPECT_EQ(result.response.local_solute.size(), positions.size());
 
-    // A rigid shift leaves the periodic surface and volume unchanged; the
-    // breathing mode changes both.
     const double step = 1.0e-5;
+    const std::vector<double>& direction = solute.breathing_mode;
+    std::vector<double> plus(direction.size());
+    std::vector<double> minus(direction.size());
+    analytic = 0.0;
+    for (std::size_t ir = 0; ir < direction.size(); ++ir)
     {
-        const std::vector<double>& direction = solute.breathing_mode;
-        std::vector<double> plus(direction.size());
-        std::vector<double> minus(direction.size());
-        double analytic = 0.0;
-        for (std::size_t ir = 0; ir < direction.size(); ++ir)
-        {
-            plus[ir] = solute.electron_density[ir] + step * direction[ir];
-            minus[ir] = solute.electron_density[ir] - step * direction[ir];
-            analytic += result.electron_potential_hartree[ir] * direction[ir] * volume_element;
-        }
-        ModuleSccs::SccsState plus_state;
-        const ModuleSccs::SccsResult plus_result = evaluate_filled_cation(
-            plus, solute, config, basis, positions, cubic_lattice(), scale, plus_state);
-        ModuleSccs::SccsState minus_state;
-        const ModuleSccs::SccsResult minus_result = evaluate_filled_cation(
-            minus, solute, config, basis, positions, cubic_lattice(), scale, minus_state);
-        const double energy_plus = plus_result.non_electrostatic.surface_energy
-                                   + plus_result.non_electrostatic.volume_energy
-                                   + plus_result.electrostatic.reaction_energy;
-        const double energy_minus = minus_result.non_electrostatic.surface_energy
-                                    + minus_result.non_electrostatic.volume_energy
-                                    + minus_result.electrostatic.reaction_energy;
-        const double finite_difference = (energy_plus - energy_minus) / (2.0 * step);
-        std::cout << "SCCS_SA_NONEL breathing finite_difference " << finite_difference
-                  << " analytic " << analytic << " error " << analytic - finite_difference
-                  << std::endl;
-        // Measured 7e-8 relative.
-        EXPECT_GT(std::abs(finite_difference), 1.0e-3);
-        EXPECT_NEAR(analytic, finite_difference, 1.0e-6 * std::abs(finite_difference));
+        plus[ir] = solute.electron_density[ir] + step * direction[ir];
+        minus[ir] = solute.electron_density[ir] - step * direction[ir];
+        analytic += result.electron_potential_hartree[ir] * direction[ir] * volume_element;
     }
+    ModuleSccs::SccsState plus_state;
+    const ModuleSccs::SccsResult plus_result = evaluate_filled_cation(
+        plus, solute, config, basis, positions, cubic_lattice(), scale, plus_state);
+    ModuleSccs::SccsState minus_state;
+    const ModuleSccs::SccsResult minus_result = evaluate_filled_cation(
+        minus, solute, config, basis, positions, cubic_lattice(), scale, minus_state);
+    const double energy_plus = plus_result.non_electrostatic.surface_energy
+                               + plus_result.non_electrostatic.volume_energy
+                               + plus_result.electrostatic.reaction_energy;
+    const double energy_minus = minus_result.non_electrostatic.surface_energy
+                                + minus_result.non_electrostatic.volume_energy
+                                + minus_result.electrostatic.reaction_energy;
+    finite_difference = (energy_plus - energy_minus) / (2.0 * step);
+    std::cout << "SCCS_SA_NONEL ecut " << ecut << " breathing finite_difference "
+              << finite_difference << " analytic " << analytic << " error "
+              << analytic - finite_difference << std::endl;
+}
+
+// With eps_bulk = 1 only the surface and volume terms remain. The periodic
+// filled boundary uses the Environ chain gradient and Hessian, so the surface
+// potential is the continuum derivative -div(g/|g|) chained through the probe
+// adjoint, not the exact derivative of the discrete surface. The filling
+// switches over about one grid spacing here, and the finite difference of the
+// sampled surface oscillates with the grid (egg-box) while the potential is
+// grid-converged: measured potential 0.0056248, 0.0056312, 0.0056300 and
+// finite difference 0.0056407, 0.0055104, 0.0056320 at 120, 240, 480 Ry.
+// The spectral surface of the same s_sa rings and its finite difference does
+// not converge at all (surface derivative 222, 165, 92).
+TEST(SccsDriver, SolventAwareNonElectrostaticPotentialConvergesToTheDensityDerivative)
+{
+    double coarse_difference = 0.0;
+    double coarse_analytic = 0.0;
+    filled_nonel_derivative(120.0, coarse_difference, coarse_analytic);
+    double fine_difference = 0.0;
+    double fine_analytic = 0.0;
+    filled_nonel_derivative(480.0, fine_difference, fine_analytic);
+    EXPECT_GT(std::abs(fine_difference), 1.0e-3);
+    EXPECT_NEAR(coarse_analytic, fine_analytic, 5.0e-3 * std::abs(fine_analytic));
+    EXPECT_NEAR(fine_analytic, fine_difference, 2.0e-3 * std::abs(fine_difference));
 }
 
 // The filling changes the dielectric, so its parameters are part of the

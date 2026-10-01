@@ -255,12 +255,37 @@ SccsResult evaluate_pw_sccs(
     non_electrostatic_parameters.surface_tension = config.surface_tension;
     non_electrostatic_parameters.pressure = config.pressure;
     non_electrostatic_parameters.surface_regularization = config.surface_regularization;
-    result.non_electrostatic = evaluate_pw_non_electrostatic(basis,
-                                                             tpiba,
-                                                             volume_element,
-                                                             non_electrostatic_parameters,
-                                                             result.response.solute,
-                                                             reduction);
+    // The periodic filled boundary has chain derivatives (Environ 'chain' with
+    // need_hessian); its spectral gradient rings where the filling switches
+    // within a grid spacing. PCC differentiates s_sa on the grid throughout.
+    const bool chain_surface = uses_solvent_aware(config.solvent_aware)
+                               && config.boundary == ModulePcc::Boundary::Periodic;
+    if (chain_surface)
+    {
+        const SolventAwareSurface surface
+            = solvent_aware_surface_of_density(cavity_density,
+                                               config.cavity,
+                                               result.response,
+                                               cavity_inputs.probe_kernel,
+                                               basis,
+                                               tpiba,
+                                               config.surface_regularization);
+        result.non_electrostatic = evaluate_chain_non_electrostatic(volume_element,
+                                                                    non_electrostatic_parameters,
+                                                                    result.response.solute,
+                                                                    surface.gradient,
+                                                                    surface.surface_derivative,
+                                                                    reduction);
+    }
+    else
+    {
+        result.non_electrostatic = evaluate_pw_non_electrostatic(basis,
+                                                                 tpiba,
+                                                                 volume_element,
+                                                                 non_electrostatic_parameters,
+                                                                 result.response.solute,
+                                                                 reduction);
+    }
     const std::vector<double> non_electrostatic_potential
         = boundary_to_density_potential(result.response,
                                         cavity_inputs.probe_kernel,
