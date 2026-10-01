@@ -178,17 +178,18 @@ class SqrtPreconditioner
 };
 
 // Environ boundary_of_density with deriv_method 'chain': grad s = s' grad n
-// and lapl s = s' lapl n + s'' |grad n|^2 from the spectral density derivatives.
+// and lapl s = s' lapl n + s'' |grad n|^2 from the spectral density
+// derivatives; density_gradient returns grad n.
 void chain_boundary_derivatives(const std::vector<double>& density,
                                 const CavityParameters& cavity,
                                 const ModulePW::PW_Basis& basis,
                                 const double tpiba,
+                                std::vector<ModuleBase::Vector3<double>>& density_gradient,
                                 std::vector<ModuleBase::Vector3<double>>& gradient,
                                 std::vector<double>& laplacian)
 {
     const std::size_t size = density.size();
-    const std::vector<ModuleBase::Vector3<double>> density_gradient
-        = ModuleSccs::periodic_gradient(density, basis, tpiba);
+    density_gradient = ModuleSccs::periodic_gradient(density, basis, tpiba);
     std::vector<std::complex<double>> density_g(basis.npw);
     basis.real2recip(density.data(), density_g.data());
     for (int ig = 0; ig < basis.npw; ++ig)
@@ -530,12 +531,13 @@ SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& 
 {
     ModuleBase::timer::start("ModuleSccs", "solvent_aware_surface_of_density");
     const std::size_t size = density.size();
-    if (response.local_solute.size() != size)
+    if (response.local_solute.size() != size || response.density_gradient.size() != size
+        || response.fraction_gradient.size() != size)
     {
-        throw std::invalid_argument("SCCS solvent-aware surface requires the filled boundary");
+        throw std::invalid_argument(
+            "SCCS solvent-aware surface requires the periodic filled boundary and its chain gradients");
     }
-    const std::vector<ModuleBase::Vector3<double>> density_gradient
-        = ModuleSccs::periodic_gradient(density, basis, tpiba);
+    const std::vector<ModuleBase::Vector3<double>>& density_gradient = response.density_gradient;
     std::vector<std::complex<double>> density_g(basis.npw);
     basis.real2recip(density.data(), density_g.data());
     std::vector<double> dsolute(size);
@@ -578,6 +580,7 @@ SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& 
                                                         probe_kernel,
                                                         basis,
                                                         local_gradient,
+                                                        response.fraction_gradient,
                                                         local_hessian,
                                                         regularization);
     ModuleBase::timer::end("ModuleSccs", "solvent_aware_surface_of_density");
@@ -612,12 +615,17 @@ SccsResponse solve_sccs_response(
     std::vector<double> solute_laplacian;
     if (!open_boundary)
     {
-        chain_boundary_derivatives(density, cavity, basis, tpiba, solute_gradient,
-                                   solute_laplacian);
+        std::vector<ModuleBase::Vector3<double>> density_gradient;
+        chain_boundary_derivatives(density, cavity, basis, tpiba, density_gradient,
+                                   solute_gradient, solute_laplacian);
         if (filled)
         {
-            solvent_aware_chain_derivatives(result.local_solute, result.filling, probe_kernel,
-                                            basis, solute_gradient, solute_laplacian);
+            // The chain surface needs grad n and grad c again; keep them.
+            result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, solute_gradient);
+            solvent_aware_chain_derivatives(result.local_solute, result.filling,
+                                            result.fraction_gradient, probe_kernel, basis,
+                                            solute_gradient, solute_laplacian);
+            result.density_gradient.swap(density_gradient);
         }
     }
     else

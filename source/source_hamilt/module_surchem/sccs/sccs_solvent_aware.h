@@ -44,6 +44,13 @@ std::vector<double> convolve_probe(const std::vector<double>& kernel,
                                    const ModulePW::PW_Basis& basis,
                                    const std::vector<double>& values);
 
+// Component-wise probe convolution of a vector field; for the local boundary
+// gradient it is grad c = p * grad s of the filled fraction.
+std::vector<ModuleBase::Vector3<double>> convolve_probe_gradient(
+    const std::vector<double>& kernel,
+    const ModulePW::PW_Basis& basis,
+    const std::vector<ModuleBase::Vector3<double>>& gradient);
+
 // Filled boundary s_sa = s + (1 - s) f(p * s), with the filling function
 // f(c) = 1 - erfc((c - filling_threshold)/filling_spread)/2 and its
 // derivatives at the filled fraction c = p * s (Environ solvent_aware_boundary).
@@ -63,10 +70,12 @@ SolventAwareBoundary solvent_aware_boundary(const std::vector<double>& local,
                                             const ModulePW::PW_Basis& basis);
 
 // Environ solvent_aware_boundary with deriv_method 'chain': turn the gradient
-// and Laplacian of the local boundary s into those of s_sa, with
-// grad c = p * grad s and lapl c = p * lapl s.
+// and Laplacian of the local boundary s into those of s_sa, given
+// fraction_gradient = grad c = p * grad s (convolve_probe_gradient of the
+// incoming gradient) and with lapl c = p * lapl s.
 void solvent_aware_chain_derivatives(const std::vector<double>& local,
                                      const SolventAwareBoundary& filled,
+                                     const std::vector<ModuleBase::Vector3<double>>& fraction_gradient,
                                      const std::vector<double>& kernel,
                                      const ModulePW::PW_Basis& basis,
                                      std::vector<ModuleBase::Vector3<double>>& gradient,
@@ -88,8 +97,9 @@ struct SolventAwareSurface
 };
 
 // Environ solvent_aware_boundary with deriv_method 'chain' and need_hessian:
-// from grad s and the components of H s (local_hessian, hessian_axes order),
-// grad c = p * grad s, H c = p * H s and
+// from grad s, fraction_gradient = grad c = p * grad s (as passed to
+// solvent_aware_chain_derivatives) and the components of H s (local_hessian,
+// hessian_axes order), with H c = p * H s and
 // H s_sa = (1 - f) H s - f' (grad s grad c^T + grad c grad s^T)
 //          + (1 - s) (f'' grad c grad c^T + f' H c).
 // Unlike a spectral gradient of s_sa, these stay smooth when the filling
@@ -99,6 +109,7 @@ SolventAwareSurface solvent_aware_surface(const std::vector<double>& local,
                                           const std::vector<double>& kernel,
                                           const ModulePW::PW_Basis& basis,
                                           const std::vector<ModuleBase::Vector3<double>>& local_gradient,
+                                          const std::vector<ModuleBase::Vector3<double>>& fraction_gradient,
                                           const std::vector<std::vector<double>>& local_hessian,
                                           double regularization);
 

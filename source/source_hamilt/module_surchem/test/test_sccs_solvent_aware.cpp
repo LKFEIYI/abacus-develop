@@ -449,7 +449,14 @@ TEST(SccsSolventAware, ChainDerivativesMatchSpectralDerivativesOfTheFilledBounda
     std::vector<ModuleBase::Vector3<double>> gradient
         = ModuleSccs::periodic_gradient(local, basis, tpiba);
     std::vector<double> laplacian = spectral_laplacian(local, basis, tpiba);
-    ModuleSccs::solvent_aware_chain_derivatives(local, filled, kernel, basis, gradient, laplacian);
+    const std::vector<ModuleBase::Vector3<double>> fraction_gradient
+        = ModuleSccs::convolve_probe_gradient(kernel, basis, gradient);
+    const std::vector<ModuleBase::Vector3<double>> short_fraction(basis.nrxx - 1);
+    EXPECT_THROW(ModuleSccs::solvent_aware_chain_derivatives(local, filled, short_fraction, kernel,
+                                                             basis, gradient, laplacian),
+                 std::invalid_argument);
+    ModuleSccs::solvent_aware_chain_derivatives(local, filled, fraction_gradient, kernel, basis,
+                                                gradient, laplacian);
 
     const std::vector<ModuleBase::Vector3<double>> expected_gradient
         = ModuleSccs::periodic_gradient(filled.boundary, basis, tpiba);
@@ -498,9 +505,12 @@ TEST(SccsSolventAware, ChainSurfaceMatchesSpectralSurfaceOfTheFilledBoundary)
         = ModuleSccs::solvent_aware_boundary(local, kernel, parameters, basis);
     const std::vector<ModuleBase::Vector3<double>> local_gradient
         = ModuleSccs::periodic_gradient(local, basis, tpiba);
+    const std::vector<ModuleBase::Vector3<double>> fraction_gradient
+        = ModuleSccs::convolve_probe_gradient(kernel, basis, local_gradient);
     const std::vector<std::vector<double>> local_hessian = spectral_hessian(local, basis, tpiba);
-    const ModuleSccs::SolventAwareSurface surface = ModuleSccs::solvent_aware_surface(
-        local, filled, kernel, basis, local_gradient, local_hessian, regularization);
+    const ModuleSccs::SolventAwareSurface surface
+        = ModuleSccs::solvent_aware_surface(local, filled, kernel, basis, local_gradient,
+                                            fraction_gradient, local_hessian, regularization);
 
     const std::vector<ModuleBase::Vector3<double>> expected_gradient
         = ModuleSccs::periodic_gradient(filled.boundary, basis, tpiba);

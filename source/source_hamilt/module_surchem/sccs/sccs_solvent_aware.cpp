@@ -34,29 +34,6 @@ double folded_fraction(const int index, const int count)
     return fraction;
 }
 
-std::vector<ModuleBase::Vector3<double>> convolve_field(
-    const std::vector<double>& kernel,
-    const ModulePW::PW_Basis& basis,
-    const std::vector<ModuleBase::Vector3<double>>& field)
-{
-    const std::size_t size = field.size();
-    std::vector<double> component(size);
-    std::vector<ModuleBase::Vector3<double>> result(size);
-    for (int d = 0; d < 3; ++d)
-    {
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            component[i] = field[i][d];
-        }
-        const std::vector<double> convolved = convolve_probe(kernel, basis, component);
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            result[i][d] = convolved[i];
-        }
-    }
-    return result;
-}
-
 } // namespace
 
 std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
@@ -168,6 +145,29 @@ std::vector<double> convolve_probe(const std::vector<double>& kernel,
     return result;
 }
 
+std::vector<ModuleBase::Vector3<double>> convolve_probe_gradient(
+    const std::vector<double>& kernel,
+    const ModulePW::PW_Basis& basis,
+    const std::vector<ModuleBase::Vector3<double>>& gradient)
+{
+    const std::size_t size = gradient.size();
+    std::vector<double> component(size);
+    std::vector<ModuleBase::Vector3<double>> result(size);
+    for (int d = 0; d < 3; ++d)
+    {
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            component[i] = gradient[i][d];
+        }
+        const std::vector<double> convolved = convolve_probe(kernel, basis, component);
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            result[i][d] = convolved[i];
+        }
+    }
+    return result;
+}
+
 SolventAwareBoundary solvent_aware_boundary(const std::vector<double>& local,
                                             const std::vector<double>& kernel,
                                             const SolventAwareParameters& parameters,
@@ -203,18 +203,18 @@ SolventAwareBoundary solvent_aware_boundary(const std::vector<double>& local,
 
 void solvent_aware_chain_derivatives(const std::vector<double>& local,
                                      const SolventAwareBoundary& filled,
+                                     const std::vector<ModuleBase::Vector3<double>>& fraction_gradient,
                                      const std::vector<double>& kernel,
                                      const ModulePW::PW_Basis& basis,
                                      std::vector<ModuleBase::Vector3<double>>& gradient,
                                      std::vector<double>& laplacian)
 {
     const std::size_t size = local.size();
-    if (gradient.size() != size || laplacian.size() != size || filled.boundary.size() != size)
+    if (gradient.size() != size || laplacian.size() != size || filled.boundary.size() != size
+        || fraction_gradient.size() != size)
     {
         throw std::invalid_argument("SCCS solvent-aware derivative arrays must match the grid");
     }
-    const std::vector<ModuleBase::Vector3<double>> fraction_gradient
-        = convolve_field(kernel, basis, gradient);
     const std::vector<double> fraction_laplacian = convolve_probe(kernel, basis, laplacian);
     for (std::size_t i = 0; i < size; ++i)
     {
@@ -246,18 +246,18 @@ SolventAwareSurface solvent_aware_surface(const std::vector<double>& local,
                                           const std::vector<double>& kernel,
                                           const ModulePW::PW_Basis& basis,
                                           const std::vector<ModuleBase::Vector3<double>>& local_gradient,
+                                          const std::vector<ModuleBase::Vector3<double>>& fraction_gradient,
                                           const std::vector<std::vector<double>>& local_hessian,
                                           const double regularization)
 {
     ModuleBase::timer::start("ModuleSccs", "solvent_aware_surface");
     const std::size_t size = local.size();
-    if (local_gradient.size() != size || filled.boundary.size() != size
+    if (local_gradient.size() != size || fraction_gradient.size() != size
+        || filled.boundary.size() != size
         || local_hessian.size() != static_cast<std::size_t>(hessian_component_count))
     {
         throw std::invalid_argument("SCCS solvent-aware surface arrays must match the grid");
     }
-    const std::vector<ModuleBase::Vector3<double>> fraction_gradient
-        = convolve_field(kernel, basis, local_gradient);
     SolventAwareSurface surface;
     surface.gradient.resize(size);
     for (std::size_t i = 0; i < size; ++i)
