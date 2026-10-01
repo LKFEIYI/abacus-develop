@@ -714,6 +714,68 @@ TEST(HCorrSccs, AppliesChargedPcc2dEnergyAndPotential)
     }
 }
 
+// out_sol reads the fields of the last correction: none before the delayed
+// start, epsilon and the boundary once SCCS runs, and the local boundary and
+// the probe filled fraction with the solvent-aware cavity.
+TEST(HCorrSccs, SolventOutputFieldsFollowTheLastCorrection)
+{
+    ModulePW::PW_Basis basis("cpu", "double");
+    UnitCell cell;
+    setup_single_ion_cell(basis, cell);
+    const double volume_element = cell.omega / static_cast<double>(basis.nxyz);
+    std::vector<double> electron_density(basis.nrxx);
+    double electron_count = 0.0;
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        const int ix = ir / (basis.ny * basis.nplane);
+        const int iy = ir / basis.nplane - ix * basis.ny;
+        const int iz = ir % basis.nplane + basis.startz_current;
+        const double dx = cell.lat0 * (static_cast<double>(ix) / basis.nx - 0.5);
+        const double dy = cell.lat0 * (static_cast<double>(iy) / basis.ny - 0.5);
+        const double dz = cell.lat0 * (static_cast<double>(iz) / basis.nz - 0.5);
+        const double r2 = dx * dx + dy * dy + dz * dz;
+        electron_density[ir] = 0.3 * std::exp(-r2 / 2.0);
+        electron_count += electron_density[ir] * volume_element;
+    }
+    const double* density_channels[1] = {electron_density.data()};
+    std::vector<double> local_potential(basis.nrxx, 0.0);
+    ModuleBase::matrix potential;
+
+    SurchemParameters parameters = periodic_sccs_parameters();
+    parameters.expected_electron_count = electron_count;
+    parameters.start_drho = 1.0e-2;
+    surchem delayed;
+    delayed.set_parameters(parameters);
+    EXPECT_TRUE(delayed.solvent_output_fields().empty());
+
+    parameters.start_drho = 0.0;
+    surchem local;
+    local.set_parameters(parameters);
+    local.v_correction_sccs(cell, basis, 1, density_channels, local_potential.data(), potential);
+    const std::vector<SolventGridField> local_fields = local.solvent_output_fields();
+    ASSERT_EQ(local_fields.size(), 2u);
+    EXPECT_EQ(local_fields[0].name, "eps");
+    EXPECT_EQ(local_fields[1].name, "cavity");
+    EXPECT_EQ(local_fields[0].values, local.sccs_result().response.epsilon);
+    EXPECT_EQ(local_fields[1].values, local.sccs_result().response.solute);
+
+    parameters.sccs_config.solvent_aware.solvent_radius = 1.0;
+    parameters.sccs_config.solvent_aware.filling_threshold = 0.45;
+    parameters.sccs_config.solvent_aware.filling_spread = 0.1;
+    surchem filled;
+    filled.set_parameters(parameters);
+    filled.v_correction_sccs(cell, basis, 1, density_channels, local_potential.data(), potential);
+    const ModuleSccs::SccsResponse& response = filled.sccs_result().response;
+    const std::vector<SolventGridField> filled_fields = filled.solvent_output_fields();
+    ASSERT_EQ(filled_fields.size(), 4u);
+    EXPECT_EQ(filled_fields[2].name, "cavity_local");
+    EXPECT_EQ(filled_fields[3].name, "filled_fraction");
+    EXPECT_EQ(filled_fields[1].values, response.solute);
+    EXPECT_EQ(filled_fields[2].values, response.local_solute);
+    EXPECT_EQ(filled_fields[3].values, response.filling.fraction);
+    EXPECT_GT(response.filled_volume, 0.0);
+}
+
 } // namespace
 
 int main(int argc, char** argv)

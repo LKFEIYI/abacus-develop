@@ -49,6 +49,7 @@ void surchem::set_parameters(const SurchemParameters& parameters)
     this->sccs_result_ = ModuleSccs::SccsResult();
     this->pcc_result_valid_ = false;
     this->electrostatic_correction_ry_.clear();
+    this->legacy_epsilon_.clear();
 }
 
 bool surchem::uses_sccs() const
@@ -102,6 +103,63 @@ bool surchem::try_activate_sccs(const int electronic_iteration, const double drh
 const std::vector<double>& surchem::electrostatic_correction() const
 {
     return this->electrostatic_correction_ry_;
+}
+
+std::vector<SolventGridField> surchem::solvent_output_fields() const
+{
+    std::vector<SolventGridField> fields;
+    if (this->parameters_set_ && this->parameters_.use_legacy_solvent)
+    {
+        if (this->legacy_epsilon_.empty())
+        {
+            return fields;
+        }
+        SolventGridField epsilon;
+        epsilon.name = "eps";
+        epsilon.values = this->legacy_epsilon_;
+        fields.push_back(epsilon);
+        // epsilon = 1 + (eb_k - 1) S with the solvent shape function S, so
+        // s = 1 - S follows from epsilon; without a dielectric s is undefined.
+        const double contrast = this->parameters_.eb_k - 1.0;
+        if (contrast > 0.0)
+        {
+            SolventGridField cavity;
+            cavity.name = "cavity";
+            cavity.values.resize(epsilon.values.size());
+            for (std::size_t ir = 0; ir < epsilon.values.size(); ++ir)
+            {
+                const double shape = (epsilon.values[ir] - 1.0) / contrast;
+                cavity.values[ir] = 1.0 - shape;
+            }
+            fields.push_back(cavity);
+        }
+        return fields;
+    }
+    if (!this->sccs_is_active() || this->sccs_result_.response.epsilon.empty())
+    {
+        return fields;
+    }
+    const ModuleSccs::SccsResponse& response = this->sccs_result_.response;
+    SolventGridField epsilon;
+    epsilon.name = "eps";
+    epsilon.values = response.epsilon;
+    fields.push_back(epsilon);
+    SolventGridField cavity;
+    cavity.name = "cavity";
+    cavity.values = response.solute;
+    fields.push_back(cavity);
+    if (!response.local_solute.empty())
+    {
+        SolventGridField local;
+        local.name = "cavity_local";
+        local.values = response.local_solute;
+        fields.push_back(local);
+        SolventGridField fraction;
+        fraction.name = "filled_fraction";
+        fraction.values = response.filling.fraction;
+        fields.push_back(fraction);
+    }
+    return fields;
 }
 
 const ModuleSccs::SccsResult& surchem::sccs_result() const
@@ -398,6 +456,7 @@ void surchem::clear()
     this->sccs_result_ = ModuleSccs::SccsResult();
     this->fixed_source_cache_ = FixedSourceCache();
     this->electrostatic_correction_ry_.clear();
+    this->legacy_epsilon_.clear();
 }
 
 surchem::~surchem()

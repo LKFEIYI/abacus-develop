@@ -41,6 +41,7 @@ class cal_vel_test : public testing::Test
         parameters.tau = 1.0798e-05;
         parameters.sigma_k = 0.6;
         parameters.nc_k = 0.00037;
+        parameters.use_legacy_solvent = true;
         solvent_model.set_parameters(parameters);
     }
 };
@@ -234,6 +235,24 @@ TEST_F(cal_vel_test, cal_vel)
 
     EXPECT_NEAR(v_res(0, 0), 0.0532168705, 1e-10);
     EXPECT_NEAR(v_res(0, 1), 0.0447818244, 1e-10);
+
+    // out_sol: the dielectric function of this correction and s = 1 - S.
+    std::vector<double> ps_totn_real(nrxx);
+    pwtest.recip2real(PS_TOTN, ps_totn_real.data());
+    std::vector<double> epsilon(nrxx);
+    std::vector<double> epsilon0(nrxx);
+    solvent_model.cal_epsilon(&pwtest, ps_totn_real.data(), epsilon.data(), epsilon0.data());
+    const std::vector<SolventGridField> fields = solvent_model.solvent_output_fields();
+    ASSERT_EQ(fields.size(), 2u);
+    EXPECT_EQ(fields[0].name, "eps");
+    EXPECT_EQ(fields[1].name, "cavity");
+    ASSERT_EQ(fields[0].values.size(), static_cast<std::size_t>(nrxx));
+    for (int ir = 0; ir < nrxx; ++ir)
+    {
+        EXPECT_EQ(fields[0].values[ir], epsilon[ir]);
+        const double shape = (epsilon[ir] - 1.0) / 79.0;
+        EXPECT_NEAR(fields[1].values[ir], 1.0 - shape, 1.0e-14);
+    }
 
     delete[] PS_TOTN;
     delete[] TOTN;

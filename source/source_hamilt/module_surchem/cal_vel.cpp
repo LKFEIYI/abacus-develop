@@ -95,6 +95,8 @@ void surchem::cal_vel(const UnitCell& cell,
     double *epsilon = new double[rho_basis->nrxx];
     double *epsilon0 = new double[rho_basis->nrxx];
     cal_epsilon(rho_basis, PS_TOTN_real, epsilon, epsilon0);
+    double* epsilon_end = epsilon + rho_basis->nrxx;
+    this->legacy_epsilon_.assign(epsilon, epsilon_end);
 
     std::complex<double> *Sol_phi = new std::complex<double>[rho_basis->npw];
     std::complex<double> *Sol_phi0 = new std::complex<double>[rho_basis->npw];

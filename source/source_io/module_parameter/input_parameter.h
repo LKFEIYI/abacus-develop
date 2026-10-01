@@ -439,6 +439,7 @@ struct Input_para
     std::vector<int> out_chg = {0, 3};        ///< output charge density. 0: no; 1: yes
     std::vector<int> out_xc_r = {-1, 3};      ///< output xc(r). -1: no; >=0: output the order of xc(r)
     std::vector<int> out_pot = {0, 8};        ///< output potential
+    std::vector<int> out_sol = {0, 8};        ///< output the solvent dielectric function and cavity
     int out_wfc_pw = 0;                       ///< 0: no; 1: txt; 2: dat
     std::vector<int> out_band = {0, 8};       ///< band calculation pengfei 2014-10-13
     int out_dos = 0;                          ///< dos calculation. mohan add 20090909

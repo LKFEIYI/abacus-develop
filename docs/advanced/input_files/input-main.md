@@ -160,6 +160,7 @@
     - [out\_freq\_elec](#out_freq_elec)
     - [out\_chg](#out_chg)
     - [out\_pot](#out_pot)
+    - [out\_sol](#out_sol)
     - [out\_dmk](#out_dmk)
     - [out\_dmr](#out_dmr)
     - [out\_wfc\_pw](#out_wfc_pw)
@@ -1996,6 +1997,19 @@
   In molecular dynamics calculations, the output frequency is controlled by out_freq_ion.
 
   > Note: In the 3.10-LTS version, the file names are SPIN1_POT.cube and SPIN1_POT_INI.cube, etc.
+- **Default**: 0
+
+### out_sol
+
+- **Type**: Integer \[Integer\](optional)
+- **Description**: - 0: No output.
+  - 1: Output the implicit-solvent fields of the last solvent correction on real space grids into files in the folder OUT.{suffix}, for imp_sol 1 (the legacy model) and imp_sol 2 (SCCS):
+   - `sol_eps.cube`: the dielectric function epsilon(r), 1 in the solute and the bulk permittivity in the solvent. An isosurface such as epsilon = 15 shows where the continuum is.
+   - `sol_cavity.cube`: the solute boundary s(r), 1 in the solute and 0 in the solvent; for imp_sol 1 it is 1 minus the solvent shape function (written only when eb_k &gt; 1).
+   - With the SCCS solvent-aware cavity (sccs_solvent_radius &gt; 0), `sol_cavity.cube` holds the filled boundary, and two more files are written: `sol_cavity_local.cube`, the boundary before the filling, and `sol_filled_fraction.cube`, the fraction of the probe sphere around each point that is filled with solute, which the filling compares with sccs_filling_threshold.
+   With out_freq_ion &gt; 0 the files are written every out_freq_ion ionic steps with the geometry index in the name, e.g. `sol_epsg1.cube`; with out_freq_ion = 0 they are overwritten at every step. Nothing is written while SCCS waits for its delayed start (sccs_start_drho) or with PCC alone.
+
+  The optional second integer controls the output precision. If not provided, the default precision is 8.
 - **Default**: 0
 
 ### out_dmk

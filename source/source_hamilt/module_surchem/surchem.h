@@ -9,6 +9,7 @@
 #include "sccs/sccs_driver.h"
 
 #include <iosfwd>
+#include <string>
 #include <vector>
 
 // forward-declared: used below only as pointer/reference
@@ -24,6 +25,13 @@ class Structure_Factor;
  * copy that could silently drift out of sync with input_parameter.h. Callers that
  * need specific values (unit tests included) must state them explicitly.
  */
+// One real-space field of the last solvent correction on the local grid.
+struct SolventGridField
+{
+    std::string name;
+    std::vector<double> values;
+};
+
 struct SurchemParameters
 {
     double eb_k = 0.0;    ///< relative permittivity of the bulk solvent
@@ -94,6 +102,14 @@ class surchem
     // local grid: the PCC open-boundary term plus the SCCS reaction potential,
     // without the cavity derivatives. Empty before the first SCCS/PCC update.
     const std::vector<double>& electrostatic_correction() const;
+
+    // Fields of the last solvent correction for out_sol, on the local grid:
+    // "eps" (dielectric function) and "cavity" (solute boundary s, 1 in the
+    // solute), plus "cavity_local" (s before filling) and "filled_fraction"
+    // (probe filled fraction) for the solvent-aware SCCS cavity. Empty before
+    // the first correction, while SCCS waits for its delayed start, and for
+    // PCC alone.
+    std::vector<SolventGridField> solvent_output_fields() const;
 
     void cal_epsilon(const ModulePW::PW_Basis* rho_basis, const double* PS_TOTN_real, double* epsilon, double* epsilon0);
 
@@ -273,6 +289,8 @@ class surchem
     ModulePcc::Pcc2dMoments pcc_2d_moments_;
     double pcc_energy_rydberg_ = 0.0;
     std::vector<double> electrostatic_correction_ry_;
+    // Dielectric function of the last legacy (imp_sol 1) correction.
+    std::vector<double> legacy_epsilon_;
     bool pcc_result_valid_ = false;
 };
 

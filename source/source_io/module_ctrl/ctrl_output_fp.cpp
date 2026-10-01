@@ -6,6 +6,7 @@
 #include "source_estate/write_elecstat_pot.h" // use write_elecstat_pot
 #include "source_io/module_elf/write_elf.h"
 #include "source_io/module_parameter/input_parameter.h" // use Input_para
+#include "source_base/tool_quit.h" // use WARNING_QUIT
 
 #ifdef __LIBXC
 #include "source_io/module_chgpot/write_libxc_r.h"
@@ -162,6 +163,33 @@ void ctrl_output_fp(UnitCell& ucell,
             pelec->pot->get_fixed_v(),
             solvent,
             inp.out_pot[1]);
+    }
+
+    // 5b) write the implicit-solvent dielectric function and cavity
+    if (inp.out_sol[0] == 1 && should_output)
+    {
+        const std::vector<SolventGridField> fields = solvent.solvent_output_fields();
+        for (const SolventGridField& field: fields)
+        {
+            if (field.values.size() != static_cast<std::size_t>(pw_rhod->nrxx))
+            {
+                ModuleBase::WARNING_QUIT("ModuleIO::ctrl_output_fp",
+                                         "the solvent fields are not on the output grid");
+            }
+            const std::string fn = global_out_dir + "sol_" + field.name + geom_block + ".cube";
+            ModuleIO::write_vdata_palgrid(para_grid,
+                                          field.values.data(),
+                                          -1, // no spin channel
+                                          nspin,
+                                          istep,
+                                          fn,
+                                          0.0, // efermi
+                                          &(ucell),
+                                          inp.out_sol[1], // precision
+                                          0, // out_fermi
+                                          false, // two_fermi, unused without out_fermi
+                                          false);
+        }
     }
 
     // 6) write ELF

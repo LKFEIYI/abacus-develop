@@ -167,6 +167,58 @@ In molecular dynamics calculations, the output frequency is controlled by out_fr
         this->add_item(item);
     }
     {
+        Input_Item item("out_sol");
+        item.annotation = "output the solvent dielectric function and cavity (with precision 8)";
+        item.category = "Output information";
+        item.type = R"(Integer \[Integer\](optional))";
+        item.description = R"(* 0: No output.
+* 1: Output the implicit-solvent fields of the last solvent correction on real space grids into files in the folder OUT.{suffix}, for imp_sol 1 (the legacy model) and imp_sol 2 (SCCS):
+ * `sol_eps.cube`: the dielectric function epsilon(r), 1 in the solute and the bulk permittivity in the solvent. An isosurface such as epsilon = 15 shows where the continuum is.
+ * `sol_cavity.cube`: the solute boundary s(r), 1 in the solute and 0 in the solvent; for imp_sol 1 it is 1 minus the solvent shape function (written only when eb_k > 1).
+ * With the SCCS solvent-aware cavity (sccs_solvent_radius > 0), `sol_cavity.cube` holds the filled boundary, and two more files are written: `sol_cavity_local.cube`, the boundary before the filling, and `sol_filled_fraction.cube`, the fraction of the probe sphere around each point that is filled with solute, which the filling compares with sccs_filling_threshold.
+ With out_freq_ion > 0 the files are written every out_freq_ion ionic steps with the geometry index in the name, e.g. `sol_epsg1.cube`; with out_freq_ion = 0 they are overwritten at every step. Nothing is written while SCCS waits for its delayed start (sccs_start_drho) or with PCC alone.
+
+The optional second integer controls the output precision. If not provided, the default precision is 8.)";
+        item.default_value = "0";
+        item.unit = "";
+        item.read_value = [](const Input_Item& item, Parameter& para) {
+            const size_t count = item.get_size();
+            if (count < 1)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_sol needs at least 1 value");
+            }
+            para.input.out_sol[1] = 8;
+            try
+            {
+                para.input.out_sol[0] = std::stoi(item.str_values[0]);
+                if (count >= 2)
+                {
+                    para.input.out_sol[1] = std::stoi(item.str_values[1]);
+                }
+            }
+            catch (const std::exception&)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_sol takes integers");
+            }
+        };
+        item.check_value = [](const Input_Item& item, const Parameter& para) {
+            if (para.input.out_sol[0] != 0 && para.input.out_sol[0] != 1)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_sol must be 0 or 1");
+            }
+            if (para.input.out_sol[0] == 1 && para.input.imp_sol == 0)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_sol 1 requires imp_sol 1 or 2");
+            }
+            if (para.input.out_sol[1] <= 0)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "out_sol precision must be positive");
+            }
+        };
+        sync_intvec(input.out_sol, 2, 0);
+        this->add_item(item);
+    }
+    {
         Input_Item item("out_dmk");
         item.annotation = ">0 output density matrix DM(k) for each k-point";
         item.category = "Output information";

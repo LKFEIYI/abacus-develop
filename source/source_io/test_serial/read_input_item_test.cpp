@@ -771,6 +771,32 @@ TEST_F(InputTest, Item_test)
         EXPECT_EQ(param.input.out_pot[0], 1);
         EXPECT_EQ(param.input.out_pot[1], 2);
     }
+    { // out_sol
+        auto it = find_label("out_sol", readinput.input_lists);
+        it->second.str_values = {"1"};
+        it->second.read_value(it->second, param);
+        EXPECT_EQ(param.input.out_sol[0], 1);
+        EXPECT_EQ(param.input.out_sol[1], 8);
+        it->second.str_values = {"1", "5"};
+        it->second.read_value(it->second, param);
+        EXPECT_EQ(param.input.out_sol[1], 5);
+
+        param.input.imp_sol = 2;
+        it->second.check_value(it->second, param);
+        param.input.imp_sol = 0;
+        testing::internal::CaptureStdout();
+        EXPECT_EXIT(it->second.check_value(it->second, param), ::testing::ExitedWithCode(1), "");
+        output = testing::internal::GetCapturedStdout();
+        EXPECT_THAT(output, testing::HasSubstr("NOTICE"));
+        param.input.imp_sol = 1;
+        param.input.out_sol[0] = 2;
+        testing::internal::CaptureStdout();
+        EXPECT_EXIT(it->second.check_value(it->second, param), ::testing::ExitedWithCode(1), "");
+        output = testing::internal::GetCapturedStdout();
+        EXPECT_THAT(output, testing::HasSubstr("NOTICE"));
+        param.input.out_sol[0] = 0;
+        param.input.imp_sol = 0;
+    }
     { // out_dos
         auto it = find_label("out_dos", readinput.input_lists);
         param.input.calculation = "get_wf";

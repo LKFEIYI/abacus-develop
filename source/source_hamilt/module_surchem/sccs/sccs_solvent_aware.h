@@ -49,6 +49,8 @@ std::vector<double> convolve_probe(const std::vector<double>& kernel,
 // derivatives at the filled fraction c = p * s (Environ solvent_aware_boundary).
 struct SolventAwareBoundary
 {
+    // Filled fraction c = p * s (the f of Andreussi et al. 2019).
+    std::vector<double> fraction;
     std::vector<double> filling;
     std::vector<double> dfilling;
     std::vector<double> d2filling;
