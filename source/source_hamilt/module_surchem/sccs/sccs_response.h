@@ -44,7 +44,9 @@ struct SccsResponse
     // Derivative of the reaction energy with respect to the boundary s, in
     // Ha. With the switching lowpass (PCC only) it is the exact derivative of
     // the discrete sqrt-CG energy; otherwise it is the continuum
-    // L eps |grad v|^2/(8 pi) of Environ, L = ln(eps_bulk).
+    // L eps |grad v|^2/(8 pi) of Environ, L = ln(eps_bulk). Empty with the
+    // lowpass and the solvent-aware filling: that exact derivative is taken
+    // with respect to the local boundary and enters cavity_potential directly.
     std::vector<double> boundary_potential;
     // The same derivative with respect to the cavity density.
     std::vector<double> cavity_potential;

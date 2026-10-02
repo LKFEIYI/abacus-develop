@@ -61,6 +61,8 @@ struct SolventAwareBoundary
     std::vector<double> filling;
     std::vector<double> dfilling;
     std::vector<double> d2filling;
+    // Third derivative, for the exact lowpass cavity derivative with PCC.
+    std::vector<double> d3filling;
     std::vector<double> boundary;
 };
 

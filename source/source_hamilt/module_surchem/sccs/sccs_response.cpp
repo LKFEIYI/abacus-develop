@@ -418,6 +418,118 @@ void switching_boundary_potential(const std::vector<double>& charge,
     }
 }
 
+// PCC dielectric derivatives of the filled boundary: the (filtered) FFT
+// derivatives a = grad s and m = lapl s of the local boundary, as for the PCC
+// boundary without filling, and the analytic filling of
+// solvent_aware_chain_derivatives with w = grad c = p * a. A spectral gradient
+// of s_sa itself would ring where the filling switches within a grid spacing.
+struct FilledSwitchingDerivatives
+{
+    std::vector<ModuleBase::Vector3<double>> local_gradient;
+    std::vector<double> local_laplacian;
+    std::vector<ModuleBase::Vector3<double>> fraction_gradient;
+};
+
+void filled_switching_derivatives(const SccsResponse& result,
+                                  const CavityParameters& cavity,
+                                  const std::vector<double>& probe_kernel,
+                                  const ModulePW::PW_Basis& basis,
+                                  const double tpiba,
+                                  FilledSwitchingDerivatives& local,
+                                  std::vector<ModuleBase::Vector3<double>>& gradient,
+                                  std::vector<double>& laplacian)
+{
+    switching_boundary_derivatives(result.local_solute, cavity, basis, tpiba,
+                                   local.local_gradient, local.local_laplacian);
+    local.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, local.local_gradient);
+    gradient = local.local_gradient;
+    laplacian = local.local_laplacian;
+    solvent_aware_chain_derivatives(result.local_solute, result.filling, local.fraction_gradient,
+                                    probe_kernel, basis, gradient, laplacian);
+}
+
+// Exact derivative of the discrete reaction energy with respect to the local
+// boundary s for the lowpass factsqrt of the filled boundary. As in
+// switching_boundary_potential, with b = eps v^2/(8 pi),
+// dE = sum [L/2 q v ds_sa + L/2 b dlapl - L^2/2 b g.dgrad], where g and lapl
+// are the filled gradient and Laplacian of filled_switching_derivatives:
+// g = (1 - f) a + (1 - s) f' w and
+// lapl = (1 - f) m - 2 f' a.w + (1 - s) (f'' |w|^2 + f' k), k = p * m.
+// Collecting ds, dc = p ds, D ds, p D ds, lapl ds and p lapl ds gives
+// dE/ds = R + p Z - div(Y + p X) + lapl(M + p N) with the filtered div and
+// lapl (D^T = -div) and the probe convolution p symmetric. Without filling it
+// reduces to switching_boundary_potential.
+std::vector<double> filled_switching_local_potential(const std::vector<double>& charge,
+                                                     const std::vector<double>& potential,
+                                                     const std::vector<ModuleBase::Vector3<double>>& gradient,
+                                                     const FilledSwitchingDerivatives& local,
+                                                     const CavityParameters& cavity,
+                                                     const std::vector<double>& probe_kernel,
+                                                     const ModulePW::PW_Basis& basis,
+                                                     const double tpiba,
+                                                     const SccsResponse& result)
+{
+    const std::size_t size = charge.size();
+    const double log_bulk = std::log(cavity.epsilon_bulk);
+    const std::vector<double> fraction_laplacian
+        = convolve_probe(probe_kernel, basis, local.local_laplacian);
+    const SolventAwareBoundary& filling = result.filling;
+    std::vector<double> pointwise(size);
+    std::vector<double> fraction_weight(size);
+    std::vector<ModuleBase::Vector3<double>> gradient_weight(size);
+    std::vector<ModuleBase::Vector3<double>> fraction_gradient_weight(size);
+    std::vector<double> laplacian_weight(size);
+    std::vector<double> fraction_laplacian_weight(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        const double weight = result.epsilon[i] * potential[i] * potential[i] / (8.0 * ModuleBase::PI);
+        const double boundary_weight = 0.5 * log_bulk * charge[i] * potential[i];
+        const double laplacian_term = 0.5 * log_bulk * weight;
+        const ModuleBase::Vector3<double> gradient_term
+            = gradient[i] * (-0.5 * log_bulk * log_bulk * weight);
+        const double empty = 1.0 - filling.filling[i];
+        const double solvent = 1.0 - result.local_solute[i];
+        const double df = filling.dfilling[i];
+        const double d2f = filling.d2filling[i];
+        const double d3f = filling.d3filling[i];
+        const ModuleBase::Vector3<double>& a = local.local_gradient[i];
+        const ModuleBase::Vector3<double>& w = local.fraction_gradient[i];
+        const double a_dot_w = a * w;
+        const double w_square = w.norm2();
+        pointwise[i] = boundary_weight * empty - df * (gradient_term * w)
+                       - laplacian_term * (d2f * w_square + df * fraction_laplacian[i]);
+        fraction_weight[i] = boundary_weight * solvent * df - df * (gradient_term * a)
+                             + solvent * d2f * (gradient_term * w)
+                             - laplacian_term * (df * local.local_laplacian[i] + 2.0 * d2f * a_dot_w)
+                             + laplacian_term * solvent * (d3f * w_square + d2f * fraction_laplacian[i]);
+        gradient_weight[i] = gradient_term * empty - w * (2.0 * laplacian_term * df);
+        fraction_gradient_weight[i] = gradient_term * (solvent * df) - a * (2.0 * laplacian_term * df)
+                                      + w * (2.0 * laplacian_term * solvent * d2f);
+        laplacian_weight[i] = laplacian_term * empty;
+        fraction_laplacian_weight[i] = laplacian_term * solvent * df;
+    }
+    const std::vector<double> convolved_fraction = convolve_probe(probe_kernel, basis, fraction_weight);
+    const std::vector<ModuleBase::Vector3<double>> convolved_gradient
+        = convolve_probe_gradient(probe_kernel, basis, fraction_gradient_weight);
+    const std::vector<double> convolved_laplacian
+        = convolve_probe(probe_kernel, basis, fraction_laplacian_weight);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        gradient_weight[i] = gradient_weight[i] + convolved_gradient[i];
+        laplacian_weight[i] += convolved_laplacian[i];
+    }
+    std::vector<double> divergence;
+    switching_divergence(gradient_weight, cavity, basis, tpiba, divergence);
+    std::vector<double> laplacian;
+    switching_laplacian(laplacian_weight, cavity, basis, tpiba, laplacian);
+    std::vector<double> local_potential(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        local_potential[i] = pointwise[i] + convolved_fraction[i] - divergence[i] + laplacian[i];
+    }
+    return local_potential;
+}
+
 // Check the preconditioned equation v = P(q - K v) independently of the CG
 // recurrences; this costs one extra Poisson solve.
 void check_fixed_point(const std::vector<double>& charge,
@@ -613,6 +725,7 @@ SccsResponse solve_sccs_response(
     const bool open_boundary = coulomb.has_boundary_correction();
     std::vector<ModuleBase::Vector3<double>> solute_gradient;
     std::vector<double> solute_laplacian;
+    FilledSwitchingDerivatives filled_derivatives;
     if (!open_boundary)
     {
         std::vector<ModuleBase::Vector3<double>> density_gradient;
@@ -628,20 +741,21 @@ SccsResponse solve_sccs_response(
             result.density_gradient.swap(density_gradient);
         }
     }
-    else
+    else if (!filled)
     {
         switching_boundary_derivatives(result.solute, cavity, basis, tpiba, solute_gradient,
                                        solute_laplacian);
-        if (filled)
-        {
-            // The dielectric uses the FFT derivatives above; the filled
-            // surface still takes the chain gradients.
-            std::vector<ModuleBase::Vector3<double>> local_gradient;
-            std::vector<double> local_laplacian;
-            chain_boundary_derivatives(density, cavity, basis, tpiba, result.density_gradient,
-                                       local_gradient, local_laplacian);
-            result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, local_gradient);
-        }
+    }
+    else
+    {
+        filled_switching_derivatives(result, cavity, probe_kernel, basis, tpiba,
+                                     filled_derivatives, solute_gradient, solute_laplacian);
+        // The filled surface takes the chain gradients of the periodic path.
+        std::vector<ModuleBase::Vector3<double>> local_gradient;
+        std::vector<double> local_laplacian;
+        chain_boundary_derivatives(density, cavity, basis, tpiba, result.density_gradient,
+                                   local_gradient, local_laplacian);
+        result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, local_gradient);
     }
     std::vector<double> coefficient;
     dielectric_of_boundary(cavity, solute_gradient, solute_laplacian, result, coefficient);
@@ -739,17 +853,34 @@ SccsResponse solve_sccs_response(
         finish_open_boundary_response(charge, coefficient, invsqrt, cavity, basis, reduction,
                                       result);
     }
-    if (uses_switching_lowpass(cavity))
+    if (uses_switching_lowpass(cavity) && filled)
     {
-        switching_boundary_potential(charge, potential, solute_gradient, cavity, basis, tpiba,
-                                     result);
+        // The exact derivative is taken with respect to the local boundary.
+        const std::vector<double> local_potential
+            = filled_switching_local_potential(charge, potential, solute_gradient,
+                                               filled_derivatives, cavity, probe_kernel, basis,
+                                               tpiba, result);
+        result.boundary_potential.clear();
+        result.cavity_potential.resize(size);
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            result.cavity_potential[i] = local_potential[i] * result.dsolute_drho[i];
+        }
     }
     else
     {
-        continuum_boundary_potential(cavity, result);
+        if (uses_switching_lowpass(cavity))
+        {
+            switching_boundary_potential(charge, potential, solute_gradient, cavity, basis, tpiba,
+                                         result);
+        }
+        else
+        {
+            continuum_boundary_potential(cavity, result);
+        }
+        result.cavity_potential
+            = boundary_to_density_potential(result, probe_kernel, basis, result.boundary_potential);
     }
-    result.cavity_potential
-        = boundary_to_density_potential(result, probe_kernel, basis, result.boundary_potential);
     ModuleBase::timer::end("ModuleSccs", "solve_sccs_response");
     return result;
 }
