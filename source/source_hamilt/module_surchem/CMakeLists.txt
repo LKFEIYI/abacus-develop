@@ -31,6 +31,7 @@ add_library(
     sccs/sccs_gaussian_ion.cpp
     sccs/sccs_response.cpp
     sccs/sccs_solvent_aware.cpp
+    sccs/sccs_sqrt_cg.cpp
 )
 
 if(ENABLE_COVERAGE)
