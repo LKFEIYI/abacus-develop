@@ -1,0 +1,3 @@
+Gamma-only LCAO water dimer with periodic SCCS, the water-neutral preset and the
+solvent-aware filling (radius 2, threshold 0.3), as PW case 227. Checks total energy,
+forces and solvation terms with the solvent-aware probe on the gamma-only density grid.
