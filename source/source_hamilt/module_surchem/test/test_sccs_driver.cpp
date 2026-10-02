@@ -764,7 +764,8 @@ ModuleBase::Matrix3 cubic_lattice()
                                0.0, 0.0, 1.0);
 }
 
-// Cation cavity in a periodic cube, filled by a soft solvent-aware probe.
+// Cation cavity in a cube, filled by a soft solvent-aware probe; config.boundary
+// selects the periodic or the PCC0D (centered) boundary.
 ModuleSccs::SccsResult evaluate_filled_cation(const std::vector<double>& electron_density,
                                               const CationSolute& solute,
                                               const ModuleSccs::SccsConfig& config,
@@ -774,7 +775,12 @@ ModuleSccs::SccsResult evaluate_filled_cation(const std::vector<double>& electro
                                               const double scale,
                                               ModuleSccs::SccsState& state)
 {
-    const ModulePcc::PccGeometry pcc;
+    ModulePcc::PccGeometry pcc;
+    if (config.boundary == ModulePcc::Boundary::Pcc0d)
+    {
+        pcc = ModulePcc::pcc_geometry(lattice, scale, 1.0e-10);
+        pcc.origin = cell_center(lattice, scale);
+    }
     const ModulePcc::Pcc2dGeometry pcc_2d;
     const ModuleSurchem::SerialChargeReduction charge_reduction;
     ModuleSccs::CavityInputs inputs;
@@ -808,7 +814,10 @@ ModuleSccs::SccsConfig filled_cation_config(const double epsilon_bulk)
 // Breathing-mode derivative of the eps_bulk = 1 (surface and volume only)
 // energy of the filled cation: centered finite difference and the electronic
 // potential projected on the mode.
-void filled_nonel_derivative(const double ecut, double& finite_difference, double& analytic)
+void filled_nonel_derivative(const double ecut,
+                             const ModulePcc::Boundary boundary,
+                             double& finite_difference,
+                             double& analytic)
 {
     const double scale = 12.0;
     ModulePW::PW_Basis basis("cpu", "double");
@@ -818,7 +827,8 @@ void filled_nonel_derivative(const double ecut, double& finite_difference, doubl
         = ModuleSurchem::pw_grid_positions(basis, cubic_lattice(), scale);
     const CationSolute solute
         = make_cation_solute(positions, cell_center(cubic_lattice(), scale), volume_element);
-    const ModuleSccs::SccsConfig config = filled_cation_config(1.0);
+    ModuleSccs::SccsConfig config = filled_cation_config(1.0);
+    config.boundary = boundary;
     ModuleSccs::SccsState state;
     const ModuleSccs::SccsResult result = evaluate_filled_cation(
         solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, state);
@@ -849,7 +859,8 @@ void filled_nonel_derivative(const double ecut, double& finite_difference, doubl
                                 + minus_result.non_electrostatic.volume_energy
                                 + minus_result.electrostatic.reaction_energy;
     finite_difference = (energy_plus - energy_minus) / (2.0 * step);
-    std::cout << "SCCS_SA_NONEL ecut " << ecut << " breathing finite_difference "
+    const char* label = boundary == ModulePcc::Boundary::Periodic ? "periodic" : "pcc";
+    std::cout << "SCCS_SA_NONEL " << label << " ecut " << ecut << " breathing finite_difference "
               << finite_difference << " analytic " << analytic << " error "
               << analytic - finite_difference << std::endl;
 }
@@ -868,10 +879,28 @@ TEST(SccsDriver, SolventAwareNonElectrostaticPotentialConvergesToTheDensityDeriv
 {
     double coarse_difference = 0.0;
     double coarse_analytic = 0.0;
-    filled_nonel_derivative(120.0, coarse_difference, coarse_analytic);
+    filled_nonel_derivative(120.0, ModulePcc::Boundary::Periodic, coarse_difference,
+                            coarse_analytic);
     double fine_difference = 0.0;
     double fine_analytic = 0.0;
-    filled_nonel_derivative(480.0, fine_difference, fine_analytic);
+    filled_nonel_derivative(480.0, ModulePcc::Boundary::Periodic, fine_difference, fine_analytic);
+    EXPECT_GT(std::abs(fine_difference), 1.0e-3);
+    EXPECT_NEAR(coarse_analytic, fine_analytic, 5.0e-3 * std::abs(fine_analytic));
+    EXPECT_NEAR(fine_analytic, fine_difference, 2.0e-3 * std::abs(fine_difference));
+}
+
+// The same check with PCC0D, whose filled surface also takes the chain
+// derivatives although its dielectric differentiates the boundary on the FFT
+// grid.
+TEST(SccsDriver, SolventAwarePccNonElectrostaticPotentialConvergesToTheDensityDerivative)
+{
+    double coarse_difference = 0.0;
+    double coarse_analytic = 0.0;
+    filled_nonel_derivative(120.0, ModulePcc::Boundary::Pcc0d, coarse_difference,
+                            coarse_analytic);
+    double fine_difference = 0.0;
+    double fine_analytic = 0.0;
+    filled_nonel_derivative(480.0, ModulePcc::Boundary::Pcc0d, fine_difference, fine_analytic);
     EXPECT_GT(std::abs(fine_difference), 1.0e-3);
     EXPECT_NEAR(coarse_analytic, fine_analytic, 5.0e-3 * std::abs(fine_analytic));
     EXPECT_NEAR(fine_analytic, fine_difference, 2.0e-3 * std::abs(fine_difference));

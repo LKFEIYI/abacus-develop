@@ -255,12 +255,12 @@ SccsResult evaluate_pw_sccs(
     non_electrostatic_parameters.surface_tension = config.surface_tension;
     non_electrostatic_parameters.pressure = config.pressure;
     non_electrostatic_parameters.surface_regularization = config.surface_regularization;
-    // The periodic filled boundary has chain derivatives (Environ 'chain' with
-    // need_hessian); its spectral gradient rings where the filling switches
-    // within a grid spacing. PCC differentiates s_sa on the grid throughout.
-    const bool chain_surface = uses_solvent_aware(config.solvent_aware)
-                               && config.boundary == ModulePcc::Boundary::Periodic;
-    if (chain_surface)
+    // The spectral gradient of the filled boundary rings where the filling
+    // switches within a grid spacing, so its surface takes the chain
+    // derivatives of the filled boundary (Environ 'chain' with need_hessian)
+    // for every boundary condition; with PCC only the dielectric
+    // differentiates the boundary on the FFT grid.
+    if (uses_solvent_aware(config.solvent_aware))
     {
         const SolventAwareSurface surface
             = solvent_aware_surface_of_density(cavity_density,

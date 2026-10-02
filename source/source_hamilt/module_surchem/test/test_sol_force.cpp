@@ -556,8 +556,11 @@ TEST(SolForce, NeutralAndChargedPcc2dMatchFixedDensityTotalEnergyDerivativeInXyz
 // potential is the exact derivative, so the force must match the fixed-density
 // derivative of the total solvation energy, cavity terms included.
 // Fixed-density check of the 'full'-mode core force with the exact lowpass
-// PCC0D cavity derivative; returns the solvent-aware filled volume.
+// PCC0D cavity derivative, to within tolerance (Hartree/bohr); returns the
+// solvent-aware filled volume.
 double check_full_mode_core_force(const ModuleSccs::SolventAwareParameters& solvent_aware,
+                                  const double surface_tension_dyn_per_cm,
+                                  const double tolerance,
                                   const char* label)
 {
     ModulePW::PW_Basis basis("cpu", "double");
@@ -637,7 +640,8 @@ double check_full_mode_core_force(const ModuleSccs::SolventAwareParameters& solv
     parameters.sccs_config.cavity.epsilon_bulk = 5.0;
     parameters.sccs_config.cavity.lowpass_p1 = 10.0;
     parameters.sccs_config.cavity.lowpass_p2 = 5.0;
-    parameters.sccs_config.surface_tension = ModuleSccs::dyn_per_cm_to_hartree_per_bohr2(5.0);
+    parameters.sccs_config.surface_tension
+        = ModuleSccs::dyn_per_cm_to_hartree_per_bohr2(surface_tension_dyn_per_cm);
     parameters.sccs_config.pressure = ModuleSccs::gpa_to_hartree_per_bohr3(0.125);
     parameters.sccs_config.surface_regularization = 1.0e-8;
     parameters.sccs_config.boundary = ModulePcc::Boundary::Pcc0d;
@@ -675,7 +679,7 @@ double check_full_mode_core_force(const ModuleSccs::SolventAwareParameters& solv
                   << " finite_difference " << finite_difference_force << " error "
                   << force_hartree - finite_difference_force << std::endl;
         EXPECT_GT(std::abs(finite_difference_force), 1.0e-4);
-        EXPECT_NEAR(force_hartree, finite_difference_force, 1.0e-7);
+        EXPECT_NEAR(force_hartree, finite_difference_force, tolerance);
     }
     evaluate_total_solvation_energy(solvent, cell, basis, radial_local_potential,
                                     electron_density);
@@ -685,19 +689,27 @@ double check_full_mode_core_force(const ModuleSccs::SolventAwareParameters& solv
 TEST(SolForce, FullSolventModeCoreForceMatchesFixedDensityEnergyDerivative)
 {
     const ModuleSccs::SolventAwareParameters local;
-    EXPECT_EQ(check_full_mode_core_force(local, "local"), 0.0);
+    EXPECT_EQ(check_full_mode_core_force(local, 5.0, 1.0e-7, "local"), 0.0);
 }
 
 // The solvent-aware filling makes the cavity nonlocal in the density; the
-// core force still contracts the exact cavity derivative, now through the
-// probe adjoint. A soft filling step keeps the finite differences smooth.
+// core force still contracts the exact lowpass cavity derivative, now through
+// the probe adjoint, and the exact volume derivative. A soft filling step
+// keeps the finite differences smooth. The filled surface takes the chain
+// derivatives, whose potential is the continuum -div(g/|g|) rather than the
+// exact derivative of the sampled surface: with surface tension the force
+// matches to the grid error of that potential (measured 8e-8, 8e-8, 5.0e-7
+// against forces of 1.6e-3, 1.2e-3, 7.5e-4 at 120 Ry).
 TEST(SolForce, SolventAwareFullModeCoreForceMatchesFixedDensityEnergyDerivative)
 {
     ModuleSccs::SolventAwareParameters filled;
     filled.solvent_radius = 0.75;
     filled.filling_threshold = 0.45;
     filled.filling_spread = 0.1;
-    const double filled_volume = check_full_mode_core_force(filled, "solvent_aware");
+    const double exact_filled_volume
+        = check_full_mode_core_force(filled, 0.0, 1.0e-7, "solvent_aware_no_surface");
+    EXPECT_GT(exact_filled_volume, 0.1);
+    const double filled_volume = check_full_mode_core_force(filled, 5.0, 1.0e-6, "solvent_aware");
     std::cout << "FULL_MODE_FORCE solvent_aware filled_volume " << filled_volume << std::endl;
     EXPECT_GT(filled_volume, 0.1);
 }

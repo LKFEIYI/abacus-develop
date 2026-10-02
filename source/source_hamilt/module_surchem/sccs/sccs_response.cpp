@@ -535,7 +535,7 @@ SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& 
         || response.fraction_gradient.size() != size)
     {
         throw std::invalid_argument(
-            "SCCS solvent-aware surface requires the periodic filled boundary and its chain gradients");
+            "SCCS solvent-aware surface requires the filled boundary and its chain gradients");
     }
     const std::vector<ModuleBase::Vector3<double>>& density_gradient = response.density_gradient;
     std::vector<std::complex<double>> density_g(basis.npw);
@@ -632,6 +632,16 @@ SccsResponse solve_sccs_response(
     {
         switching_boundary_derivatives(result.solute, cavity, basis, tpiba, solute_gradient,
                                        solute_laplacian);
+        if (filled)
+        {
+            // The dielectric uses the FFT derivatives above; the filled
+            // surface still takes the chain gradients.
+            std::vector<ModuleBase::Vector3<double>> local_gradient;
+            std::vector<double> local_laplacian;
+            chain_boundary_derivatives(density, cavity, basis, tpiba, result.density_gradient,
+                                       local_gradient, local_laplacian);
+            result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, local_gradient);
+        }
     }
     std::vector<double> coefficient;
     dielectric_of_boundary(cavity, solute_gradient, solute_laplacian, result, coefficient);

@@ -33,9 +33,9 @@ struct SccsResponse
     SolventAwareBoundary filling;
     // Grid integral of s_sa - s, in bohr^3; zero without the filling.
     double filled_volume = 0.0;
-    // Periodic solvent-aware path only (chain derivatives), empty otherwise:
-    // the spectral grad n of the cavity density and grad c = p * grad s with
-    // grad s = s' grad n, kept for solvent_aware_surface_of_density.
+    // Solvent-aware only, empty otherwise: the spectral grad n of the cavity
+    // density and grad c = p * grad s with the chain grad s = s' grad n, kept
+    // for solvent_aware_surface_of_density with every boundary condition.
     std::vector<ModuleBase::Vector3<double>> density_gradient;
     std::vector<ModuleBase::Vector3<double>> fraction_gradient;
     std::vector<double> epsilon;
@@ -64,12 +64,13 @@ std::vector<double> boundary_to_density_potential(const SccsResponse& response,
                                                   const ModulePW::PW_Basis& basis,
                                                   const std::vector<double>& boundary_potential);
 
-// Periodic solvent-aware path (Environ boundary_of_density with deriv_method
+// Solvent-aware surface (Environ boundary_of_density with deriv_method
 // 'chain' and need_hessian): grad s = s' grad n and
 // H s = s' H n + s'' grad n grad n^T from the spectral density derivatives,
 // passed to solvent_aware_surface for the filled boundary of response. grad n
-// and grad c come from response, which must be the periodic solvent-aware
-// solution for this density.
+// and grad c come from response, which must be the solvent-aware solution for
+// this density. With PCC the dielectric still differentiates s_sa on the FFT
+// grid; the surface uses these chain derivatives as in the periodic path.
 SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& density,
                                                      const CavityParameters& cavity,
                                                      const SccsResponse& response,
