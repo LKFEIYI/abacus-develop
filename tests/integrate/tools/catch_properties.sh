@@ -107,6 +107,7 @@ imp_sol=$(get_input_key_value "imp_sol" "INPUT")
 assume_isolated=$(get_input_key_value "assume_isolated" "INPUT")
 run_rpa=$(get_input_key_value "rpa" "INPUT")
 out_pot=$(get_input_key_value "out_pot" "INPUT")
+out_sol=$(get_input_key_value "out_sol" "INPUT")
 out_elf=$(get_input_key_value "out_elf" "INPUT")
 out_dm1=$(get_input_key_value "out_dm1" "INPUT")
 get_s=$(get_input_key_value "calculation" "INPUT")
@@ -802,6 +803,18 @@ if [[ "$imp_sol" == "1" || "$imp_sol" == "2" ]]; then
 	esol_cav=`grep E_sol_cav $running_path | awk '{print $3}'`
 	echo "esolelref $esol_el" >>$1
 	echo "esolcavref $esol_cav" >>$1
+fi
+
+# out_sol 1: integrals of the written solvent fields, e.g. the cavity volume
+# int s dV of sol_cavity.cube. sol_eps.cube is skipped: its integral is
+# dominated by the bulk permittivity times the cell volume.
+if [[ "$out_sol" == "1" ]]; then
+	for field in sol_cavity sol_cavity_local sol_filled_fraction; do
+		if [ -f "OUT.autotest/$field.cube" ]; then
+			integral=$(python3 "$CUBE_TOOL" integrate "OUT.autotest/$field.cube")
+			echo "${field}_integralref $integral" >>$1
+		fi
+	done
 fi
 
 #--------------------------------------------

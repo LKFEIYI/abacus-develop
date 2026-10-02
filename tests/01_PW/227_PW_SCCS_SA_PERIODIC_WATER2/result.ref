@@ -3,4 +3,7 @@ etotperatomref -155.7022632156
 totalforceref 5.219348
 esolelref -0.5850276889
 esolcavref 0.1187515606
+sol_cavity_integralref 562.7650642
+sol_cavity_local_integralref 457.9279998
+sol_filled_fraction_integralref 457.9279998
 totaltimeref 6.29
