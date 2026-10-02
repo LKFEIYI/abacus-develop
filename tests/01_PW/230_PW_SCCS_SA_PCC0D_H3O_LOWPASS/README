@@ -1,3 +1,1 @@
-Case 225_PW_SCCS_PCC0D_H3O_LOWPASS with the solvent-aware filling (radius 2, threshold
-0.3). Checks total energy, forces and SCCS/PCC energy terms of a charged solute whose
-filled boundary keeps the exact lowpass cavity derivative through the probe.
+case 225 with the solvent-aware filling

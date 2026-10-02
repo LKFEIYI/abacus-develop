@@ -1,2 +1,1 @@
-Gamma-only LCAO neutral water with SCCS (epsilon 1.1) and 2D PCC, open along y.
-Checks total energy, forces and SCCS/PCC energy terms against result.ref.
+gamma-only LCAO neutral water with SCCS (epsilon 1.1) and 2D PCC open along y

@@ -1,3 +1,1 @@
-PW water dimer with periodic SCCS, the water-neutral preset and the solvent-aware
-filling (radius 2, threshold 0.3). Checks total energy, forces and solvation terms
-with the chain derivatives of the filled boundary and its surface.
+PW water dimer with periodic SCCS and the solvent-aware filling

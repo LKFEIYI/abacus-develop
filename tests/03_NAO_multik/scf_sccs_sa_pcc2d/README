@@ -1,2 +1,1 @@
-scf_sccs_pcc2d with the solvent-aware filling (radius 1.5, threshold 0.3). Checks
-energies and forces of the LCAO filled boundary with a 2x1x2 k mesh and kpar 2.
+scf_sccs_pcc2d with the solvent-aware filling
