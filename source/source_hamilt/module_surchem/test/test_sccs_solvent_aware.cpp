@@ -298,6 +298,78 @@ TEST(SccsSolventAware, NarrowCellProbeSumsPeriodicImages)
     EXPECT_GT(std::abs(first_shell_kernel(basis, truncated) - expected), 1.0e-3);
 }
 
+// Largest deviation of the probe kernel from the transform of the isolated
+// probe over the G vectors with |G| <= maximum_g (bohr^-1) of a cell with the
+// given lattice rows (units of scale).
+double oblique_probe_error(const ModuleBase::Matrix3& lattice,
+                           const double scale,
+                           const ModuleSccs::SolventAwareParameters& parameters,
+                           const double maximum_g,
+                           int& compared)
+{
+    ModulePW::PW_Basis basis("cpu", "double");
+#ifdef __MPI
+    basis.initmpi(1, 0, POOL_WORLD);
+#endif
+    basis.initgrids(scale, lattice, 120.0);
+    basis.initparameters(false, 120.0, 1, false);
+    basis.setuptransform();
+    basis.collect_local_pw();
+    const ModuleSurchem::SerialChargeReduction reduction;
+    const std::vector<double> kernel
+        = ModuleSccs::solvent_probe_kernel(basis, lattice, scale, parameters, reduction);
+    const double width = parameters.solvent_radius * parameters.radial_scale;
+    const double spread = parameters.radial_spread;
+    const double tpiba = ModuleBase::TWO_PI / scale;
+    double error = 0.0;
+    compared = 0;
+    for (int ig = 0; ig < basis.npw; ++ig)
+    {
+        const double g = tpiba * std::sqrt(basis.gg[ig]);
+        if (g > maximum_g)
+        {
+            continue;
+        }
+        const double expected = isolated_probe_transform(g, width, spread);
+        error = std::max(error, std::abs(kernel[ig] - expected));
+        ++compared;
+    }
+    return error;
+}
+
+// The image sum covers every image within the probe cutoff of a folded grid
+// point, using the cell heights rather than the lattice-vector lengths. In a
+// hexagonal cell narrower than the probe and in a cell sheared to 10 degrees,
+// whose 2.1 bohr height needs images n = +-4 along a 12 bohr lattice vector,
+// the kernel must still be the transform of the whole isolated probe on every
+// G vector. Image counts from the lattice-vector lengths miss probe weight
+// there (measured kernel error 1.9e-2, against 8e-15 with the heights).
+TEST(SccsSolventAware, ObliqueCellProbeSumsPeriodicImages)
+{
+    const double sqrt3_half = 0.5 * std::sqrt(3.0);
+    const ModuleBase::Matrix3 hexagonal(1.0, 0.0, 0.0,
+                                        -0.5, sqrt3_half, 0.0,
+                                        0.0, 0.0, 1.2);
+    const double shear_angle = 10.0 * ModuleBase::PI / 180.0;
+    const ModuleBase::Matrix3 sheared(1.0, 0.0, 0.0,
+                                      std::cos(shear_angle), std::sin(shear_angle), 0.0,
+                                      0.0, 0.0, 1.0);
+    const ModuleSccs::SolventAwareParameters hexagonal_probe = probe_parameters(3.0);
+    const ModuleSccs::SolventAwareParameters sheared_probe = probe_parameters(3.0);
+    int hexagonal_count = 0;
+    const double hexagonal_error
+        = oblique_probe_error(hexagonal, 9.0, hexagonal_probe, 1.5, hexagonal_count);
+    int sheared_count = 0;
+    const double sheared_error = oblique_probe_error(sheared, 12.0, sheared_probe, 1.5, sheared_count);
+    std::cout << std::setprecision(6) << "SCCS_SA_OBLIQUE hexagonal " << hexagonal_error << " over "
+              << hexagonal_count << " G, sheared " << sheared_error << " over " << sheared_count
+              << " G" << std::endl;
+    EXPECT_GT(hexagonal_count, 20);
+    EXPECT_GT(sheared_count, 20);
+    EXPECT_LT(hexagonal_error, 1.0e-6);
+    EXPECT_LT(sheared_error, 1.0e-6);
+}
+
 TEST(SccsSolventAware, KeepsUniformSoluteAndSolvent)
 {
     const double length = 16.0;

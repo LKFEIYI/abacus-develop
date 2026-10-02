@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -932,6 +933,118 @@ TEST(SccsDriver, SolventAwareParametersInvalidateTheWarmStart)
         solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, state);
     EXPECT_FALSE(changed.response.polarization.warm_started);
     EXPECT_NE(changed.response.filled_volume, cold.response.filled_volume);
+}
+
+// Spectral gradient of a grid function, multiplied by the Environ switching
+// lowpass 0.5 erfc(p1 G^2/Gcut^2 - p2) when both parameters are positive.
+std::vector<ModuleBase::Vector3<double>> filtered_gradient(const std::vector<double>& values,
+                                                           const ModulePW::PW_Basis& basis,
+                                                           const double tpiba,
+                                                           const double lowpass_p1,
+                                                           const double lowpass_p2)
+{
+    std::vector<std::complex<double>> values_g(basis.npw);
+    basis.real2recip(values.data(), values_g.data());
+    std::vector<std::complex<double>> component_g(basis.npw);
+    std::vector<double> component(values.size());
+    std::vector<ModuleBase::Vector3<double>> gradient(values.size());
+    for (int d = 0; d < 3; ++d)
+    {
+        for (int ig = 0; ig < basis.npw; ++ig)
+        {
+            const double argument = lowpass_p1 * basis.gg[ig] / basis.ggecut - lowpass_p2;
+            const double filter = lowpass_p1 > 0.0 ? 0.5 * std::erfc(argument) : 1.0;
+            component_g[ig] = ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][d] * values_g[ig] * filter;
+        }
+        basis.recip2real(component_g.data(), component.data());
+        for (std::size_t ir = 0; ir < values.size(); ++ir)
+        {
+            gradient[ir][d] = component[ir];
+        }
+    }
+    return gradient;
+}
+
+// The two PCC dielectric paths of a filled boundary. With the switching
+// lowpass, grad ln(eps) is the filtered FFT gradient of s_sa (Environ
+// deriv_method 'fft' with deriv_lowpass), and the cavity potential is the
+// exact derivative with respect to s_sa chained through the probe adjoint.
+// An exact derivative of the analytic filling instead carried pointwise
+// higher derivatives of the filling, which the filter does not smooth, and
+// stalled the SCF where the filling only starts. Without the lowpass,
+// grad ln(eps) is the analytic filling on the FFT gradient of the local
+// boundary, whose spectral gradient of s_sa would ring.
+TEST(SccsDriver, PccFilledDielectricPathsFollowTheLowpass)
+{
+    const double scale = 12.0;
+    ModulePW::PW_Basis basis("cpu", "double");
+    make_basis(cubic_lattice(), scale, 120.0, basis);
+    const double tpiba = ModuleBase::TWO_PI / scale;
+    const double volume_element = scale * scale * scale / static_cast<double>(basis.nxyz);
+    const std::vector<ModuleBase::Vector3<double>> positions
+        = ModuleSurchem::pw_grid_positions(basis, cubic_lattice(), scale);
+    const CationSolute solute
+        = make_cation_solute(positions, cell_center(cubic_lattice(), scale), volume_element);
+    const double log_bulk = std::log(78.3);
+    const ModuleSurchem::SerialChargeReduction reduction;
+    for (const double lowpass : {10.0, -1.0})
+    {
+        ModuleSccs::SccsConfig config = filled_cation_config(78.3);
+        config.boundary = ModulePcc::Boundary::Pcc0d;
+        config.cavity.lowpass_p1 = lowpass;
+        config.cavity.lowpass_p2 = lowpass > 0.0 ? 5.0 : -1.0;
+        ModuleSccs::SccsState state;
+        const ModuleSccs::SccsResult result = evaluate_filled_cation(
+            solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, state);
+        const ModuleSccs::SccsResponse& response = result.response;
+        ASSERT_GT(response.filled_volume, 0.5);
+        const std::vector<double> kernel = ModuleSccs::solvent_probe_kernel(
+            basis, cubic_lattice(), scale, config.solvent_aware, reduction);
+        std::vector<ModuleBase::Vector3<double>> expected_gradient;
+        if (lowpass > 0.0)
+        {
+            expected_gradient = filtered_gradient(response.solute, basis, tpiba,
+                                                  config.cavity.lowpass_p1,
+                                                  config.cavity.lowpass_p2);
+        }
+        else
+        {
+            expected_gradient = filtered_gradient(response.local_solute, basis, tpiba, -1.0, -1.0);
+            const std::vector<ModuleBase::Vector3<double>> fraction_gradient
+                = ModuleSccs::convolve_probe_gradient(kernel, basis, expected_gradient);
+            for (std::size_t ir = 0; ir < positions.size(); ++ir)
+            {
+                const double empty = 1.0 - response.filling.filling[ir];
+                const double solvent = 1.0 - response.local_solute[ir];
+                expected_gradient[ir] = expected_gradient[ir] * empty
+                                        + fraction_gradient[ir] * (solvent * response.filling.dfilling[ir]);
+            }
+        }
+        double gradient_error = 0.0;
+        double gradient_scale = 0.0;
+        for (std::size_t ir = 0; ir < positions.size(); ++ir)
+        {
+            const ModuleBase::Vector3<double> expected = expected_gradient[ir] * (-log_bulk);
+            const ModuleBase::Vector3<double> difference = response.grad_log_epsilon[ir] - expected;
+            gradient_error = std::max(gradient_error, difference.norm());
+            gradient_scale = std::max(gradient_scale, expected.norm());
+        }
+        EXPECT_GT(gradient_scale, 1.0);
+        EXPECT_LT(gradient_error, 1.0e-10 * gradient_scale);
+        if (lowpass > 0.0)
+        {
+            ASSERT_EQ(response.boundary_potential.size(), positions.size());
+            const std::vector<double> expected_potential = ModuleSccs::boundary_to_density_potential(
+                response, kernel, basis, response.boundary_potential);
+            double potential_error = 0.0;
+            for (std::size_t ir = 0; ir < positions.size(); ++ir)
+            {
+                potential_error
+                    = std::max(potential_error, std::abs(response.cavity_potential[ir] - expected_potential[ir]));
+            }
+            EXPECT_EQ(potential_error, 0.0);
+        }
+    }
 }
 
 // The periodic filled response keeps grad n and grad c = p * grad s for the
