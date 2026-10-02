@@ -9,6 +9,19 @@
 
 namespace ModuleSccs
 {
+namespace
+{
+
+void validate_spectral_basis(const ModulePW::PW_Basis& basis, const double tpiba)
+{
+    if (!std::isfinite(tpiba) || tpiba <= 0.0 || basis.npw <= 0 || basis.nrxx <= 0
+        || basis.gcar == nullptr)
+    {
+        throw std::invalid_argument("SCCS periodic gradient requires an initialized PW basis and positive tpiba");
+    }
+}
+
+} // namespace
 
 std::vector<ModuleBase::Vector3<double>> periodic_gradient(
     const std::vector<double>& values,
@@ -19,26 +32,52 @@ std::vector<ModuleBase::Vector3<double>> periodic_gradient(
     {
         throw std::invalid_argument("SCCS scalar array does not match the local PW real-space grid");
     }
-    if (!std::isfinite(tpiba) || tpiba <= 0.0 || basis.npw <= 0 || basis.nrxx <= 0
-        || basis.gcar == nullptr)
-    {
-        throw std::invalid_argument("SCCS periodic gradient requires an initialized PW basis and positive tpiba");
-    }
-
+    validate_spectral_basis(basis, tpiba);
     std::vector<std::complex<double>> values_g(basis.npw);
     basis.real2recip(values.data(), values_g.data());
+    const std::vector<double> no_filter;
+    return spectral_gradient(values_g, no_filter, basis, tpiba);
+}
+
+std::vector<ModuleBase::Vector3<double>> spectral_gradient(
+    const std::vector<std::complex<double>>& values_g,
+    const std::vector<double>& filter,
+    const ModulePW::PW_Basis& basis,
+    const double tpiba)
+{
+    validate_spectral_basis(basis, tpiba);
+    const std::size_t coefficient_count = static_cast<std::size_t>(basis.npw);
+    if (values_g.size() != coefficient_count
+        || (!filter.empty() && filter.size() != coefficient_count))
+    {
+        throw std::invalid_argument("SCCS spectral gradient coefficients and filter must match the PW basis");
+    }
     std::vector<std::complex<double>> gradient_g(basis.npw);
     std::vector<double> gradient_r(basis.nrxx);
     std::vector<ModuleBase::Vector3<double>> gradient(basis.nrxx);
     for (int direction = 0; direction < 3; ++direction)
     {
+        if (filter.empty())
+        {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static, 1024)
 #endif
-        for (int ig = 0; ig < basis.npw; ++ig)
+            for (int ig = 0; ig < basis.npw; ++ig)
+            {
+                gradient_g[ig]
+                    = ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][direction] * values_g[ig];
+            }
+        }
+        else
         {
-            gradient_g[ig]
-                = ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][direction] * values_g[ig];
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
+            for (int ig = 0; ig < basis.npw; ++ig)
+            {
+                gradient_g[ig] = ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][direction]
+                                 * values_g[ig] * filter[ig];
+            }
         }
         basis.recip2real(gradient_g.data(), gradient_r.data());
 #ifdef _OPENMP

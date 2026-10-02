@@ -177,28 +177,71 @@ class SqrtPreconditioner
     std::vector<double> potential_;
 };
 
-// Environ boundary_of_density with deriv_method 'chain': grad s = s' grad n
-// and lapl s = s' lapl n + s'' |grad n|^2 from the spectral density
-// derivatives; density_gradient returns grad n.
-void chain_boundary_derivatives(const std::vector<double>& density,
-                                const CavityParameters& cavity,
-                                const ModulePW::PW_Basis& basis,
-                                const double tpiba,
-                                std::vector<ModuleBase::Vector3<double>>& density_gradient,
-                                std::vector<ModuleBase::Vector3<double>>& gradient,
-                                std::vector<double>& laplacian)
+// Spectral Laplacian of the real field with coefficients values_g, each
+// multiplied by filter[ig] unless filter is empty. It is symmetric under the
+// grid inner product, so it is its own transpose in the cavity derivative.
+void spectral_laplacian(const std::vector<std::complex<double>>& values_g,
+                        const std::vector<double>& filter,
+                        const ModulePW::PW_Basis& basis,
+                        const double tpiba,
+                        std::vector<double>& laplacian)
 {
-    const std::size_t size = density.size();
-    density_gradient = ModuleSccs::periodic_gradient(density, basis, tpiba);
-    std::vector<std::complex<double>> density_g(basis.npw);
-    basis.real2recip(density.data(), density_g.data());
-    for (int ig = 0; ig < basis.npw; ++ig)
+    std::vector<std::complex<double>> laplacian_g(basis.npw);
+    if (filter.empty())
     {
-        density_g[ig] *= -tpiba * tpiba * basis.gg[ig];
+        for (int ig = 0; ig < basis.npw; ++ig)
+        {
+            laplacian_g[ig] = values_g[ig] * (-tpiba * tpiba * basis.gg[ig]);
+        }
     }
-    std::vector<double> density_laplacian(size);
-    basis.recip2real(density_g.data(), density_laplacian.data());
+    else
+    {
+        for (int ig = 0; ig < basis.npw; ++ig)
+        {
+            laplacian_g[ig] = values_g[ig] * (-tpiba * tpiba * basis.gg[ig] * filter[ig]);
+        }
+    }
+    laplacian.resize(basis.nrxx);
+    basis.recip2real(laplacian_g.data(), laplacian.data());
+}
+
+// Environ boundary_of_density with deriv_method 'chain': grad s = s' grad n
+// from the spectral grad n of the density coefficients density_g;
+// density_gradient returns grad n.
+void chain_boundary_gradient(const std::vector<std::complex<double>>& density_g,
+                             const std::vector<double>& dsolute_drho,
+                             const ModulePW::PW_Basis& basis,
+                             const double tpiba,
+                             std::vector<ModuleBase::Vector3<double>>& density_gradient,
+                             std::vector<ModuleBase::Vector3<double>>& gradient)
+{
+    const std::vector<double> no_filter;
+    density_gradient = ModuleSccs::spectral_gradient(density_g, no_filter, basis, tpiba);
+    const std::size_t size = dsolute_drho.size();
     gradient.resize(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        for (int d = 0; d < 3; ++d)
+        {
+            gradient[i][d] = dsolute_drho[i] * density_gradient[i][d];
+        }
+    }
+}
+
+// The chain lapl s = s' lapl n + s'' |grad n|^2 matching
+// chain_boundary_gradient.
+void chain_boundary_laplacian(const std::vector<double>& density,
+                              const std::vector<std::complex<double>>& density_g,
+                              const std::vector<ModuleBase::Vector3<double>>& density_gradient,
+                              const CavityParameters& cavity,
+                              const ModulePW::PW_Basis& basis,
+                              const double tpiba,
+                              std::vector<double>& laplacian)
+{
+    const std::vector<double> no_filter;
+    std::vector<double> density_laplacian;
+    spectral_laplacian(density_g, no_filter, basis, tpiba, density_laplacian);
+    const std::size_t size = density.size();
     laplacian.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
@@ -206,7 +249,6 @@ void chain_boundary_derivatives(const std::vector<double>& density,
         double gradient_square = 0.0;
         for (int d = 0; d < 3; ++d)
         {
-            gradient[i][d] = point.dsolute_drho * density_gradient[i][d];
             gradient_square += density_gradient[i][d] * density_gradient[i][d];
         }
         laplacian[i] = point.dsolute_drho * density_laplacian[i]
@@ -247,77 +289,37 @@ void dielectric_of_boundary(const CavityParameters& cavity,
 
 // Environ 3.1.1 core_fft_lowpass: with lowpass_p1 and lowpass_p2 positive,
 // every switching-function derivative is multiplied by
-// 0.5 erfc(p1 G^2/Gcut^2 - p2), Gcut^2 being the density cutoff; else by one.
-double switching_filter(const double gg,
-                        const CavityParameters& cavity,
-                        const ModulePW::PW_Basis& basis)
+// 0.5 erfc(p1 G^2/Gcut^2 - p2), Gcut^2 being the density cutoff. One weight
+// per G vector; empty without the lowpass.
+std::vector<double> switching_filter(const CavityParameters& cavity,
+                                     const ModulePW::PW_Basis& basis)
 {
+    std::vector<double> filter;
     if (!uses_switching_lowpass(cavity))
     {
-        return 1.0;
+        return filter;
     }
-    const double argument = cavity.lowpass_p1 * gg / basis.ggecut - cavity.lowpass_p2;
-    return 0.5 * std::erfc(argument);
-}
-
-// Spectral gradient of the switching function, filtered when requested.
-std::vector<ModuleBase::Vector3<double>> switching_gradient(const std::vector<double>& values,
-                                                            const CavityParameters& cavity,
-                                                            const ModulePW::PW_Basis& basis,
-                                                            const double tpiba)
-{
-    if (!uses_switching_lowpass(cavity))
-    {
-        return ModuleSccs::periodic_gradient(values, basis, tpiba);
-    }
-    std::vector<std::complex<double>> values_g(basis.npw);
-    basis.real2recip(values.data(), values_g.data());
-    std::vector<std::complex<double>> gradient_g(basis.npw);
-    std::vector<double> gradient_r(values.size());
-    std::vector<ModuleBase::Vector3<double>> gradient(values.size());
-    for (int d = 0; d < 3; ++d)
-    {
-        for (int ig = 0; ig < basis.npw; ++ig)
-        {
-            const double filter = switching_filter(basis.gg[ig], cavity, basis);
-            gradient_g[ig] = ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][d] * values_g[ig] * filter;
-        }
-        basis.recip2real(gradient_g.data(), gradient_r.data());
-        for (std::size_t i = 0; i < values.size(); ++i)
-        {
-            gradient[i][d] = gradient_r[i];
-        }
-    }
-    return gradient;
-}
-
-// Spectral Laplacian of the switching function. It is symmetric under the
-// grid inner product, so it is its own transpose in the cavity derivative.
-void switching_laplacian(const std::vector<double>& values,
-                         const CavityParameters& cavity,
-                         const ModulePW::PW_Basis& basis,
-                         const double tpiba,
-                         std::vector<double>& laplacian)
-{
-    std::vector<std::complex<double>> values_g(basis.npw);
-    basis.real2recip(values.data(), values_g.data());
+    filter.resize(basis.npw);
     for (int ig = 0; ig < basis.npw; ++ig)
     {
-        const double filter = switching_filter(basis.gg[ig], cavity, basis);
-        values_g[ig] *= -tpiba * tpiba * basis.gg[ig] * filter;
+        const double argument = cavity.lowpass_p1 * basis.gg[ig] / basis.ggecut - cavity.lowpass_p2;
+        filter[ig] = 0.5 * std::erfc(argument);
     }
-    laplacian.resize(values.size());
-    basis.recip2real(values_g.data(), laplacian.data());
+    return filter;
 }
 
-// Spectral divergence matching switching_gradient; minus this divergence is
-// the transpose of switching_gradient.
+// Spectral divergence matching spectral_gradient with the same filter; minus
+// this divergence is the transpose of that gradient.
 void switching_divergence(const std::vector<ModuleBase::Vector3<double>>& field,
-                          const CavityParameters& cavity,
+                          const std::vector<double>& filter,
                           const ModulePW::PW_Basis& basis,
                           const double tpiba,
                           std::vector<double>& divergence)
 {
+    if (filter.size() != static_cast<std::size_t>(basis.npw))
+    {
+        throw std::invalid_argument("SCCS switching divergence requires the lowpass filter");
+    }
     const std::size_t size = field.size();
     std::vector<double> component(size);
     std::vector<std::complex<double>> component_g(basis.npw);
@@ -332,8 +334,7 @@ void switching_divergence(const std::vector<ModuleBase::Vector3<double>>& field,
         basis.real2recip(component.data(), component_g.data());
         for (int ig = 0; ig < basis.npw; ++ig)
         {
-            const double filter = switching_filter(basis.gg[ig], cavity, basis);
-            divergence_g[ig] += ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][d] * component_g[ig] * filter;
+            divergence_g[ig] += ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][d] * component_g[ig] * filter[ig];
         }
     }
     divergence.resize(size);
@@ -344,16 +345,19 @@ void switching_divergence(const std::vector<ModuleBase::Vector3<double>>& field,
 // and dipole. The chain-rule f drops steeply to zero at density_min, and the
 // sampled f v source then fails to converge with the grid. Differentiate the
 // boundary s on the FFT grid instead (Environ deriv_method 'fft'); the filtered
-// grad s is also the one of the exact cavity derivative.
+// grad s is also the one of the exact cavity derivative. One forward transform
+// serves the gradient and the Laplacian.
 void switching_boundary_derivatives(const std::vector<double>& boundary,
-                                    const CavityParameters& cavity,
+                                    const std::vector<double>& filter,
                                     const ModulePW::PW_Basis& basis,
                                     const double tpiba,
                                     std::vector<ModuleBase::Vector3<double>>& gradient,
                                     std::vector<double>& laplacian)
 {
-    gradient = switching_gradient(boundary, cavity, basis, tpiba);
-    switching_laplacian(boundary, cavity, basis, tpiba, laplacian);
+    std::vector<std::complex<double>> boundary_g(basis.npw);
+    basis.real2recip(boundary.data(), boundary_g.data());
+    gradient = ModuleSccs::spectral_gradient(boundary_g, filter, basis, tpiba);
+    spectral_laplacian(boundary_g, filter, basis, tpiba, laplacian);
 }
 
 // PCC dielectric derivatives of the filled boundary without the lowpass: the
@@ -367,14 +371,14 @@ void switching_boundary_derivatives(const std::vector<double>& boundary,
 // higher derivatives of the filling, which the filter does not smooth, into
 // that exact derivative and stall the SCF where the filling only starts.
 void filled_fft_derivatives(const SccsResponse& result,
-                            const CavityParameters& cavity,
+                            const std::vector<double>& filter,
                             const std::vector<double>& probe_kernel,
                             const ModulePW::PW_Basis& basis,
                             const double tpiba,
                             std::vector<ModuleBase::Vector3<double>>& gradient,
                             std::vector<double>& laplacian)
 {
-    switching_boundary_derivatives(result.local_solute, cavity, basis, tpiba, gradient, laplacian);
+    switching_boundary_derivatives(result.local_solute, filter, basis, tpiba, gradient, laplacian);
     const std::vector<ModuleBase::Vector3<double>> fraction_gradient
         = convolve_probe_gradient(probe_kernel, basis, gradient);
     solvent_aware_chain_derivatives(result.local_solute, result.filling, fraction_gradient,
@@ -414,6 +418,7 @@ void switching_boundary_potential(const std::vector<double>& charge,
                                 const std::vector<double>& potential,
                                 const std::vector<ModuleBase::Vector3<double>>& solute_gradient,
                                 const CavityParameters& cavity,
+                                const std::vector<double>& filter,
                                 const ModulePW::PW_Basis& basis,
                                 const double tpiba,
                                 SccsResponse& result)
@@ -430,10 +435,12 @@ void switching_boundary_potential(const std::vector<double>& charge,
             weighted_gradient[i][d] = weight[i] * solute_gradient[i][d];
         }
     }
+    std::vector<std::complex<double>> weight_g(basis.npw);
+    basis.real2recip(weight.data(), weight_g.data());
     std::vector<double> weight_laplacian;
-    switching_laplacian(weight, cavity, basis, tpiba, weight_laplacian);
+    spectral_laplacian(weight_g, filter, basis, tpiba, weight_laplacian);
     std::vector<double> weighted_divergence;
-    switching_divergence(weighted_gradient, cavity, basis, tpiba, weighted_divergence);
+    switching_divergence(weighted_gradient, filter, basis, tpiba, weighted_divergence);
     result.boundary_potential.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
@@ -557,14 +564,14 @@ SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& 
     ModuleBase::timer::start("ModuleSccs", "solvent_aware_surface_of_density");
     const std::size_t size = density.size();
     if (response.local_solute.size() != size || response.density_gradient.size() != size
-        || response.fraction_gradient.size() != size)
+        || response.fraction_gradient.size() != size
+        || response.density_reciprocal.size() != static_cast<std::size_t>(basis.npw))
     {
         throw std::invalid_argument(
             "SCCS solvent-aware surface requires the filled boundary and its chain gradients");
     }
     const std::vector<ModuleBase::Vector3<double>>& density_gradient = response.density_gradient;
-    std::vector<std::complex<double>> density_g(basis.npw);
-    basis.real2recip(density.data(), density_g.data());
+    const std::vector<std::complex<double>>& density_g = response.density_reciprocal;
     std::vector<double> dsolute(size);
     std::vector<double> d2solute(size);
     for (std::size_t i = 0; i < size; ++i)
@@ -636,13 +643,24 @@ SccsResponse solve_sccs_response(
         fill_cavity(solvent_aware, probe_kernel, basis, reduction, result);
     }
     const bool open_boundary = coulomb.has_boundary_correction();
+    const std::vector<double> filter = switching_filter(cavity, basis);
+    // One forward transform of the cavity density serves every chain
+    // derivative, including the Hessian of the filled surface.
+    std::vector<std::complex<double>> density_g;
+    if (!open_boundary || filled)
+    {
+        density_g.resize(basis.npw);
+        basis.real2recip(density.data(), density_g.data());
+    }
     std::vector<ModuleBase::Vector3<double>> solute_gradient;
     std::vector<double> solute_laplacian;
     if (!open_boundary)
     {
         std::vector<ModuleBase::Vector3<double>> density_gradient;
-        chain_boundary_derivatives(density, cavity, basis, tpiba, density_gradient,
-                                   solute_gradient, solute_laplacian);
+        chain_boundary_gradient(density_g, result.dsolute_drho, basis, tpiba, density_gradient,
+                                solute_gradient);
+        chain_boundary_laplacian(density, density_g, density_gradient, cavity, basis, tpiba,
+                                 solute_laplacian);
         if (filled)
         {
             // The chain surface needs grad n and grad c again; keep them.
@@ -657,23 +675,26 @@ SccsResponse solve_sccs_response(
     {
         if (filled && !uses_switching_lowpass(cavity))
         {
-            filled_fft_derivatives(result, cavity, probe_kernel, basis, tpiba, solute_gradient,
+            filled_fft_derivatives(result, filter, probe_kernel, basis, tpiba, solute_gradient,
                                    solute_laplacian);
         }
         else
         {
-            switching_boundary_derivatives(result.solute, cavity, basis, tpiba, solute_gradient,
+            switching_boundary_derivatives(result.solute, filter, basis, tpiba, solute_gradient,
                                            solute_laplacian);
         }
         if (filled)
         {
             // The filled surface takes the chain gradients of the periodic path.
             std::vector<ModuleBase::Vector3<double>> local_gradient;
-            std::vector<double> local_laplacian;
-            chain_boundary_derivatives(density, cavity, basis, tpiba, result.density_gradient,
-                                       local_gradient, local_laplacian);
+            chain_boundary_gradient(density_g, result.dsolute_drho, basis, tpiba,
+                                    result.density_gradient, local_gradient);
             result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, local_gradient);
         }
+    }
+    if (filled)
+    {
+        result.density_reciprocal.swap(density_g);
     }
     std::vector<double> coefficient;
     dielectric_of_boundary(cavity, solute_gradient, solute_laplacian, result, coefficient);
@@ -773,8 +794,8 @@ SccsResponse solve_sccs_response(
     }
     if (uses_switching_lowpass(cavity))
     {
-        switching_boundary_potential(charge, potential, solute_gradient, cavity, basis, tpiba,
-                                     result);
+        switching_boundary_potential(charge, potential, solute_gradient, cavity, filter, basis,
+                                     tpiba, result);
     }
     else
     {

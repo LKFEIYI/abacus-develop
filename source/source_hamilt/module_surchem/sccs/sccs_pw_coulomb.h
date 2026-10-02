@@ -18,6 +18,16 @@ std::vector<ModuleBase::Vector3<double>> periodic_gradient(
     const ModulePW::PW_Basis& basis,
     double tpiba);
 
+// Spectral gradient of a real field from its coefficients values_g on the
+// PW_Basis G vectors, so that one forward transform can serve several
+// derivatives. A non-empty filter (one weight per G vector) multiplies every
+// coefficient.
+std::vector<ModuleBase::Vector3<double>> spectral_gradient(
+    const std::vector<std::complex<double>>& values_g,
+    const std::vector<double>& filter,
+    const ModulePW::PW_Basis& basis,
+    double tpiba);
+
 class PeriodicCoulombOperator : public CoulombOperator
 {
   public:

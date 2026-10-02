@@ -1047,10 +1047,11 @@ TEST(SccsDriver, PccFilledDielectricPathsFollowTheLowpass)
     }
 }
 
-// The periodic filled response keeps grad n and grad c = p * grad s for the
-// chain surface instead of recomputing them. They must equal a fresh
-// evaluation from the cavity density bit for bit, stay empty without the
-// filling, and the surface must refuse a response that lacks them.
+// The filled response keeps grad n, grad c = p * grad s and the density
+// coefficients for the chain surface instead of recomputing them, with the
+// periodic chain dielectric and with the PCC lowpass FFT dielectric. They must
+// equal a fresh evaluation from the cavity density bit for bit, stay empty
+// without the filling, and the surface must refuse a response that lacks them.
 TEST(SccsDriver, SolventAwareChainSurfaceReusesTheResponseGradients)
 {
     const double scale = 12.0;
@@ -1062,56 +1063,86 @@ TEST(SccsDriver, SolventAwareChainSurfaceReusesTheResponseGradients)
         = ModuleSurchem::pw_grid_positions(basis, cubic_lattice(), scale);
     const ModuleBase::Vector3<double> center = cell_center(cubic_lattice(), scale);
     const CationSolute solute = make_cation_solute(positions, center, volume_element);
-    const ModuleSccs::SccsConfig config = filled_cation_config(78.3);
-    ModuleSccs::SccsState state;
-    const ModuleSccs::SccsResult result = evaluate_filled_cation(
-        solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, state);
-    const ModuleSccs::SccsResponse& response = result.response;
-    const std::vector<double>& cavity_density = result.charge.electron;
-
     const ModuleSurchem::SerialChargeReduction reduction;
-    const std::vector<double> kernel = ModuleSccs::solvent_probe_kernel(
-        basis, cubic_lattice(), scale, config.solvent_aware, reduction);
-    const std::vector<ModuleBase::Vector3<double>> density_gradient
-        = ModuleSccs::periodic_gradient(cavity_density, basis, tpiba);
-    std::vector<ModuleBase::Vector3<double>> local_gradient(positions.size());
-    for (std::size_t ir = 0; ir < positions.size(); ++ir)
+    const ModulePcc::Boundary boundaries[] = {ModulePcc::Boundary::Periodic, ModulePcc::Boundary::Pcc0d};
+    for (const ModulePcc::Boundary boundary : boundaries)
     {
-        const ModuleSccs::CavityPoint point
-            = ModuleSccs::evaluate_cavity(cavity_density[ir], config.cavity);
-        local_gradient[ir] = density_gradient[ir] * point.dsolute_drho;
-    }
-    const std::vector<ModuleBase::Vector3<double>> fraction_gradient
-        = ModuleSccs::convolve_probe_gradient(kernel, basis, local_gradient);
-    ASSERT_EQ(response.density_gradient.size(), positions.size());
-    ASSERT_EQ(response.fraction_gradient.size(), positions.size());
-    double density_difference = 0.0;
-    double fraction_difference = 0.0;
-    double fraction_scale = 0.0;
-    for (std::size_t ir = 0; ir < positions.size(); ++ir)
-    {
-        const ModuleBase::Vector3<double> density_change
-            = response.density_gradient[ir] - density_gradient[ir];
-        const ModuleBase::Vector3<double> fraction_change
-            = response.fraction_gradient[ir] - fraction_gradient[ir];
-        density_difference = std::max(density_difference, density_change.norm());
-        fraction_difference = std::max(fraction_difference, fraction_change.norm());
-        fraction_scale = std::max(fraction_scale, fraction_gradient[ir].norm());
-    }
-    EXPECT_GT(fraction_scale, 1.0e-3);
-    EXPECT_EQ(density_difference, 0.0);
-    EXPECT_EQ(fraction_difference, 0.0);
+        ModuleSccs::SccsConfig config = filled_cation_config(78.3);
+        config.boundary = boundary;
+        if (boundary == ModulePcc::Boundary::Pcc0d)
+        {
+            config.cavity.lowpass_p1 = test_lowpass_p1;
+            config.cavity.lowpass_p2 = test_lowpass_p2;
+        }
+        ModuleSccs::SccsState state;
+        const ModuleSccs::SccsResult result = evaluate_filled_cation(
+            solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, state);
+        const ModuleSccs::SccsResponse& response = result.response;
+        const std::vector<double>& cavity_density = result.charge.electron;
 
-    ModuleSccs::SccsResponse without_gradients = response;
-    without_gradients.fraction_gradient.clear();
-    EXPECT_THROW(ModuleSccs::solvent_aware_surface_of_density(cavity_density,
-                                                              config.cavity,
-                                                              without_gradients,
-                                                              kernel,
-                                                              basis,
-                                                              tpiba,
-                                                              config.surface_regularization),
-                 std::invalid_argument);
+        const std::vector<double> kernel = ModuleSccs::solvent_probe_kernel(
+            basis, cubic_lattice(), scale, config.solvent_aware, reduction);
+        std::vector<std::complex<double>> density_g(basis.npw);
+        basis.real2recip(cavity_density.data(), density_g.data());
+        const std::vector<ModuleBase::Vector3<double>> density_gradient
+            = ModuleSccs::periodic_gradient(cavity_density, basis, tpiba);
+        std::vector<ModuleBase::Vector3<double>> local_gradient(positions.size());
+        for (std::size_t ir = 0; ir < positions.size(); ++ir)
+        {
+            const ModuleSccs::CavityPoint point
+                = ModuleSccs::evaluate_cavity(cavity_density[ir], config.cavity);
+            local_gradient[ir] = density_gradient[ir] * point.dsolute_drho;
+        }
+        const std::vector<ModuleBase::Vector3<double>> fraction_gradient
+            = ModuleSccs::convolve_probe_gradient(kernel, basis, local_gradient);
+        ASSERT_EQ(response.density_gradient.size(), positions.size());
+        ASSERT_EQ(response.fraction_gradient.size(), positions.size());
+        ASSERT_EQ(response.density_reciprocal.size(), density_g.size());
+        double density_difference = 0.0;
+        double fraction_difference = 0.0;
+        double fraction_scale = 0.0;
+        for (std::size_t ir = 0; ir < positions.size(); ++ir)
+        {
+            const ModuleBase::Vector3<double> density_change
+                = response.density_gradient[ir] - density_gradient[ir];
+            const ModuleBase::Vector3<double> fraction_change
+                = response.fraction_gradient[ir] - fraction_gradient[ir];
+            density_difference = std::max(density_difference, density_change.norm());
+            fraction_difference = std::max(fraction_difference, fraction_change.norm());
+            fraction_scale = std::max(fraction_scale, fraction_gradient[ir].norm());
+        }
+        double coefficient_difference = 0.0;
+        for (std::size_t ig = 0; ig < density_g.size(); ++ig)
+        {
+            const double change = std::abs(response.density_reciprocal[ig] - density_g[ig]);
+            coefficient_difference = std::max(coefficient_difference, change);
+        }
+        EXPECT_GT(fraction_scale, 1.0e-3);
+        EXPECT_EQ(density_difference, 0.0);
+        EXPECT_EQ(fraction_difference, 0.0);
+        EXPECT_EQ(coefficient_difference, 0.0);
+
+        ModuleSccs::SccsResponse without_gradients = response;
+        without_gradients.fraction_gradient.clear();
+        EXPECT_THROW(ModuleSccs::solvent_aware_surface_of_density(cavity_density,
+                                                                  config.cavity,
+                                                                  without_gradients,
+                                                                  kernel,
+                                                                  basis,
+                                                                  tpiba,
+                                                                  config.surface_regularization),
+                     std::invalid_argument);
+        ModuleSccs::SccsResponse without_coefficients = response;
+        without_coefficients.density_reciprocal.clear();
+        EXPECT_THROW(ModuleSccs::solvent_aware_surface_of_density(cavity_density,
+                                                                  config.cavity,
+                                                                  without_coefficients,
+                                                                  kernel,
+                                                                  basis,
+                                                                  tpiba,
+                                                                  config.surface_regularization),
+                     std::invalid_argument);
+    }
 
     const ModuleSccs::SccsResult local
         = evaluate_cation(solute.electron_density, solute.ionic_density,
@@ -1119,6 +1150,7 @@ TEST(SccsDriver, SolventAwareChainSurfaceReusesTheResponseGradients)
                           cubic_lattice(), scale, volume_element, -1.0, -1.0);
     EXPECT_TRUE(local.response.density_gradient.empty());
     EXPECT_TRUE(local.response.fraction_gradient.empty());
+    EXPECT_TRUE(local.response.density_reciprocal.empty());
 }
 
 // A pseudo-valence density that vanishes at the nucleus puts dielectric inside

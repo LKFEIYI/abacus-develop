@@ -5,6 +5,8 @@
 #include "sccs_poisson.h"
 #include "sccs_solvent_aware.h"
 
+#include <complex>
+
 namespace ModulePW
 {
 class PW_Basis;
@@ -38,6 +40,10 @@ struct SccsResponse
     // for solvent_aware_surface_of_density with every boundary condition.
     std::vector<ModuleBase::Vector3<double>> density_gradient;
     std::vector<ModuleBase::Vector3<double>> fraction_gradient;
+    // Solvent-aware only, empty otherwise: the Fourier coefficients of the
+    // cavity density on the PW_Basis G vectors, for the chain Hessian of the
+    // surface.
+    std::vector<std::complex<double>> density_reciprocal;
     std::vector<double> epsilon;
     std::vector<ModuleBase::Vector3<double>> grad_log_epsilon;
     PolarizationResult polarization;
@@ -67,9 +73,9 @@ std::vector<double> boundary_to_density_potential(const SccsResponse& response,
 // Solvent-aware surface (Environ boundary_of_density with deriv_method
 // 'chain' and need_hessian): grad s = s' grad n and
 // H s = s' H n + s'' grad n grad n^T from the spectral density derivatives,
-// passed to solvent_aware_surface for the filled boundary of response. grad n
-// and grad c come from response, which must be the solvent-aware solution for
-// this density. With PCC the dielectric still differentiates s_sa on the FFT
+// passed to solvent_aware_surface for the filled boundary of response. grad n,
+// grad c and the density coefficients come from response, which must be the
+// solvent-aware solution for this density. With PCC the dielectric still differentiates s_sa on the FFT
 // grid; the surface uses these chain derivatives as in the periodic path.
 SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& density,
                                                      const CavityParameters& cavity,
