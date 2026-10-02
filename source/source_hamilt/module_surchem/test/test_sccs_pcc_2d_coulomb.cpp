@@ -274,6 +274,7 @@ TEST_F(SccsPcc2dCoulombTest, SqrtCgKeepsChargedUniformDielectricPccGauge)
     solver.max_iterations = 10;
     solver.tolerance_rms = 1.0e-14;
     solver.tolerance_max = 1.0e-14;
+    solver.polarization_diagnostics = true;
     const std::vector<double> cold_start;
     const ModuleSccs::SccsResponse result
         = ModuleSccs::solve_sccs_response(cavity_density,

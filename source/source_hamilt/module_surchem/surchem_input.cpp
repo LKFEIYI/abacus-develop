@@ -179,6 +179,7 @@ SurchemParameters make_parameters(const Input_para& inp,
     parameters.sccs_config.tolerance_max = inp.sccs_tol_max;
     parameters.sccs_config.surface_regularization = inp.sccs_surface_eta;
     parameters.sccs_config.check_fixed_point = inp.sccs_debug >= 2;
+    parameters.sccs_config.polarization_diagnostics = inp.sccs_debug >= 2;
     parameters.start_drho = inp.sccs_start_drho;
     parameters.start_nmax = inp.sccs_start_nmax;
     ModuleSccs::validate_config(parameters.sccs_config);

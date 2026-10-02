@@ -575,6 +575,8 @@ TEST(HCorrSccs, AppliesChargedPcc2dEnergyAndPotential)
     parameters.expected_electron_count = 0.8;
     parameters.expected_ionic_charge = 1.0;
     parameters.debug = 2;
+    // make_parameters sets this with sccs_debug 2.
+    parameters.sccs_config.polarization_diagnostics = true;
     parameters.normalization_tolerance = 1.0e-10;
     parameters.sccs_config.cavity.density_min = 1.0e-2;
     parameters.sccs_config.cavity.density_max = 2.0e-2;

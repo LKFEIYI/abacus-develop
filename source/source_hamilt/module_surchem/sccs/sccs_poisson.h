@@ -11,6 +11,8 @@ namespace ModuleSccs
 struct ElectrostaticField
 {
     std::vector<double> potential;
+    // Spectral gradient of the potential; empty with the switching lowpass
+    // unless PolarizationSolverParameters::polarization_diagnostics is set.
     std::vector<ModuleBase::Vector3<double>> gradient;
 };
 
@@ -55,6 +57,10 @@ struct PolarizationSolverParameters
     double tolerance_max = 0.0;
     // Verify v = P(q - K v) after convergence (one extra Poisson solve).
     bool check_fixed_point = false;
+    // Also form the field gradient with the switching lowpass, whose exact
+    // cavity derivative does not use it, and the open-boundary polarization
+    // density; both serve only the sccs_debug diagnostics.
+    bool polarization_diagnostics = false;
 };
 
 struct PolarizationResult
@@ -66,8 +72,9 @@ struct PolarizationResult
     bool fixed_point_checked = false;
     double fixed_point_defect_rms = 0.0;
     double fixed_point_defect_max = 0.0;
-    // Open boundaries only: the ENVIRON dielectric_of_potential polarization
-    // density, for the PCC moment diagnostics. Empty when periodic.
+    // Open boundaries with polarization_diagnostics only: the ENVIRON
+    // dielectric_of_potential polarization density, for the PCC moment
+    // diagnostics. Empty otherwise.
     std::vector<double> polarization_charge;
     ElectrostaticField field;
 };

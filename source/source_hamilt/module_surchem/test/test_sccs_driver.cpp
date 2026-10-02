@@ -64,6 +64,8 @@ ModuleSccs::SccsResult evaluate_uniform_charge(const double net_charge,
     config.max_iterations = 100;
     config.tolerance_rms = 1.0e-14;
     config.tolerance_max = 1.0e-14;
+    // The moment checks read the polarization density diagnostics.
+    config.polarization_diagnostics = true;
     const ModulePcc::Pcc2dGeometry pcc_2d_geometry;
     const ModuleSurchem::SerialChargeReduction charge_reduction;
     return ModuleSccs::evaluate_pw_sccs(electron_density,
@@ -120,6 +122,8 @@ TEST(SccsDriver, EvaluatesNeutralAndFixedChargePcc2dSources)
     config.max_iterations = 100;
     config.tolerance_rms = 1.0e-13;
     config.tolerance_max = 1.0e-13;
+    // The moment checks read the polarization density diagnostics.
+    config.polarization_diagnostics = true;
     const ModulePcc::PccGeometry pcc;
     const ModuleSurchem::SerialChargeReduction charge_reduction;
     ModuleSccs::SccsState state;
@@ -292,6 +296,8 @@ TEST(SccsDriver, ChargedPcc2dSqrtCgPolarizationSatisfiesGaussLaw)
     config.max_iterations = 300;
     config.tolerance_rms = 1.0e-12;
     config.tolerance_max = 1.0e-10;
+    // The moment checks read the polarization density diagnostics.
+    config.polarization_diagnostics = true;
     const ModulePcc::PccGeometry pcc;
     const ModuleSurchem::SerialChargeReduction charge_reduction;
     ModuleSccs::SccsState state;
@@ -625,11 +631,16 @@ void check_cation_cavity_derivative(const ModulePcc::Boundary boundary,
         = evaluate_cation(solute.electron_density, solute.ionic_density, boundary, basis,
                           positions, center, lattice, scale, volume_element, test_lowpass_p1,
                           test_lowpass_p2);
+    // The lowpass response forms no field without the diagnostics; take the
+    // FFT gradient of the solved potential for the continuum comparison.
+    const std::vector<ModuleBase::Vector3<double>> field_gradient
+        = ModuleSccs::periodic_gradient(result.response.polarization.field.potential, basis,
+                                        basis.tpiba);
     double exact_maximum = 0.0;
     double continuum_maximum = 0.0;
     for (std::size_t ir = 0; ir < positions.size(); ++ir)
     {
-        const double gradient_square = result.response.polarization.field.gradient[ir].norm2();
+        const double gradient_square = field_gradient[ir].norm2();
         const double continuum_cavity
             = continuum_cavity_potential(result.response, ir, gradient_square);
         exact_maximum = std::max(exact_maximum, std::abs(result.response.cavity_potential[ir]));
@@ -657,7 +668,7 @@ void check_cation_cavity_derivative(const ModulePcc::Boundary boundary,
             plus[ir] = solute.electron_density[ir] + step * direction[ir];
             minus[ir] = solute.electron_density[ir] - step * direction[ir];
             exact += result.electrostatic.electron_potential[ir] * direction[ir] * volume_element;
-            const double gradient_square = result.response.polarization.field.gradient[ir].norm2();
+            const double gradient_square = field_gradient[ir].norm2();
             const double continuum_potential
                 = -result.electrostatic.reaction_potential[ir]
                   + continuum_cavity_potential(result.response, ir, gradient_square);
@@ -1045,6 +1056,68 @@ TEST(SccsDriver, PccFilledDielectricPathsFollowTheLowpass)
             EXPECT_EQ(potential_error, 0.0);
         }
     }
+}
+
+// The sccs_debug diagnostics (the lowpass field gradient and the PCC
+// polarization density and moments) must leave the solution unchanged, and
+// are skipped without polarization_diagnostics. Without the lowpass the
+// continuum cavity potential still forms the field gradient.
+TEST(SccsDriver, PolarizationDiagnosticsLeaveThePccSolutionUnchanged)
+{
+    const double scale = 12.0;
+    ModulePW::PW_Basis basis("cpu", "double");
+    make_basis(cubic_lattice(), scale, 60.0, basis);
+    const double volume_element = scale * scale * scale / static_cast<double>(basis.nxyz);
+    const std::vector<ModuleBase::Vector3<double>> positions
+        = ModuleSurchem::pw_grid_positions(basis, cubic_lattice(), scale);
+    const ModuleBase::Vector3<double> center = cell_center(cubic_lattice(), scale);
+    const CationSolute solute = make_cation_solute(positions, center, volume_element);
+    ModuleSccs::SccsConfig config = filled_cation_config(78.3);
+    config.boundary = ModulePcc::Boundary::Pcc0d;
+    config.cavity.lowpass_p1 = test_lowpass_p1;
+    config.cavity.lowpass_p2 = test_lowpass_p2;
+    ModuleSccs::SccsState quiet_state;
+    const ModuleSccs::SccsResult quiet = evaluate_filled_cation(
+        solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, quiet_state);
+    config.polarization_diagnostics = true;
+    ModuleSccs::SccsState verbose_state;
+    const ModuleSccs::SccsResult verbose = evaluate_filled_cation(
+        solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, verbose_state);
+
+    EXPECT_TRUE(quiet.response.polarization.field.gradient.empty());
+    EXPECT_TRUE(quiet.response.polarization.polarization_charge.empty());
+    EXPECT_EQ(quiet.polarization_moments.charge, 0.0);
+    EXPECT_EQ(quiet.screened_moments.charge, 0.0);
+    ASSERT_EQ(verbose.response.polarization.field.gradient.size(), positions.size());
+    ASSERT_EQ(verbose.response.polarization.polarization_charge.size(), positions.size());
+    // The density integral carries a large finite-grid error at this cutoff;
+    // only its sign is physical here.
+    EXPECT_LT(verbose.polarization_moments.charge, 0.0);
+    EXPECT_DOUBLE_EQ(verbose.screened_moments.charge,
+                     verbose.solute_moments.charge + verbose.polarization_moments.charge);
+
+    EXPECT_EQ(quiet.electrostatic.reaction_energy, verbose.electrostatic.reaction_energy);
+    EXPECT_EQ(quiet.non_electrostatic.surface_energy, verbose.non_electrostatic.surface_energy);
+    EXPECT_EQ(quiet.response.polarization.iterations, verbose.response.polarization.iterations);
+    double potential_difference = 0.0;
+    for (std::size_t ir = 0; ir < positions.size(); ++ir)
+    {
+        const double electron_change
+            = std::abs(quiet.electron_potential_hartree[ir] - verbose.electron_potential_hartree[ir]);
+        const double cavity_change
+            = std::abs(quiet.cavity_potential[ir] - verbose.cavity_potential[ir]);
+        potential_difference = std::max(potential_difference, std::max(electron_change, cavity_change));
+    }
+    EXPECT_EQ(potential_difference, 0.0);
+
+    config.cavity.lowpass_p1 = -1.0;
+    config.cavity.lowpass_p2 = -1.0;
+    config.polarization_diagnostics = false;
+    ModuleSccs::SccsState continuum_state;
+    const ModuleSccs::SccsResult continuum = evaluate_filled_cation(
+        solute.electron_density, solute, config, basis, positions, cubic_lattice(), scale, continuum_state);
+    EXPECT_EQ(continuum.response.polarization.field.gradient.size(), positions.size());
+    EXPECT_TRUE(continuum.response.polarization.polarization_charge.empty());
 }
 
 // The filled response keeps grad n, grad c = p * grad s and the density

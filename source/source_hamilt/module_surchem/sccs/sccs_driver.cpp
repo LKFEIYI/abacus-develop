@@ -203,6 +203,7 @@ SccsResult evaluate_pw_sccs(
     solver_parameters.tolerance_rms = config.tolerance_rms;
     solver_parameters.tolerance_max = config.tolerance_max;
     solver_parameters.check_fixed_point = config.check_fixed_point;
+    solver_parameters.polarization_diagnostics = config.polarization_diagnostics;
     const std::uint64_t position_signature = grid_position_signature(positions);
     // A changed grid, cavity or PCC geometry invalidates the warm-start potential.
     // Borrow the cache until the solve succeeds; state is updated only below.
@@ -306,8 +307,9 @@ SccsResult evaluate_pw_sccs(
             = result.response.cavity_potential[index] + non_electrostatic_potential[index];
     }
 
-    // PCC moments of the smooth solute and of the polarization density, for
-    // the Gauss's-law check and the sccs_debug report; none when periodic.
+    // PCC moments of the smooth solute and, with polarization_diagnostics, of
+    // the polarization density for the sccs_debug report; none when periodic.
+    const bool polarization_density = !result.response.polarization.polarization_charge.empty();
     if (config.boundary == ModulePcc::Boundary::Pcc0d)
     {
         result.solute_moments
@@ -316,14 +318,18 @@ SccsResult evaluate_pw_sccs(
                                           volume_element,
                                           pcc_geometry,
                                           reduction);
-        result.polarization_moments
-            = ModulePcc::reduced_pcc_density_moments(
-                result.response.polarization.polarization_charge,
-                positions,
-                volume_element,
-                pcc_geometry,
-                reduction);
-        result.screened_moments = ModulePcc::sum_moments(result.solute_moments, result.polarization_moments);
+        if (polarization_density)
+        {
+            result.polarization_moments
+                = ModulePcc::reduced_pcc_density_moments(
+                    result.response.polarization.polarization_charge,
+                    positions,
+                    volume_element,
+                    pcc_geometry,
+                    reduction);
+            result.screened_moments
+                = ModulePcc::sum_moments(result.solute_moments, result.polarization_moments);
+        }
         result.smooth_vacuum_pcc_energy
             = ModulePcc::pcc_self_energy(result.solute_moments, pcc_geometry.parameters);
     }
@@ -335,14 +341,17 @@ SccsResult evaluate_pw_sccs(
                                              volume_element,
                                              pcc_2d_geometry,
                                              reduction);
-        result.polarization_moments_2d
-            = ModulePcc::reduced_pcc_2d_density_moments(result.response.polarization.polarization_charge,
-                                             positions,
-                                             volume_element,
-                                             pcc_2d_geometry,
-                                             reduction);
-        result.screened_moments_2d = ModulePcc::pcc_2d_sum_moments(result.solute_moments_2d,
-                                                                   result.polarization_moments_2d);
+        if (polarization_density)
+        {
+            result.polarization_moments_2d
+                = ModulePcc::reduced_pcc_2d_density_moments(result.response.polarization.polarization_charge,
+                                                 positions,
+                                                 volume_element,
+                                                 pcc_2d_geometry,
+                                                 reduction);
+            result.screened_moments_2d = ModulePcc::pcc_2d_sum_moments(result.solute_moments_2d,
+                                                                       result.polarization_moments_2d);
+        }
         const double global_grid_size = static_cast<double>(basis.nxyz);
         const double grid_charge_tolerance
             = config.tolerance_max * volume_element * global_grid_size;

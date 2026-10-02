@@ -53,9 +53,11 @@ TEST(SurchemInput, TransfersPresetAndSolverControls)
     EXPECT_EQ(parameters.start_nmax, 12);
     EXPECT_EQ(parameters.debug, 2);
     EXPECT_TRUE(parameters.sccs_config.check_fixed_point);
+    EXPECT_TRUE(parameters.sccs_config.polarization_diagnostics);
     input.sccs_debug = 1;
     const SurchemParameters summary = ModuleSurchem::make_parameters(input, cell, 0.0, 2);
     EXPECT_FALSE(summary.sccs_config.check_fixed_point);
+    EXPECT_FALSE(summary.sccs_config.polarization_diagnostics);
     EXPECT_DOUBLE_EQ(summary.sccs_config.cavity.lowpass_p1, -1.0);
     EXPECT_DOUBLE_EQ(summary.sccs_config.cavity.lowpass_p2, -1.0);
     EXPECT_FALSE(summary.sccs_config.core_electrons);

@@ -308,39 +308,6 @@ std::vector<double> switching_filter(const CavityParameters& cavity,
     return filter;
 }
 
-// Spectral divergence matching spectral_gradient with the same filter; minus
-// this divergence is the transpose of that gradient.
-void switching_divergence(const std::vector<ModuleBase::Vector3<double>>& field,
-                          const std::vector<double>& filter,
-                          const ModulePW::PW_Basis& basis,
-                          const double tpiba,
-                          std::vector<double>& divergence)
-{
-    if (filter.size() != static_cast<std::size_t>(basis.npw))
-    {
-        throw std::invalid_argument("SCCS switching divergence requires the lowpass filter");
-    }
-    const std::size_t size = field.size();
-    std::vector<double> component(size);
-    std::vector<std::complex<double>> component_g(basis.npw);
-    const std::complex<double> zero(0.0, 0.0);
-    std::vector<std::complex<double>> divergence_g(basis.npw, zero);
-    for (int d = 0; d < 3; ++d)
-    {
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            component[i] = field[i][d];
-        }
-        basis.real2recip(component.data(), component_g.data());
-        for (int ig = 0; ig < basis.npw; ++ig)
-        {
-            divergence_g[ig] += ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][d] * component_g[ig] * filter[ig];
-        }
-    }
-    divergence.resize(size);
-    basis.recip2real(divergence_g.data(), divergence.data());
-}
-
 // With PCC the potential at the cavity edge carries the open-boundary monopole
 // and dipole. The chain-rule f drops steeply to zero at density_min, and the
 // sampled f v source then fails to converge with the grid. Differentiate the
@@ -385,6 +352,64 @@ void filled_fft_derivatives(const SccsResponse& result,
                                     probe_kernel, basis, gradient, laplacian);
 }
 
+// Periodic dielectric derivatives (Environ deriv_method 'chain'): the chain
+// grad s and lapl s of the density, carried through the filling when it is
+// on. The filled response keeps grad n and grad c for its chain surface.
+void periodic_dielectric_derivatives(const std::vector<double>& density,
+                                     const std::vector<std::complex<double>>& density_g,
+                                     const CavityParameters& cavity,
+                                     const std::vector<double>& probe_kernel,
+                                     const ModulePW::PW_Basis& basis,
+                                     const double tpiba,
+                                     SccsResponse& result,
+                                     std::vector<ModuleBase::Vector3<double>>& gradient,
+                                     std::vector<double>& laplacian)
+{
+    std::vector<ModuleBase::Vector3<double>> density_gradient;
+    chain_boundary_gradient(density_g, result.dsolute_drho, basis, tpiba, density_gradient, gradient);
+    chain_boundary_laplacian(density, density_g, density_gradient, cavity, basis, tpiba, laplacian);
+    if (result.local_solute.empty())
+    {
+        return;
+    }
+    result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, gradient);
+    solvent_aware_chain_derivatives(result.local_solute, result.filling, result.fraction_gradient,
+                                    probe_kernel, basis, gradient, laplacian);
+    result.density_gradient.swap(density_gradient);
+}
+
+// PCC dielectric derivatives on the FFT grid (Environ deriv_method 'fft'): of
+// s, or of s_sa with the lowpass, or of the local s with the analytic filling
+// without it (an empty filter). The filled surface still takes the chain
+// gradients of the periodic path.
+void open_dielectric_derivatives(const std::vector<std::complex<double>>& density_g,
+                                 const std::vector<double>& filter,
+                                 const std::vector<double>& probe_kernel,
+                                 const ModulePW::PW_Basis& basis,
+                                 const double tpiba,
+                                 SccsResponse& result,
+                                 std::vector<ModuleBase::Vector3<double>>& gradient,
+                                 std::vector<double>& laplacian)
+{
+    const bool filled = !result.local_solute.empty();
+    if (filled && filter.empty())
+    {
+        filled_fft_derivatives(result, filter, probe_kernel, basis, tpiba, gradient, laplacian);
+    }
+    else
+    {
+        switching_boundary_derivatives(result.solute, filter, basis, tpiba, gradient, laplacian);
+    }
+    if (!filled)
+    {
+        return;
+    }
+    std::vector<ModuleBase::Vector3<double>> local_gradient;
+    chain_boundary_gradient(density_g, result.dsolute_drho, basis, tpiba, result.density_gradient,
+                            local_gradient);
+    result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, local_gradient);
+}
+
 // Continuum boundary potential -(deps/ds)|grad v|^2/(8 pi) of Environ
 // dielectric::de_dboundary, with deps/ds = -L eps and grad v from the solved
 // potential.
@@ -413,7 +438,9 @@ void continuum_boundary_potential(const CavityParameters& cavity, SccsResponse& 
 // dE/ds = L/2 (q v + lapl b + L div(b grad s)).
 // Its continuum limit is L eps |grad v|^2/(8 pi). Without the filter the
 // discrete derivative is not grid-converged at the cavity edge and its
-// grid-scale oscillations drive the electronic SCF to diverge.
+// grid-scale oscillations drive the electronic SCF to diverge. Both filtered
+// transposes are summed in G space, so one inverse transform returns them;
+// minus the filtered divergence is the transpose of the filtered gradient.
 void switching_boundary_potential(const std::vector<double>& charge,
                                 const std::vector<double>& potential,
                                 const std::vector<ModuleBase::Vector3<double>>& solute_gradient,
@@ -423,31 +450,136 @@ void switching_boundary_potential(const std::vector<double>& charge,
                                 const double tpiba,
                                 SccsResponse& result)
 {
+    if (filter.size() != static_cast<std::size_t>(basis.npw))
+    {
+        throw std::invalid_argument("SCCS switching boundary potential requires the lowpass filter");
+    }
     const std::size_t size = charge.size();
     const double log_bulk = std::log(cavity.epsilon_bulk);
     std::vector<double> weight(size);
-    std::vector<ModuleBase::Vector3<double>> weighted_gradient(size);
     for (std::size_t i = 0; i < size; ++i)
     {
         weight[i] = result.epsilon[i] * potential[i] * potential[i] / (8.0 * ModuleBase::PI);
-        for (int d = 0; d < 3; ++d)
+    }
+    // lapl b + L div(b grad s), filtered, accumulated in G space.
+    std::vector<std::complex<double>> transpose_g(basis.npw);
+    basis.real2recip(weight.data(), transpose_g.data());
+    for (int ig = 0; ig < basis.npw; ++ig)
+    {
+        transpose_g[ig] *= -tpiba * tpiba * basis.gg[ig] * filter[ig];
+    }
+    std::vector<double> component(size);
+    std::vector<std::complex<double>> component_g(basis.npw);
+    for (int d = 0; d < 3; ++d)
+    {
+        for (std::size_t i = 0; i < size; ++i)
         {
-            weighted_gradient[i][d] = weight[i] * solute_gradient[i][d];
+            component[i] = weight[i] * solute_gradient[i][d];
+        }
+        basis.real2recip(component.data(), component_g.data());
+        for (int ig = 0; ig < basis.npw; ++ig)
+        {
+            transpose_g[ig] += log_bulk * ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][d]
+                               * component_g[ig] * filter[ig];
         }
     }
-    std::vector<std::complex<double>> weight_g(basis.npw);
-    basis.real2recip(weight.data(), weight_g.data());
-    std::vector<double> weight_laplacian;
-    spectral_laplacian(weight_g, filter, basis, tpiba, weight_laplacian);
-    std::vector<double> weighted_divergence;
-    switching_divergence(weighted_gradient, filter, basis, tpiba, weighted_divergence);
+    std::vector<double> transpose(size);
+    basis.recip2real(transpose_g.data(), transpose.data());
     result.boundary_potential.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
-        result.boundary_potential[i] = 0.5 * log_bulk
-                                       * (charge[i] * potential[i] + weight_laplacian[i]
-                                          + log_bulk * weighted_divergence[i]);
+        result.boundary_potential[i]
+            = 0.5 * log_bulk * (charge[i] * potential[i] + transpose[i]);
     }
+}
+
+// ENVIRON generalized_sqrt warm start: one preconditioned fixed-point step
+// v = P(q - f v_old) from the previous potential, whose charge residual is
+// f (v_old - v) with f the sqrt-CG coefficient. Keep it in potential and
+// residual only when it improves on the cold-start residual of polarization;
+// true when kept.
+bool warm_start(const std::vector<double>& charge,
+                const std::vector<double>& coefficient,
+                const std::vector<double>& initial_potential,
+                const ModuleSurchem::ChargeReduction& reduction,
+                SqrtPreconditioner& preconditioner,
+                std::vector<double>& potential,
+                std::vector<double>& residual,
+                PolarizationResult& polarization)
+{
+    const std::size_t size = charge.size();
+    std::vector<double> guess_residual(size);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        guess_residual[i] = charge[i] - coefficient[i] * initial_potential[i];
+    }
+    std::vector<double> guess;
+    preconditioner.apply(guess_residual, guess);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        guess_residual[i] = coefficient[i] * (initial_potential[i] - guess[i]);
+    }
+    double guess_rms = 0.0;
+    double guess_max = 0.0;
+    reduced_rms_max(guess_residual, reduction, guess_rms, guess_max);
+    if (guess_rms >= polarization.residual_rms)
+    {
+        return false;
+    }
+    potential.swap(guess);
+    residual.swap(guess_residual);
+    polarization.warm_started = true;
+    return true;
+}
+
+// Preconditioned CG on K v = q with K = P^-1 + f, from potential and its
+// charge residual. P^-1 z = r for z = P r, so K d follows from the recurrence
+// without P^-1. Returns whether both residual tolerances were reached.
+bool sqrt_cg(const std::vector<double>& coefficient,
+             const PolarizationSolverParameters& solver,
+             const ModulePW::PW_Basis& basis,
+             const ModuleSurchem::ChargeReduction& reduction,
+             SqrtPreconditioner& preconditioner,
+             std::vector<double>& potential,
+             std::vector<double>& residual,
+             PolarizationResult& polarization)
+{
+    const std::size_t size = potential.size();
+    std::vector<double> direction(size, 0.0);
+    std::vector<double> image(size, 0.0);
+    std::vector<double> z;
+    double old_rz = 0.0;
+    bool converged = false;
+    for (int iteration = 1; !converged && iteration <= solver.max_iterations; ++iteration)
+    {
+        preconditioner.apply(residual, z);
+        const double rz = grid_dot(residual, z, basis, reduction);
+        if (!std::isfinite(rz) || std::abs(rz) < 1e-30)
+        {
+            throw std::runtime_error("CG sqrt null/nonfinite preconditioned residual");
+        }
+        const double beta = std::abs(old_rz) > 1e-30 ? rz / old_rz : 0.0;
+        old_rz = rz;
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            direction[i] = z[i] + beta * direction[i];
+            image[i] = coefficient[i] * z[i] + residual[i] + beta * image[i];
+        }
+        const double curvature = grid_dot(direction, image, basis, reduction);
+        if (!std::isfinite(curvature) || curvature == 0.0)
+        {
+            throw std::runtime_error("CG sqrt invalid curvature");
+        }
+        const double alpha = rz / curvature;
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            potential[i] += alpha * direction[i];
+            residual[i] -= alpha * image[i];
+        }
+        polarization.iterations = iteration;
+        converged = residual_converged(residual, solver, reduction, polarization);
+    }
+    return converged;
 }
 
 // Check the preconditioned equation v = P(q - K v) independently of the CG
@@ -497,8 +629,7 @@ void remove_mean(const ModulePW::PW_Basis& basis,
 }
 
 // The CG builds sqrt(eps) v = w = C_PCC(s) with s = (q - f v)/sqrt(eps).
-// Report the ENVIRON dielectric_of_potential polarization density and the
-// far-field polarization charge int(s)/sqrt(eps_bulk) - int(q).
+// Report the far-field polarization charge int(s)/sqrt(eps_bulk) - int(q).
 void finish_open_boundary_response(const std::vector<double>& charge,
                                    const std::vector<double>& coefficient,
                                    const std::vector<double>& invsqrt,
@@ -516,10 +647,6 @@ void finish_open_boundary_response(const std::vector<double>& charge,
         source_sum += (charge[i] - coefficient[i] * potential[i]) * invsqrt[i];
         solute_sum += charge[i];
     }
-    // The corrected potential has no periodic Laplacian inverse; use the
-    // ENVIRON dielectric_of_potential polarization charge instead. Its integral
-    // carries a finite-grid error; the far field fixes the net screening charge.
-    result.polarization.polarization_charge = continuum_polarization_charge(charge, result);
     reduction.reduce_sum(source_sum);
     reduction.reduce_sum(solute_sum);
     const double volume_element = basis.omega / basis.nxyz;
@@ -654,43 +781,15 @@ SccsResponse solve_sccs_response(
     }
     std::vector<ModuleBase::Vector3<double>> solute_gradient;
     std::vector<double> solute_laplacian;
-    if (!open_boundary)
+    if (open_boundary)
     {
-        std::vector<ModuleBase::Vector3<double>> density_gradient;
-        chain_boundary_gradient(density_g, result.dsolute_drho, basis, tpiba, density_gradient,
-                                solute_gradient);
-        chain_boundary_laplacian(density, density_g, density_gradient, cavity, basis, tpiba,
-                                 solute_laplacian);
-        if (filled)
-        {
-            // The chain surface needs grad n and grad c again; keep them.
-            result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, solute_gradient);
-            solvent_aware_chain_derivatives(result.local_solute, result.filling,
-                                            result.fraction_gradient, probe_kernel, basis,
-                                            solute_gradient, solute_laplacian);
-            result.density_gradient.swap(density_gradient);
-        }
+        open_dielectric_derivatives(density_g, filter, probe_kernel, basis, tpiba, result,
+                                    solute_gradient, solute_laplacian);
     }
     else
     {
-        if (filled && !uses_switching_lowpass(cavity))
-        {
-            filled_fft_derivatives(result, filter, probe_kernel, basis, tpiba, solute_gradient,
-                                   solute_laplacian);
-        }
-        else
-        {
-            switching_boundary_derivatives(result.solute, filter, basis, tpiba, solute_gradient,
-                                           solute_laplacian);
-        }
-        if (filled)
-        {
-            // The filled surface takes the chain gradients of the periodic path.
-            std::vector<ModuleBase::Vector3<double>> local_gradient;
-            chain_boundary_gradient(density_g, result.dsolute_drho, basis, tpiba,
-                                    result.density_gradient, local_gradient);
-            result.fraction_gradient = convolve_probe_gradient(probe_kernel, basis, local_gradient);
-        }
+        periodic_dielectric_derivatives(density, density_g, cavity, probe_kernel, basis, tpiba,
+                                        result, solute_gradient, solute_laplacian);
     }
     if (filled)
     {
@@ -706,66 +805,18 @@ SccsResponse solve_sccs_response(
     SqrtPreconditioner preconditioner(invsqrt, coulomb);
     std::vector<double> residual = charge;
     std::vector<double> potential(size, 0.0);
-    std::vector<double> direction(size, 0.0);
-    std::vector<double> image(size, 0.0);
-    std::vector<double> z;
-    double old_rz = 0.0;
     PolarizationResult& polarization = result.polarization;
     bool converged = residual_converged(residual, solver, reduction, polarization);
-    // ENVIRON generalized_sqrt warm start: one preconditioned fixed-point step
-    // v = P(q - K v_old) from the previous potential, whose charge residual is
-    // K (v_old - v). Keep it only when it improves on the cold-start residual.
     if (!converged && initial_potential.size() == size)
     {
-        std::vector<double> guess_residual(size);
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            guess_residual[i] = charge[i] - coefficient[i] * initial_potential[i];
-        }
-        preconditioner.apply(guess_residual, z);
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            guess_residual[i] = coefficient[i] * (initial_potential[i] - z[i]);
-        }
-        double guess_rms = 0.0;
-        double guess_max = 0.0;
-        reduced_rms_max(guess_residual, reduction, guess_rms, guess_max);
-        if (guess_rms < polarization.residual_rms)
-        {
-            potential.swap(z);
-            residual.swap(guess_residual);
-            polarization.warm_started = true;
-            converged = residual_converged(residual, solver, reduction, polarization);
-        }
+        const bool restarted = warm_start(charge, coefficient, initial_potential, reduction,
+                                          preconditioner, potential, residual, polarization);
+        converged = restarted && residual_converged(residual, solver, reduction, polarization);
     }
-    for (int iteration = 1; !converged && iteration <= solver.max_iterations; ++iteration)
+    if (!converged)
     {
-        preconditioner.apply(residual, z);
-        const double rz = grid_dot(residual, z, basis, reduction);
-        if (!std::isfinite(rz) || std::abs(rz) < 1e-30)
-        {
-            throw std::runtime_error("CG sqrt null/nonfinite preconditioned residual");
-        }
-        const double beta = std::abs(old_rz) > 1e-30 ? rz / old_rz : 0.0;
-        old_rz = rz;
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            direction[i] = z[i] + beta * direction[i];
-            image[i] = coefficient[i] * z[i] + residual[i] + beta * image[i];
-        }
-        const double curvature = grid_dot(direction, image, basis, reduction);
-        if (!std::isfinite(curvature) || curvature == 0.0)
-        {
-            throw std::runtime_error("CG sqrt invalid curvature");
-        }
-        const double alpha = rz / curvature;
-        for (std::size_t i = 0; i < size; ++i)
-        {
-            potential[i] += alpha * direction[i];
-            residual[i] -= alpha * image[i];
-        }
-        polarization.iterations = iteration;
-        converged = residual_converged(residual, solver, reduction, polarization);
+        converged = sqrt_cg(coefficient, solver, basis, reduction, preconditioner, potential,
+                            residual, polarization);
     }
     if (!converged)
     {
@@ -785,12 +836,26 @@ SccsResponse solve_sccs_response(
     }
     result.polarization.field.potential = potential;
     // Environ dielectric::de_dboundary differentiates the solved potential on
-    // its derivative grid, for the continuum cavity potential and diagnostics.
-    result.polarization.field.gradient = ModuleSccs::periodic_gradient(potential, basis, tpiba);
+    // its derivative grid for the continuum cavity potential. The lowpass
+    // exact derivative needs no field, so there it is formed only for the
+    // diagnostics.
+    const bool continuum_cavity = !uses_switching_lowpass(cavity);
+    if (continuum_cavity || solver.polarization_diagnostics)
+    {
+        result.polarization.field.gradient = ModuleSccs::periodic_gradient(potential, basis, tpiba);
+    }
     if (open_boundary)
     {
         finish_open_boundary_response(charge, coefficient, invsqrt, cavity, basis, reduction,
                                       result);
+    }
+    if (open_boundary && solver.polarization_diagnostics)
+    {
+        // The corrected potential has no periodic Laplacian inverse; use the
+        // ENVIRON dielectric_of_potential polarization charge instead. Its
+        // integral carries a finite-grid error; the far field fixes the net
+        // screening charge.
+        result.polarization.polarization_charge = continuum_polarization_charge(charge, result);
     }
     if (uses_switching_lowpass(cavity))
     {

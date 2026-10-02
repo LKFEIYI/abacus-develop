@@ -61,11 +61,14 @@ struct SccsResult
     // Derivative of the reaction, surface and volume energies with respect to
     // the cavity density, for the 'full'-mode core-electron force.
     std::vector<double> cavity_potential;
-    // PCC0D moments about the PCC origin; zero for other boundaries.
+    // PCC0D moments about the PCC origin; zero for other boundaries. The
+    // polarization and screened moments stay zero without
+    // SccsConfig::polarization_diagnostics.
     ModulePcc::MultipoleMoments solute_moments;
     ModulePcc::MultipoleMoments polarization_moments;
     ModulePcc::MultipoleMoments screened_moments;
-    // PCC2D moments along the open direction; zero for other boundaries.
+    // PCC2D moments along the open direction; zero for other boundaries, and
+    // the same rule for the polarization and screened moments.
     ModulePcc::Pcc2dMoments solute_moments_2d;
     ModulePcc::Pcc2dMoments polarization_moments_2d;
     ModulePcc::Pcc2dMoments screened_moments_2d;

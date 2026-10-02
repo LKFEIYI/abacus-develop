@@ -29,6 +29,9 @@ struct SccsConfig
     double tolerance_rms = 0.0;
     double tolerance_max = 0.0;
     bool check_fixed_point = false;
+    // PolarizationSolverParameters::polarization_diagnostics; the PCC
+    // polarization moments of SccsResult stay zero without it.
+    bool polarization_diagnostics = false;
     // ENVIRON solvent_mode 'full': the cavity density adds a Gaussian of the
     // valence charge with core_spread (bohr) on every non-hydrogen atom.
     bool core_electrons = false;
