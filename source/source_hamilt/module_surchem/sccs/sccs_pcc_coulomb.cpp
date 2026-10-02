@@ -47,6 +47,9 @@ void PccCoulombOperator::apply_potential(const std::vector<double>& charge,
     const ModulePcc::MultipoleMoments local_moments = ModulePcc::density_moments_from_relative_positions(
         charge, relative_positions_, volume_element_);
     const ModulePcc::MultipoleMoments moments = ModulePcc::reduce_pcc_moments(local_moments, reduction_);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t index = 0; index < charge.size(); ++index)
     {
         potential[index] += ModulePcc::pcc_potential(moments, relative_positions_[index], geometry_.parameters);

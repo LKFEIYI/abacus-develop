@@ -74,7 +74,9 @@ std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
     const int image_count_3 = static_cast<int>(std::ceil(image_reach_3));
 
     std::vector<double> probe(basis.nrxx, 0.0);
-    double integral = 0.0;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (int ir = 0; ir < basis.nrxx; ++ir)
     {
         const int ix = ir / (basis.ny * basis.nplane);
@@ -103,7 +105,13 @@ std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
             }
         }
         probe[ir] = value;
-        integral += value;
+    }
+    // The image sums above dominate; this serial sum keeps the normalization
+    // independent of the thread count.
+    double integral = 0.0;
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        integral += probe[ir];
     }
     reduction.reduce_sum(integral);
     integral *= volume / static_cast<double>(basis.nxyz);
@@ -117,6 +125,9 @@ std::vector<double> solvent_probe_kernel(const ModulePW::PW_Basis& basis,
     std::vector<std::complex<double>> probe_g(basis.npw);
     basis.real2recip(probe.data(), probe_g.data());
     std::vector<double> kernel(basis.npw);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (int ig = 0; ig < basis.npw; ++ig)
     {
         kernel[ig] = probe_g[ig].real() * volume / integral;
@@ -136,6 +147,9 @@ std::vector<double> convolve_probe(const std::vector<double>& kernel,
     }
     std::vector<std::complex<double>> values_g(basis.npw);
     basis.real2recip(values.data(), values_g.data());
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (int ig = 0; ig < basis.npw; ++ig)
     {
         values_g[ig] *= kernel[ig];
@@ -155,11 +169,17 @@ std::vector<ModuleBase::Vector3<double>> convolve_probe_gradient(
     std::vector<ModuleBase::Vector3<double>> result(size);
     for (int d = 0; d < 3; ++d)
     {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             component[i] = gradient[i][d];
         }
         const std::vector<double> convolved = convolve_probe(kernel, basis, component);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             result[i][d] = convolved[i];
@@ -184,6 +204,9 @@ SolventAwareBoundary solvent_aware_boundary(const std::vector<double>& local,
     filled.dfilling.resize(size);
     filled.d2filling.resize(size);
     filled.boundary.resize(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         // Environ: fill = 1 - sfunct2, dfill = -dsfunct2, d2fill = -d2sfunct2.
@@ -216,6 +239,9 @@ void solvent_aware_chain_derivatives(const std::vector<double>& local,
         throw std::invalid_argument("SCCS solvent-aware derivative arrays must match the grid");
     }
     const std::vector<double> fraction_laplacian = convolve_probe(kernel, basis, laplacian);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         const double empty = 1.0 - filled.filling[i];
@@ -260,6 +286,9 @@ SolventAwareSurface solvent_aware_surface(const std::vector<double>& local,
     }
     SolventAwareSurface surface;
     surface.gradient.resize(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         const double empty = 1.0 - filled.filling[i];
@@ -282,6 +311,9 @@ SolventAwareSurface solvent_aware_surface(const std::vector<double>& local,
         const std::vector<double> fraction_hessian
             = convolve_probe(kernel, basis, local_hessian[component]);
         const double weight = first == second ? 1.0 : 2.0;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             const double empty = 1.0 - filled.filling[i];
@@ -302,6 +334,9 @@ SolventAwareSurface solvent_aware_surface(const std::vector<double>& local,
     }
     surface.surface_derivative.resize(size);
     const double regularization_square = regularization * regularization;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         const double norm_square = surface.gradient[i].norm2() + regularization_square;
@@ -325,11 +360,17 @@ std::vector<double> solvent_aware_adjoint(const std::vector<double>& local,
         throw std::invalid_argument("SCCS solvent-aware adjoint arrays must match the grid");
     }
     std::vector<double> weighted(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         weighted[i] = (1.0 - local[i]) * filled.dfilling[i] * boundary_potential[i];
     }
     std::vector<double> result = convolve_probe(kernel, basis, weighted);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         result[i] += (1.0 - filled.filling[i]) * boundary_potential[i];

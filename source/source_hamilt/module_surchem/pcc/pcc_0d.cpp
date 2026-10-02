@@ -1,9 +1,11 @@
 #include "pcc_0d.h"
 #include "../common/lattice_row.h"
+#include "../common/thread_sum.h"
 
 #include "source_base/constants.h"
 #include "source_base/matrix3.h"
 
+#include <array>
 #include <cmath>
 #include <stdexcept>
 
@@ -359,21 +361,33 @@ MultipoleMoments density_moments_from_relative_positions(
     }
     // Accumulate directly: constructing one PointCharge per grid point adds
     // a full-grid allocation and copy to every polarization iteration.
-    MultipoleMoments moments;
-    for (std::size_t index = 0; index < density.size(); ++index)
-    {
+    // Slot 5 counts the non-finite points, which are not thrown inside the
+    // parallel loop.
+    const auto add_point = [&](const std::size_t index, std::array<double, 6>& sums) {
         const double charge = density[index] * volume_element;
         const ModuleBase::Vector3<double>& relative = relative_positions[index];
         if (!std::isfinite(charge) || !finite_vector(relative))
         {
-            throw std::domain_error("PCC point charges and positions must be finite");
+            sums[5] += 1.0;
+            return;
         }
-        moments.charge += charge;
-        moments.dipole.x += charge * relative.x;
-        moments.dipole.y += charge * relative.y;
-        moments.dipole.z += charge * relative.z;
-        moments.quadrupole_trace += charge * norm_squared(relative);
+        sums[0] += charge;
+        sums[1] += charge * relative.x;
+        sums[2] += charge * relative.y;
+        sums[3] += charge * relative.z;
+        sums[4] += charge * norm_squared(relative);
+    };
+    const std::array<double, 6> sums = ModuleSurchem::thread_sums<6>(density.size(), add_point);
+    if (sums[5] > 0.0)
+    {
+        throw std::domain_error("PCC point charges and positions must be finite");
     }
+    MultipoleMoments moments;
+    moments.charge = sums[0];
+    moments.dipole.x = sums[1];
+    moments.dipole.y = sums[2];
+    moments.dipole.z = sums[3];
+    moments.quadrupole_trace = sums[4];
     return moments;
 }
 

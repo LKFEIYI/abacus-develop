@@ -1,9 +1,11 @@
 #include "pcc_2d.h"
 #include "../common/lattice_row.h"
+#include "../common/thread_sum.h"
 
 #include "source_base/constants.h"
 #include "source_base/matrix3.h"
 
+#include <array>
 #include <cmath>
 #include <stdexcept>
 
@@ -268,19 +270,29 @@ Pcc2dMoments pcc_2d_density_moments_from_relative_coordinates(
     {
         throw std::invalid_argument("two-dimensional PCC requires a positive finite volume element");
     }
-    Pcc2dMoments moments;
-    for (std::size_t index = 0; index < density.size(); ++index)
-    {
+    // Slot 3 counts the non-finite points, which are not thrown inside the
+    // parallel loop.
+    const auto add_point = [&](const std::size_t index, std::array<double, 4>& sums) {
         if (!std::isfinite(density[index]) || !std::isfinite(relative_coordinates[index]))
         {
-            throw std::domain_error(
-                "two-dimensional PCC density values and relative coordinates must be finite");
+            sums[3] += 1.0;
+            return;
         }
         const double charge = density[index] * volume_element;
-        moments.charge += charge;
-        moments.dipole += charge * relative_coordinates[index];
-        moments.quadrupole += charge * relative_coordinates[index] * relative_coordinates[index];
+        sums[0] += charge;
+        sums[1] += charge * relative_coordinates[index];
+        sums[2] += charge * relative_coordinates[index] * relative_coordinates[index];
+    };
+    const std::array<double, 4> sums = ModuleSurchem::thread_sums<4>(density.size(), add_point);
+    if (sums[3] > 0.0)
+    {
+        throw std::domain_error(
+            "two-dimensional PCC density values and relative coordinates must be finite");
     }
+    Pcc2dMoments moments;
+    moments.charge = sums[0];
+    moments.dipole = sums[1];
+    moments.quadrupole = sums[2];
     return moments;
 }
 

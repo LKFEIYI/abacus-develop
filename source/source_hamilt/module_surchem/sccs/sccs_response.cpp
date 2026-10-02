@@ -2,12 +2,14 @@
 
 #include "sccs_pw_coulomb.h"
 #include "../common/charge_reduction.h"
+#include "../common/thread_sum.h"
 
 #include "source_base/constants.h"
 #include "source_base/timer.h"
 #include "source_basis/module_pw/pw_basis.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <stdexcept>
@@ -60,11 +62,26 @@ SccsResponse prepare_cavity(const std::vector<double>& density, const CavityPara
     const std::size_t size = density.size();
     result.solute.resize(size);
     result.dsolute_drho.resize(size);
+    // evaluate_cavity throws on a non-finite density; count those here so that
+    // nothing is thrown inside the parallel loop.
+    long invalid = 0;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024) reduction(+ : invalid)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
+        if (!std::isfinite(density[i]))
+        {
+            ++invalid;
+            continue;
+        }
         const CavityPoint point = ModuleSccs::evaluate_cavity(density[i], cavity);
         result.solute[i] = point.solute;
         result.dsolute_drho[i] = point.dsolute_drho;
+    }
+    if (invalid > 0)
+    {
+        throw std::domain_error("SCCS cavity density must be finite");
     }
     return result;
 }
@@ -80,11 +97,12 @@ void fill_cavity(const SolventAwareParameters& solvent_aware,
     result.local_solute = result.solute;
     result.filling = solvent_aware_boundary(result.local_solute, probe_kernel, solvent_aware, basis);
     result.solute = result.filling.boundary;
-    double filled_volume = 0.0;
-    for (std::size_t i = 0; i < result.solute.size(); ++i)
-    {
-        filled_volume += result.solute[i] - result.local_solute[i];
-    }
+    const std::vector<double>& filled = result.solute;
+    const std::vector<double>& local = result.local_solute;
+    const auto add_filling = [&filled, &local](const std::size_t i, std::array<double, 1>& sum) {
+        sum[0] += filled[i] - local[i];
+    };
+    double filled_volume = ModuleSurchem::thread_sums<1>(filled.size(), add_filling)[0];
     reduction.reduce_sum(filled_volume);
     result.filled_volume = filled_volume * basis.omega / basis.nxyz;
 }
@@ -95,15 +113,22 @@ void reduced_rms_max(const std::vector<double>& values,
                      double& rms,
                      double& maximum)
 {
+    // Per thread: the sum of squares and the maximum magnitude.
+    const auto add_value = [&values](const std::size_t i, std::array<double, 2>& partial) {
+        partial[0] += values[i] * values[i];
+        const double magnitude = std::abs(values[i]);
+        partial[1] = std::max(partial[1], magnitude);
+    };
+    const std::vector<std::array<double, 2>> partials
+        = ModuleSurchem::thread_partials<2>(values.size(), add_value);
     double square = 0.0;
     double local_maximum = 0.0;
-    double count = static_cast<double>(values.size());
-    for (std::size_t i = 0; i < values.size(); ++i)
+    for (std::size_t thread = 0; thread < partials.size(); ++thread)
     {
-        square += values[i] * values[i];
-        const double magnitude = std::abs(values[i]);
-        local_maximum = std::max(local_maximum, magnitude);
+        square += partials[thread][0];
+        local_maximum = std::max(local_maximum, partials[thread][1]);
     }
+    double count = static_cast<double>(values.size());
     reduction.reduce_sum(square);
     reduction.reduce_max(local_maximum);
     reduction.reduce_sum(count);
@@ -134,11 +159,10 @@ double grid_dot(const std::vector<double>& left,
                 const ModulePW::PW_Basis& basis,
                 const ModuleSurchem::ChargeReduction& reduction)
 {
-    double value = 0.0;
-    for (std::size_t i = 0; i < left.size(); ++i)
-    {
-        value += left[i] * right[i];
-    }
+    const auto add_product = [&left, &right](const std::size_t i, std::array<double, 1>& sum) {
+        sum[0] += left[i] * right[i];
+    };
+    double value = ModuleSurchem::thread_sums<1>(left.size(), add_product)[0];
     reduction.reduce_sum(value);
     return value * basis.omega / basis.nxyz;
 }
@@ -158,12 +182,18 @@ class SqrtPreconditioner
     void apply(const std::vector<double>& rhs, std::vector<double>& value)
     {
         const std::size_t size = this->invsqrt_.size();
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             this->weighted_[i] = rhs[i] * this->invsqrt_[i];
         }
         this->coulomb_.apply_potential(this->weighted_, this->potential_);
         value.resize(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             value[i] = this->potential_[i] * this->invsqrt_[i];
@@ -189,6 +219,9 @@ void spectral_laplacian(const std::vector<std::complex<double>>& values_g,
     std::vector<std::complex<double>> laplacian_g(basis.npw);
     if (filter.empty())
     {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (int ig = 0; ig < basis.npw; ++ig)
         {
             laplacian_g[ig] = values_g[ig] * (-tpiba * tpiba * basis.gg[ig]);
@@ -196,6 +229,9 @@ void spectral_laplacian(const std::vector<std::complex<double>>& values_g,
     }
     else
     {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (int ig = 0; ig < basis.npw; ++ig)
         {
             laplacian_g[ig] = values_g[ig] * (-tpiba * tpiba * basis.gg[ig] * filter[ig]);
@@ -219,6 +255,9 @@ void chain_boundary_gradient(const std::vector<std::complex<double>>& density_g,
     density_gradient = ModuleSccs::spectral_gradient(density_g, no_filter, basis, tpiba);
     const std::size_t size = dsolute_drho.size();
     gradient.resize(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         for (int d = 0; d < 3; ++d)
@@ -243,8 +282,17 @@ void chain_boundary_laplacian(const std::vector<double>& density,
     spectral_laplacian(density_g, no_filter, basis, tpiba, density_laplacian);
     const std::size_t size = density.size();
     laplacian.resize(size);
+    long invalid = 0;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024) reduction(+ : invalid)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
+        if (!std::isfinite(density[i]))
+        {
+            ++invalid;
+            continue;
+        }
         const CavityPoint point = ModuleSccs::evaluate_cavity(density[i], cavity);
         double gradient_square = 0.0;
         for (int d = 0; d < 3; ++d)
@@ -253,6 +301,10 @@ void chain_boundary_laplacian(const std::vector<double>& density,
         }
         laplacian[i] = point.dsolute_drho * density_laplacian[i]
                        + point.d2solute_drho2 * gradient_square;
+    }
+    if (invalid > 0)
+    {
+        throw std::domain_error("SCCS cavity density must be finite");
     }
 }
 
@@ -270,6 +322,9 @@ void dielectric_of_boundary(const CavityParameters& cavity,
     result.epsilon.resize(size);
     result.grad_log_epsilon.resize(size);
     coefficient.resize(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         const double log_epsilon = log_bulk * (1.0 - result.solute[i]);
@@ -300,6 +355,9 @@ std::vector<double> switching_filter(const CavityParameters& cavity,
         return filter;
     }
     filter.resize(basis.npw);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (int ig = 0; ig < basis.npw; ++ig)
     {
         const double argument = cavity.lowpass_p1 * basis.gg[ig] / basis.ggecut - cavity.lowpass_p2;
@@ -418,6 +476,9 @@ void continuum_boundary_potential(const CavityParameters& cavity, SccsResponse& 
     const std::size_t size = result.epsilon.size();
     const double log_bulk = std::log(cavity.epsilon_bulk);
     result.boundary_potential.resize(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         const ModuleBase::Vector3<double>& gradient = result.polarization.field.gradient[i];
@@ -457,6 +518,9 @@ void switching_boundary_potential(const std::vector<double>& charge,
     const std::size_t size = charge.size();
     const double log_bulk = std::log(cavity.epsilon_bulk);
     std::vector<double> weight(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         weight[i] = result.epsilon[i] * potential[i] * potential[i] / (8.0 * ModuleBase::PI);
@@ -464,6 +528,9 @@ void switching_boundary_potential(const std::vector<double>& charge,
     // lapl b + L div(b grad s), filtered, accumulated in G space.
     std::vector<std::complex<double>> transpose_g(basis.npw);
     basis.real2recip(weight.data(), transpose_g.data());
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (int ig = 0; ig < basis.npw; ++ig)
     {
         transpose_g[ig] *= -tpiba * tpiba * basis.gg[ig] * filter[ig];
@@ -472,11 +539,17 @@ void switching_boundary_potential(const std::vector<double>& charge,
     std::vector<std::complex<double>> component_g(basis.npw);
     for (int d = 0; d < 3; ++d)
     {
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             component[i] = weight[i] * solute_gradient[i][d];
         }
         basis.real2recip(component.data(), component_g.data());
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (int ig = 0; ig < basis.npw; ++ig)
         {
             transpose_g[ig] += log_bulk * ModuleBase::IMAG_UNIT * tpiba * basis.gcar[ig][d]
@@ -486,6 +559,9 @@ void switching_boundary_potential(const std::vector<double>& charge,
     std::vector<double> transpose(size);
     basis.recip2real(transpose_g.data(), transpose.data());
     result.boundary_potential.resize(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         result.boundary_potential[i]
@@ -509,12 +585,18 @@ bool warm_start(const std::vector<double>& charge,
 {
     const std::size_t size = charge.size();
     std::vector<double> guess_residual(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         guess_residual[i] = charge[i] - coefficient[i] * initial_potential[i];
     }
     std::vector<double> guess;
     preconditioner.apply(guess_residual, guess);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         guess_residual[i] = coefficient[i] * (initial_potential[i] - guess[i]);
@@ -560,6 +642,9 @@ bool sqrt_cg(const std::vector<double>& coefficient,
         }
         const double beta = std::abs(old_rz) > 1e-30 ? rz / old_rz : 0.0;
         old_rz = rz;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             direction[i] = z[i] + beta * direction[i];
@@ -571,6 +656,9 @@ bool sqrt_cg(const std::vector<double>& coefficient,
             throw std::runtime_error("CG sqrt invalid curvature");
         }
         const double alpha = rz / curvature;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             potential[i] += alpha * direction[i];
@@ -593,6 +681,9 @@ void check_fixed_point(const std::vector<double>& charge,
 {
     const std::size_t size = potential.size();
     std::vector<double> right(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         right[i] = charge[i] - coefficient[i] * potential[i];
@@ -600,6 +691,9 @@ void check_fixed_point(const std::vector<double>& charge,
     std::vector<double> image;
     preconditioner.apply(right, image);
     std::vector<double> defect(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         defect[i] = potential[i] - image[i];
@@ -615,16 +709,19 @@ void remove_mean(const ModulePW::PW_Basis& basis,
                  const ModuleSurchem::ChargeReduction& reduction,
                  std::vector<double>& potential)
 {
-    double mean = 0.0;
-    for (const double value : potential)
-    {
-        mean += value;
-    }
+    const std::size_t size = potential.size();
+    const auto add_potential = [&potential](const std::size_t i, std::array<double, 1>& sum) {
+        sum[0] += potential[i];
+    };
+    double mean = ModuleSurchem::thread_sums<1>(size, add_potential)[0];
     reduction.reduce_sum(mean);
     mean /= basis.nxyz;
-    for (double& value : potential)
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
+    for (std::size_t i = 0; i < size; ++i)
     {
-        value -= mean;
+        potential[i] -= mean;
     }
 }
 
@@ -640,13 +737,13 @@ void finish_open_boundary_response(const std::vector<double>& charge,
 {
     const std::size_t size = charge.size();
     const std::vector<double>& potential = result.polarization.field.potential;
-    double source_sum = 0.0;
-    double solute_sum = 0.0;
-    for (std::size_t i = 0; i < size; ++i)
-    {
-        source_sum += (charge[i] - coefficient[i] * potential[i]) * invsqrt[i];
-        solute_sum += charge[i];
-    }
+    const auto add_source = [&](const std::size_t i, std::array<double, 2>& sums) {
+        sums[0] += (charge[i] - coefficient[i] * potential[i]) * invsqrt[i];
+        sums[1] += charge[i];
+    };
+    const std::array<double, 2> sums = ModuleSurchem::thread_sums<2>(size, add_source);
+    double source_sum = sums[0];
+    double solute_sum = sums[1];
     reduction.reduce_sum(source_sum);
     reduction.reduce_sum(solute_sum);
     const double volume_element = basis.omega / basis.nxyz;
@@ -673,6 +770,9 @@ std::vector<double> boundary_to_density_potential(const SccsResponse& response,
         density_potential = solvent_aware_adjoint(response.local_solute, response.filling,
                                                   probe_kernel, basis, boundary_potential);
     }
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         density_potential[i] *= response.dsolute_drho[i];
@@ -701,13 +801,29 @@ SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& 
     const std::vector<std::complex<double>>& density_g = response.density_reciprocal;
     std::vector<double> dsolute(size);
     std::vector<double> d2solute(size);
+    long invalid = 0;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024) reduction(+ : invalid)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
+        if (!std::isfinite(density[i]))
+        {
+            ++invalid;
+            continue;
+        }
         const CavityPoint point = ModuleSccs::evaluate_cavity(density[i], cavity);
         dsolute[i] = point.dsolute_drho;
         d2solute[i] = point.d2solute_drho2;
     }
+    if (invalid > 0)
+    {
+        throw std::domain_error("SCCS cavity density must be finite");
+    }
     std::vector<ModuleBase::Vector3<double>> local_gradient(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         local_gradient[i] = density_gradient[i] * dsolute[i];
@@ -720,6 +836,9 @@ SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& 
         int first = 0;
         int second = 0;
         hessian_axes(component, first, second);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (int ig = 0; ig < basis.npw; ++ig)
         {
             hessian_g[ig] = -tpiba_square * basis.gcar[ig][first] * basis.gcar[ig][second]
@@ -728,6 +847,9 @@ SolventAwareSurface solvent_aware_surface_of_density(const std::vector<double>& 
         std::vector<double>& hessian = local_hessian[component];
         hessian.resize(size);
         basis.recip2real(hessian_g.data(), hessian.data());
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
         for (std::size_t i = 0; i < size; ++i)
         {
             const double outer = density_gradient[i][first] * density_gradient[i][second];
@@ -798,6 +920,9 @@ SccsResponse solve_sccs_response(
     std::vector<double> coefficient;
     dielectric_of_boundary(cavity, solute_gradient, solute_laplacian, result, coefficient);
     std::vector<double> invsqrt(size);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t i = 0; i < size; ++i)
     {
         invsqrt[i] = 1.0 / std::sqrt(result.epsilon[i]);

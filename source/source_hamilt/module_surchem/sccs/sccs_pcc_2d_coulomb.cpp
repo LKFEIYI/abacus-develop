@@ -49,6 +49,9 @@ void Pcc2dCoulombOperator::apply_potential(const std::vector<double>& charge,
     const ModulePcc::Pcc2dMoments local_moments = ModulePcc::pcc_2d_density_moments_from_relative_coordinates(
         charge, relative_coordinates_, volume_element_);
     const ModulePcc::Pcc2dMoments moments = ModulePcc::reduce_pcc_2d_moments(local_moments, reduction_);
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, 1024)
+#endif
     for (std::size_t index = 0; index < charge.size(); ++index)
     {
         potential[index] += ModulePcc::pcc_2d_potential(moments, relative_coordinates_[index], geometry_.parameters);

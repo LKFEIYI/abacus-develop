@@ -2,11 +2,13 @@
 
 #include "sccs_pw_coulomb.h"
 #include "../common/charge_reduction.h"
+#include "../common/thread_sum.h"
 
 #include "source_base/constants.h"
 #include "source_base/timer.h"
 #include "source_basis/module_pw/pw_basis.h"
 
+#include <array>
 #include <cmath>
 #include <complex>
 #include <stdexcept>
@@ -54,11 +56,13 @@ NonElectrostaticResult evaluate_pw_non_electrostatic(
     std::vector<ModuleBase::Vector3<double>> unit_gradient(solute.size());
     NonElectrostaticResult result;
     result.boundary_potential.resize(solute.size());
-    for (std::size_t index = 0; index < solute.size(); ++index)
-    {
+    // Slot 2 counts the non-finite inputs, which are not thrown inside the
+    // parallel loop.
+    const auto add_point = [&](const std::size_t index, std::array<double, 3>& sums) {
         if (!std::isfinite(solute[index]))
         {
-            throw std::domain_error("SCCS PW non-electrostatic inputs must be finite");
+            sums[2] += 1.0;
+            return;
         }
         const double norm_squared = gradient[index].x * gradient[index].x
                                     + gradient[index].y * gradient[index].y
@@ -69,9 +73,16 @@ NonElectrostaticResult evaluate_pw_non_electrostatic(
         unit_gradient[index].x = gradient[index].x / norm;
         unit_gradient[index].y = gradient[index].y / norm;
         unit_gradient[index].z = gradient[index].z / norm;
-        result.surface += (norm - parameters.surface_regularization) * volume_element;
-        result.volume += solute[index] * volume_element;
+        sums[0] += (norm - parameters.surface_regularization) * volume_element;
+        sums[1] += solute[index] * volume_element;
+    };
+    const std::array<double, 3> sums = ModuleSurchem::thread_sums<3>(solute.size(), add_point);
+    if (sums[2] > 0.0)
+    {
+        throw std::domain_error("SCCS PW non-electrostatic inputs must be finite");
     }
+    result.surface = sums[0];
+    result.volume = sums[1];
     reduction.reduce_sum(result.surface);
     reduction.reduce_sum(result.volume);
 
@@ -133,19 +144,28 @@ NonElectrostaticResult evaluate_chain_non_electrostatic(
     result.boundary_potential.resize(size);
     const double regularization_square
         = parameters.surface_regularization * parameters.surface_regularization;
-    for (std::size_t index = 0; index < size; ++index)
-    {
+    // Slot 2 counts the non-finite inputs, which are not thrown inside the
+    // parallel loop.
+    const auto add_point = [&](const std::size_t index, std::array<double, 3>& sums) {
         if (!std::isfinite(solute[index]) || !std::isfinite(surface_derivative[index]))
         {
-            throw std::domain_error("SCCS PW non-electrostatic inputs must be finite");
+            sums[2] += 1.0;
+            return;
         }
         const double norm_squared = gradient[index].norm2() + regularization_square;
         const double norm = std::sqrt(norm_squared);
-        result.surface += (norm - parameters.surface_regularization) * volume_element;
-        result.volume += solute[index] * volume_element;
+        sums[0] += (norm - parameters.surface_regularization) * volume_element;
+        sums[1] += solute[index] * volume_element;
         result.boundary_potential[index]
             = parameters.pressure + parameters.surface_tension * surface_derivative[index];
+    };
+    const std::array<double, 3> sums = ModuleSurchem::thread_sums<3>(size, add_point);
+    if (sums[2] > 0.0)
+    {
+        throw std::domain_error("SCCS PW non-electrostatic inputs must be finite");
     }
+    result.surface = sums[0];
+    result.volume = sums[1];
     reduction.reduce_sum(result.surface);
     reduction.reduce_sum(result.volume);
     result.surface_energy = parameters.surface_tension * result.surface;

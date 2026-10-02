@@ -1,6 +1,8 @@
 #include "sccs_charge.h"
 #include "../common/charge_reduction.h"
+#include "../common/thread_sum.h"
 
+#include <array>
 #include <cmath>
 #include <stdexcept>
 
@@ -61,16 +63,26 @@ ChargeDensity assemble_charge_density(const std::vector<double>& electron_densit
     ChargeDensity result;
     result.electron = electron_density;
     result.solute.resize(electron_density.size());
-    for (std::size_t index = 0; index < electron_density.size(); ++index)
-    {
+    // Slot 2 counts the non-finite densities, which are not thrown inside the
+    // parallel loop.
+    const auto add_point = [&](const std::size_t index, std::array<double, 3>& sums) {
         if (!std::isfinite(electron_density[index]) || !std::isfinite(ionic_density[index]))
         {
-            throw std::domain_error("SCCS charge densities must be finite");
+            sums[2] += 1.0;
+            return;
         }
-        result.electron_count += electron_density[index] * volume_element;
-        result.ionic_charge += ionic_density[index] * volume_element;
+        sums[0] += electron_density[index] * volume_element;
+        sums[1] += ionic_density[index] * volume_element;
         result.solute[index] = ionic_density[index] - electron_density[index];
+    };
+    const std::array<double, 3> sums
+        = ModuleSurchem::thread_sums<3>(electron_density.size(), add_point);
+    if (sums[2] > 0.0)
+    {
+        throw std::domain_error("SCCS charge densities must be finite");
     }
+    result.electron_count = sums[0];
+    result.ionic_charge = sums[1];
     reduction.reduce_sum(result.electron_count);
     reduction.reduce_sum(result.ionic_charge);
     if (!std::isfinite(result.electron_count) || !std::isfinite(result.ionic_charge))
