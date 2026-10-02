@@ -1,0 +1,3 @@
+Case 228_PW_SCCS_SA_PCC2D_WATER2_LOWPASS without the cavity low-pass filter. Checks
+total energy, forces and SCCS/PCC energy terms; the dielectric applies the analytic
+filling to FFT derivatives of the boundary before filling, the surface is the chain.
