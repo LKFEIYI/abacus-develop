@@ -693,14 +693,13 @@ TEST(SolForce, FullSolventModeCoreForceMatchesFixedDensityEnergyDerivative)
 }
 
 // The solvent-aware filling makes the cavity nonlocal in the density; the
-// core force still contracts the exact lowpass cavity derivative, now taken
-// with respect to the boundary before filling through the analytic filling
-// and the probe, and the exact volume derivative. A soft filling step keeps
-// the finite differences smooth. The filled surface takes the chain
+// core force still contracts the exact lowpass cavity derivative, now through
+// the probe adjoint, and the exact volume derivative. A soft filling step
+// keeps the finite differences smooth. The filled surface takes the chain
 // derivatives, whose potential is the continuum -div(g/|g|) rather than the
 // exact derivative of the sampled surface: with surface tension the force
-// matches to the grid error of that potential (measured 1.2e-8, 3.0e-8,
-// 5.3e-7 against forces of 1.2e-2, 8.9e-3, 5.9e-3 at 120 Ry; 4e-9 without).
+// matches to the grid error of that potential (measured 8e-8, 8e-8, 5.0e-7
+// against forces of 1.6e-3, 1.2e-3, 7.5e-4 at 120 Ry).
 TEST(SolForce, SolventAwareFullModeCoreForceMatchesFixedDensityEnergyDerivative)
 {
     ModuleSccs::SolventAwareParameters filled;

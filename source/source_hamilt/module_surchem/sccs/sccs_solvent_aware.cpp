@@ -183,7 +183,6 @@ SolventAwareBoundary solvent_aware_boundary(const std::vector<double>& local,
     filled.filling.resize(size);
     filled.dfilling.resize(size);
     filled.d2filling.resize(size);
-    filled.d3filling.resize(size);
     filled.boundary.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
@@ -196,8 +195,6 @@ SolventAwareBoundary solvent_aware_boundary(const std::vector<double>& local,
             const double gaussian = std::exp(exponent) / sqrt_pi;
             filled.dfilling[i] = gaussian / spread;
             filled.d2filling[i] = -2.0 * argument * gaussian / (spread * spread);
-            filled.d3filling[i]
-                = (4.0 * argument * argument - 2.0) * gaussian / (spread * spread * spread);
         }
         filled.boundary[i] = local[i] + (1.0 - local[i]) * filled.filling[i];
     }

@@ -241,13 +241,15 @@ void ReadInput::item_sccs()
                        "Width of the erfc step of the solvent-aware filling in the probe solute "
                        "fraction, as Environ filling_spread; positive, default 0.02. Used only "
                        "when sccs_solvent_radius is positive. The step is usually narrower than "
-                       "the grid spacing, so the filling is never differentiated on the FFT grid: "
-                       "the filled boundary takes the analytic derivatives of the filling (Environ "
-                       "solvent_aware_boundary, deriv_method chain). With assume_isolated none "
-                       "they act on the chain derivatives of the boundary before filling; with "
-                       "pcc_0d or pcc_2d the dielectric applies them to the FFT derivatives of that "
-                       "boundary, as PCC does without filling, and the surface to its chain "
-                       "derivatives.",
+                       "the grid spacing, where FFT derivatives of the filled boundary ring, so the "
+                       "surface always takes the analytic derivatives of the filling (Environ "
+                       "solvent_aware_boundary, deriv_method chain), and so does the dielectric "
+                       "with assume_isolated none. With pcc_0d or pcc_2d the dielectric applies the "
+                       "analytic filling to the FFT derivatives of the boundary before filling, as "
+                       "PCC does without filling; with sccs_lowpass_p1 and sccs_lowpass_p2 it "
+                       "differentiates the filled boundary on the filtered FFT grid instead "
+                       "(Environ deriv_method fft with deriv_lowpass), which keeps the exact cavity "
+                       "derivative.",
                        "0.02",
                        "")
 #undef ADD_SCCS_REAL_ITEM
