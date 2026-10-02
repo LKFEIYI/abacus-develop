@@ -1093,8 +1093,9 @@ TEST(SccsDriver, PolarizationDiagnosticsLeaveThePccSolutionUnchanged)
     // The density integral carries a large finite-grid error at this cutoff;
     // only its sign is physical here.
     EXPECT_LT(verbose.polarization_moments.charge, 0.0);
-    EXPECT_DOUBLE_EQ(verbose.screened_moments.charge,
-                     verbose.solute_moments.charge + verbose.polarization_moments.charge);
+    const double screened_charge
+        = verbose.solute_moments.charge + verbose.polarization_moments.charge;
+    EXPECT_DOUBLE_EQ(verbose.screened_moments.charge, screened_charge);
 
     EXPECT_EQ(quiet.electrostatic.reaction_energy, verbose.electrostatic.reaction_energy);
     EXPECT_EQ(quiet.non_electrostatic.surface_energy, verbose.non_electrostatic.surface_energy);
@@ -1103,10 +1104,12 @@ TEST(SccsDriver, PolarizationDiagnosticsLeaveThePccSolutionUnchanged)
     for (std::size_t ir = 0; ir < positions.size(); ++ir)
     {
         const double electron_change
-            = std::abs(quiet.electron_potential_hartree[ir] - verbose.electron_potential_hartree[ir]);
-        const double cavity_change
-            = std::abs(quiet.cavity_potential[ir] - verbose.cavity_potential[ir]);
-        potential_difference = std::max(potential_difference, std::max(electron_change, cavity_change));
+            = quiet.electron_potential_hartree[ir] - verbose.electron_potential_hartree[ir];
+        const double cavity_change = quiet.cavity_potential[ir] - verbose.cavity_potential[ir];
+        const double electron_difference = std::abs(electron_change);
+        const double cavity_difference = std::abs(cavity_change);
+        const double point_difference = std::max(electron_difference, cavity_difference);
+        potential_difference = std::max(potential_difference, point_difference);
     }
     EXPECT_EQ(potential_difference, 0.0);
 
@@ -1187,8 +1190,9 @@ TEST(SccsDriver, SolventAwareChainSurfaceReusesTheResponseGradients)
         double coefficient_difference = 0.0;
         for (std::size_t ig = 0; ig < density_g.size(); ++ig)
         {
-            const double change = std::abs(response.density_reciprocal[ig] - density_g[ig]);
-            coefficient_difference = std::max(coefficient_difference, change);
+            const std::complex<double> change = response.density_reciprocal[ig] - density_g[ig];
+            const double magnitude = std::abs(change);
+            coefficient_difference = std::max(coefficient_difference, magnitude);
         }
         EXPECT_GT(fraction_scale, 1.0e-3);
         EXPECT_EQ(density_difference, 0.0);
