@@ -3,6 +3,7 @@
 #include <mpi.h>
 #endif
 
+#include "../common/pw_grid.h"
 #include "../surchem.h"
 
 #include "source_base/constants.h"
@@ -12,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -440,6 +442,115 @@ TEST(HCorrSccs, ConvertsHartreeResultToRydbergPotentialAndEnergy)
                               local_potential.data(),
                               potential);
     EXPECT_FALSE(solvent.sccs_result().reused_fixed_sources);
+}
+
+// With nspin 2 the cavity follows the total density and both spin channels
+// get the same SCCS potential, so a spin-split density must reproduce the
+// nspin 1 result for its sum bit for bit. The solvent-aware filling is on.
+// The split up = 0.75 n, down = n - up adds back to n exactly.
+TEST(HCorrSccs, SpinPolarizedDensityGetsTheTotalDensityPotentialInBothChannels)
+{
+    ModulePW::PW_Basis basis("cpu", "double");
+#ifdef __MPI
+    basis.initmpi(1, 0, POOL_WORLD);
+#endif
+    const ModuleBase::Matrix3 lattice(1.0, 0.0, 0.0,
+                                      0.0, 1.0, 0.0,
+                                      0.0, 0.0, 1.0);
+    const double length = 10.0;
+    const double volume = length * length * length;
+    basis.initgrids(length, lattice, 40.0);
+    basis.initparameters(false, 40.0, 1, false);
+    basis.setuptransform();
+    basis.collect_local_pw();
+
+    UnitCell cell;
+    cell.lat0 = length;
+    cell.latvec = lattice;
+    cell.omega = volume;
+    cell.tpiba = ModuleBase::TWO_PI / length;
+    cell.tpiba2 = cell.tpiba * cell.tpiba;
+    cell.ntype = 1;
+    cell.nat = 1;
+    cell.atoms = new Atom[1];
+    cell.atoms[0].na = 1;
+    cell.atoms[0].mass = 1.0;
+    cell.atoms[0].ncpp.zv = 1.0;
+    cell.atoms[0].tau.push_back(ModuleBase::Vector3<double>(0.5, 0.5, 0.5));
+
+    // One electron in a Gaussian of width 1.5 bohr on the ion: its peak lies
+    // above density_max, so the cavity switches inside the cell.
+    const std::vector<ModuleBase::Vector3<double>> positions
+        = ModuleSurchem::pw_grid_positions(basis, lattice, length);
+    const double width = 1.5;
+    const double norm = 1.0 / (std::pow(ModuleBase::PI, 1.5) * width * width * width);
+    const double volume_element = volume / static_cast<double>(basis.nxyz);
+    std::vector<double> total(basis.nrxx);
+    std::vector<double> spin_up(basis.nrxx);
+    std::vector<double> spin_down(basis.nrxx);
+    double electron_count = 0.0;
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        const ModuleBase::Vector3<double> center(0.5 * length, 0.5 * length, 0.5 * length);
+        const ModuleBase::Vector3<double> offset = positions[ir] - center;
+        const double exponent = -offset.norm2() / (width * width);
+        total[ir] = norm * std::exp(exponent);
+        spin_up[ir] = 0.75 * total[ir];
+        spin_down[ir] = total[ir] - spin_up[ir];
+        electron_count += total[ir] * volume_element;
+    }
+
+    SurchemParameters parameters;
+    parameters.use_sccs = true;
+    parameters.expected_electron_count = electron_count;
+    parameters.expected_ionic_charge = 1.0;
+    parameters.sccs_config.cavity.density_min = 1.0e-4;
+    parameters.sccs_config.cavity.density_max = 5.0e-3;
+    parameters.sccs_config.cavity.epsilon_bulk = 78.3;
+    parameters.sccs_config.surface_tension = ModuleSccs::dyn_per_cm_to_hartree_per_bohr2(50.0);
+    parameters.sccs_config.surface_regularization = 1.0e-8;
+    parameters.sccs_config.max_iterations = 200;
+    parameters.sccs_config.tolerance_rms = 1.0e-12;
+    parameters.sccs_config.tolerance_max = 1.0e-10;
+    parameters.sccs_config.solvent_aware.solvent_radius = 1.5;
+    parameters.sccs_config.solvent_aware.filling_threshold = 0.3;
+    std::vector<double> local_potential(basis.nrxx, 0.0);
+
+    surchem unpolarized;
+    unpolarized.set_parameters(parameters);
+    const double* total_channels[1] = {total.data()};
+    ModuleBase::matrix unpolarized_potential;
+    unpolarized.v_correction_sccs(cell, basis, 1, total_channels, local_potential.data(),
+                                  unpolarized_potential);
+    const double unpolarized_reaction = surchem::Ael;
+    const double unpolarized_cavity = surchem::Acav;
+
+    surchem polarized;
+    polarized.set_parameters(parameters);
+    const double* spin_channels[2] = {spin_up.data(), spin_down.data()};
+    ModuleBase::matrix polarized_potential;
+    polarized.v_correction_sccs(cell, basis, 2, spin_channels, local_potential.data(),
+                                polarized_potential);
+
+    EXPECT_GT(polarized.sccs_result().response.filled_volume, 0.0);
+    EXPECT_NE(unpolarized_reaction, 0.0);
+    EXPECT_EQ(surchem::Ael, unpolarized_reaction);
+    EXPECT_EQ(surchem::Acav, unpolarized_cavity);
+    ASSERT_EQ(polarized_potential.nr, 2);
+    ASSERT_EQ(polarized_potential.nc, basis.nrxx);
+    double channel_difference = 0.0;
+    double total_difference = 0.0;
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        const double between_channels = polarized_potential(0, ir) - polarized_potential(1, ir);
+        const double against_total = polarized_potential(0, ir) - unpolarized_potential(0, ir);
+        const double channel_magnitude = std::abs(between_channels);
+        const double total_magnitude = std::abs(against_total);
+        channel_difference = std::max(channel_difference, channel_magnitude);
+        total_difference = std::max(total_difference, total_magnitude);
+    }
+    EXPECT_EQ(channel_difference, 0.0);
+    EXPECT_EQ(total_difference, 0.0);
 }
 
 TEST(HCorrSccs, AppliesNeutralPcc2dPointIonEnergyAndPotential)
