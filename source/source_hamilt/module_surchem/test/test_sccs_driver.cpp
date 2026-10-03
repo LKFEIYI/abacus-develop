@@ -877,34 +877,21 @@ void filled_nonel_derivative(const double ecut,
               << analytic - finite_difference << std::endl;
 }
 
-// With eps_bulk = 1 only the surface and volume terms remain. The periodic
-// filled boundary uses the Environ chain gradient and Hessian, so the surface
-// potential is the continuum derivative -div(g/|g|) chained through the probe
-// adjoint, not the exact derivative of the discrete surface. The filling
-// switches over about one grid spacing here, and the finite difference of the
-// sampled surface oscillates with the grid (egg-box) while the potential is
-// grid-converged: measured potential 0.0056248, 0.0056312, 0.0056300 and
-// finite difference 0.0056407, 0.0055104, 0.0056320 at 120, 240, 480 Ry.
-// The spectral surface of the same s_sa rings and its finite difference does
-// not converge at all (surface derivative 222, 165, 92).
+// With eps_bulk = 1 only the surface and volume terms remain. The filled
+// boundary uses the Environ chain gradient and Hessian for every boundary
+// condition, so the surface potential is the continuum derivative
+// -div(g/|g|) chained through the probe adjoint, not the exact derivative of
+// the discrete surface. The filling switches over about one grid spacing here,
+// and the finite difference of the sampled surface oscillates with the grid
+// (egg-box) while the potential is grid-converged: measured periodic potential
+// 0.0056248, 0.0056312, 0.0056300 and finite difference 0.0056407, 0.0055104,
+// 0.0056320 at 120, 240, 480 Ry. The spectral surface of the same s_sa rings
+// and its finite difference does not converge at all (surface derivative 222,
+// 165, 92). PCC0D is checked: its dielectric differentiates the boundary on
+// the FFT grid, but its surface takes the chain gradients through the same
+// solvent_aware_surface as the periodic path, whose reuse
+// SolventAwareChainSurfaceReusesTheResponseGradients checks for both.
 TEST(SccsDriver, SolventAwareNonElectrostaticPotentialConvergesToTheDensityDerivative)
-{
-    double coarse_difference = 0.0;
-    double coarse_analytic = 0.0;
-    filled_nonel_derivative(120.0, ModulePcc::Boundary::Periodic, coarse_difference,
-                            coarse_analytic);
-    double fine_difference = 0.0;
-    double fine_analytic = 0.0;
-    filled_nonel_derivative(480.0, ModulePcc::Boundary::Periodic, fine_difference, fine_analytic);
-    EXPECT_GT(std::abs(fine_difference), 1.0e-3);
-    EXPECT_NEAR(coarse_analytic, fine_analytic, 5.0e-3 * std::abs(fine_analytic));
-    EXPECT_NEAR(fine_analytic, fine_difference, 2.0e-3 * std::abs(fine_difference));
-}
-
-// The same check with PCC0D, whose filled surface also takes the chain
-// derivatives although its dielectric differentiates the boundary on the FFT
-// grid.
-TEST(SccsDriver, SolventAwarePccNonElectrostaticPotentialConvergesToTheDensityDerivative)
 {
     double coarse_difference = 0.0;
     double coarse_analytic = 0.0;
