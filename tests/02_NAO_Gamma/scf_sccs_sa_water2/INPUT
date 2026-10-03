@@ -7,8 +7,8 @@ calculation         scf
 basis_type          lcao
 gamma_only          1
 nbands              12
-ecutwfc             100
-ecutrho             400
+ecutwfc             75
+ecutrho             300
 scf_nmax            80
 scf_thr             1.0e-8
 cal_force           1
