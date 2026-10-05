@@ -12,6 +12,7 @@ AddTest(TARGET MODULE_HAMILT_sccs_poisson
     ../../../source_cell/atom_pseudo.cpp ../../../source_cell/pseudo.cpp
     ../../../source_estate/charge_moments.cpp ../../../source_estate/pcc_0d.cpp
     ../sccs_pcc_0d_coulomb.cpp
+    ../sccs_cavity_derivatives.cpp
     ../sccs_functional.cpp
     ../sccs_parameters.cpp
     ../sccs_ionic_charge.cpp ../sccs_ionic_force.cpp ../sccs_pw_coulomb.cpp ../sccs_response.cpp ../sccs_cavity.cpp

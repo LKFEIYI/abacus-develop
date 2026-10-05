@@ -1,5 +1,6 @@
 add_library(sccs OBJECT
   sccs_cavity.cpp
+  sccs_cavity_derivatives.cpp
   sccs_parameters.cpp
   sccs_functional.cpp
   sccs_ionic_charge.cpp
