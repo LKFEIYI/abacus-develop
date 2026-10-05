@@ -141,3 +141,4 @@ scf_deltaspin4
 221_PW_PCC0D_H3O
 222_PW_PCC2D_H3O
 scf_sccs_h2
+scf_sccs_pcc0d_h2

@@ -510,7 +510,7 @@ Available options are:
 * pcc_2d: self-consistent PCC correction for a slab, open along the lattice vector selected by pcc_2d_axis (default: the third) and periodic along the other two. The open vector must be perpendicular to the periodic plane (rewrite a tilted cell as the equivalent perpendicular one), and the k-point sampling along it must be Gamma only. The multipoles are taken about the mass-weighted ionic center along the normal, and the correction is cut half a cell length from that center, so this plane must lie in the vacuum. With symmetry 1, every analyzed operation, including the primitive-cell translations used to symmetrize the density, must map the open vector onto plus or minus itself; an operation that keeps its direction must not translate by a fraction of it, which would copy the slab within the cell, whereas a mirror normal to it may. Otherwise the run stops; use a primitive cell with vacuum only along the open vector, or symmetry 0 or -1. The monopole term uses the open planar kernel that vanishes on the plane of the charge, -pi*Q*L/(3*A) with L the cell length along the open vector and A the periodic area, so the energy of a charged slab converges with the vacuum size; it is referenced to zero potential on the plane of the charge. ENVIRON uses -pi*Q/(3*L), so charged-slab energies agree with ENVIRON only for A = L^2.
 * makov-payne, m-p, mp: compute the Makov-Payne correction to the total energy and estimate a corrected vacuum level for eigenvalue alignment. This option is available only for cubic lattices (latname = sc, fcc, or bcc).
 
-pcc_0d and pcc_2d contribute to the energy, the potential and the fixed-cell forces; the correction energy is printed as E_pcc. They require CPU KS-DFT (esolver_type ksdft) with basis_type pw or lcao, calculation scf or relax, and nspin 1 or 2, without efield_flag, gate_flag, cal_stress, DFT-1/2, deepks output or dm_to_rho.
+pcc_0d and pcc_2d contribute to the energy, the potential and the fixed-cell forces; the correction energy is printed as E_pcc. They require CPU KS-DFT (esolver_type ksdft) with basis_type pw or lcao, calculation scf or relax, and nspin 1 or 2, without efield_flag, gate_flag, cal_stress, DFT-1/2, deepks output or dm_to_rho. With imp_sol=2, pcc_0d currently supports SCF energies without forces; imp_sol=1 and the pcc_2d combination with imp_sol=2 are not supported.
 
 Theory: G. Makov and M. C. Payne, Phys. Rev. B 51, 4014 (1995); PCC: O. Andreussi and N. Marzari, Phys. Rev. B 90, 245101 (2014).)";
         item.default_value = "none";
@@ -538,7 +538,9 @@ Theory: G. Makov and M. C. Payne, Phys. Rev. B 51, 4014 (1995); PCC: O. Andreuss
             if (inp.assume_isolated == "pcc_0d" || inp.assume_isolated == "pcc_2d")
             {
                 std::string error;
-                if (inp.imp_sol) { error = "cannot be combined with imp_sol"; }
+                if (inp.imp_sol == 1) { error = "cannot be combined with imp_sol=1"; }
+                else if (inp.imp_sol == 2 && inp.assume_isolated != "pcc_0d")
+                { error = "SCCS currently supports PCC 0D only"; }
                 else if (inp.nspin != 1 && inp.nspin != 2) { error = "requires nspin 1 or 2"; }
                 else if (inp.device != "cpu") { error = "requires device cpu"; }
                 else if (inp.esolver_type != "ksdft") { error = "requires esolver_type ksdft"; }

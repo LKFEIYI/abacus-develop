@@ -40,6 +40,11 @@ TEST(ReadInpSccs, SupportedScopeAndNumericalValidation)
     input.cal_stress = false;
     input.cal_force = false;
     input.assume_isolated = "pcc_0d";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.cal_force = true;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.cal_force = false;
+    input.assume_isolated = "pcc_2d";
     EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
     input.assume_isolated = "none";
     input.sccs_rho_min = input.sccs_rho_max;
