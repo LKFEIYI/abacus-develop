@@ -15,6 +15,31 @@
 
 namespace elecstate
 {
+void Potential::write_correction_iteration(std::ostream& output, int level, double residual, double pcc_energy) const
+{
+    if (level == 0) { return; }
+    const PotBase* selected = nullptr;
+    int priority = 0;
+    for (const PotBase* component : this->components)
+    {
+        const int candidate = component->correction_output_priority();
+        if (candidate > priority)
+        {
+            priority = candidate;
+            selected = component;
+        }
+    }
+    if (selected != nullptr) { selected->write_correction_iteration(output, level, residual, pcc_energy); }
+}
+void Potential::write_correction_final(std::ostream& output, int level, double pcc_energy) const
+{
+    if (level < 2) { return; }
+    for (const PotBase* component : this->components)
+    {
+        component->write_correction_final(output, level, pcc_energy);
+    }
+}
+
 bool Potential::update_scf_state(int electronic_iteration, double density_residual)
 {
     bool changed = false;

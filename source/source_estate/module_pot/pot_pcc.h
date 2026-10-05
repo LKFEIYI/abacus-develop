@@ -22,6 +22,8 @@ class PotPcc : public PotBase
 
     void cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential) override;
     double get_energy() const override;
+    int correction_output_priority() const override { return result_valid_ ? 2 : 0; }
+    void write_correction_iteration(std::ostream& output, int level, double residual, double pcc_energy) const override;
     const std::vector<double>& electron_potential() const;
     void add_force(const UnitCell& cell, ModuleBase::matrix& force) const;
 

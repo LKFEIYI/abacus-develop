@@ -1,4 +1,5 @@
 #include "pot_pcc.h"
+#include "sccs_output.h"
 
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
@@ -359,6 +360,19 @@ void PotPcc::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::m
     }
     result_valid_ = true;
     ModuleBase::timer::end("PotPcc", "cal_v_eff");
+}
+
+void PotPcc::write_correction_iteration(std::ostream& output, int level, double residual, double pcc_energy) const
+{
+    if (!result_valid_ || level == 0) { return; }
+    PccOutput result;
+    result.slab = dimension_ == Dimension::slab;
+    result.axis = open_axis_;
+    result.origin = geometry_.origin;
+    result.coordinate = slab_.origin;
+    result.normal = slab_.normal;
+    result.moments[1] = moments_;
+    write_pcc_output(output, result, level, energy_rydberg_);
 }
 
 double PotPcc::get_energy() const

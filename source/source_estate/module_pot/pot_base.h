@@ -1,6 +1,8 @@
 #ifndef POTBASE_H
 #define POTBASE_H
 
+#include <iosfwd>
+
 #include "source_base/complexmatrix.h"
 #include "source_base/matrix.h"
 #include "source_cell/unitcell.h"
@@ -34,6 +36,11 @@ class PotBase
     // True means the potential changed its model: restart mixing and require
     // another electronic iteration before accepting convergence.
     virtual bool update_scf_state(int electronic_iteration, double density_residual) { return false; }
+
+    // Prefer active solvation (3), otherwise PCC (2), then deferred solvation (1).
+    virtual int correction_output_priority() const { return 0; }
+    virtual void write_correction_iteration(std::ostream&, int, double, double) const {}
+    virtual void write_correction_final(std::ostream&, int, double) const {}
 
     // Solvation contributions in Ry, added once after the band-energy potential subtraction.
     virtual void get_solvation_energy(double& electrostatic, double& non_electrostatic) const

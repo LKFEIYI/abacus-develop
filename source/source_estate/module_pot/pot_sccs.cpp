@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <utility>
+#include <ostream>
 
 namespace
 {
@@ -209,6 +210,7 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
                                                                solver_, restart_potential_, basis, cell->tpiba,
                                                                *coulomb, response, error);
     require_valid_on_pool(response_valid, error);
+    output_.transforms = coulomb->transform_counts();
     if (config_.boundary == ModuleSccs::Boundary::Pcc2d)
     {
         const double electron_count = ionic_sum - net_charge;
@@ -220,6 +222,24 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     const bool functional_valid = ModuleSccs::evaluate_functional(solute_charge, response, config_, basis,
                                                                   cell->tpiba, *coulomb, functional, error);
     require_valid_on_pool(functional_valid, error);
+    output_.valid = true;
+    output_.iterations = response.polarization.iterations;
+    output_.warm_started = response.polarization.warm_started;
+    output_.residual_rms = response.polarization.residual_rms;
+    output_.residual_max = response.polarization.residual_max;
+    output_.fixed_point_checked = response.polarization.fixed_point_checked;
+    output_.fixed_point_defect_rms = response.polarization.fixed_point_defect_rms;
+    output_.fixed_point_defect_max = response.polarization.fixed_point_defect_max;
+    output_.reaction_energy = functional.reaction_energy;
+    output_.volume = functional.volume;
+    output_.surface = functional.surface;
+    output_.far_field_charge = response.far_field_polarization_charge;
+    if (solver_.check_fixed_point && config_.boundary != ModuleSccs::Boundary::Periodic)
+    {
+        const bool diagnostics_valid = collect_sccs_output(*cell, basis, atoms, ions, solute_charge,
+                                                           config_, response, output_, error);
+        require_valid_on_pool(diagnostics_valid, error);
+    }
     electrostatic_rydberg_ = 2.0 * functional.reaction_energy;
     non_electrostatic_rydberg_ = 2.0 * (functional.surface_energy + functional.volume_energy);
     electrostatic_potential_.resize(basis.nrxx);
@@ -277,6 +297,31 @@ void PotSccs::add_solvation_force(const UnitCell& cell, ModuleBase::matrix& forc
         }
     }
     ModuleBase::timer::end("PotSccs", "add_solvation_force");
+}
+
+int PotSccs::correction_output_priority() const
+{
+    if (!sccs_active_) { return 1; }
+    return output_.valid ? 3 : 0;
+}
+void PotSccs::write_correction_iteration(std::ostream& output, int level, double residual, double pcc_energy) const
+{
+    if (level == 0) { return; }
+    if (!sccs_active_)
+    {
+        output << " SCCS_DEFERRED DRHO " << residual << " START_DRHO " << config_.start_drho
+               << " START_NMAX " << config_.start_nmax << '\n';
+        return;
+    }
+    const double energy = get_energy();
+    const bool pcc = config_.boundary != ModuleSccs::Boundary::Periodic;
+    write_sccs_output(output, output_, level, energy, pcc, pcc_energy);
+}
+void PotSccs::write_correction_final(std::ostream& output, int level, double pcc_energy) const
+{
+    if (level < 2 || !sccs_active_) { return; }
+    const bool slab = config_.boundary == ModuleSccs::Boundary::Pcc2d;
+    write_sccs_final_output(output, output_, slab, pcc_energy);
 }
 
 double PotSccs::get_energy() const

@@ -2,6 +2,7 @@
 #define POT_SCCS_H
 
 #include "pot_base.h"
+#include "sccs_output.h"
 #include "source_hamilt/module_sccs/sccs_parameters.h"
 
 struct Input_para;
@@ -21,6 +22,9 @@ public:
     void cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential) override;
     double get_energy() const override;
     bool update_scf_state(int electronic_iteration, double density_residual) override;
+    int correction_output_priority() const override;
+    void write_correction_iteration(std::ostream& output, int level, double residual, double pcc_energy) const override;
+    void write_correction_final(std::ostream& output, int level, double pcc_energy) const override;
     bool sccs_is_active() const { return sccs_active_; }
     void add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const override;
     void get_solvation_energy(double& electrostatic, double& non_electrostatic) const override;
@@ -32,6 +36,7 @@ private:
     bool sccs_active_ = false;
     const ModuleSccs::SccsConfig config_;
     const ModuleSccs::PolarizationSolverParameters solver_;
+    SccsOutput output_;
     double electrostatic_rydberg_ = 0.0;
     double non_electrostatic_rydberg_ = 0.0;
     std::vector<double> electrostatic_potential_;
