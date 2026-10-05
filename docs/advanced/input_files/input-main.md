@@ -543,6 +543,8 @@
     - [sccs\_surface\_eta](#sccs_surface_eta)
     - [sccs\_lowpass\_p1](#sccs_lowpass_p1)
     - [sccs\_lowpass\_p2](#sccs_lowpass_p2)
+    - [sccs\_solvent\_mode](#sccs_solvent_mode)
+    - [sccs\_corespread](#sccs_corespread)
     - [eb\_k](#eb_k)
     - [tau](#tau)
     - [sigma\_k](#sigma_k)
@@ -5012,6 +5014,21 @@
 - **Availability**: *[`imp_sol`](#imp_sol)==2*
 - **Description**: Offset of the SCCS switching-function low-pass filter, as Environ deriv_lowpass_p2; see sccs_lowpass_p1. Both must be positive or both non-positive. Default -1 (off).
 - **Default**: -1
+
+### sccs_solvent_mode
+
+- **Type**: String
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Allowed values: electronic (default) and full, as Environ solvent_mode. electronic builds the dielectric cavity from the valence electron density. full adds a valence-charge Gaussian on each atom with positive sccs_corespread. The Gaussians shape only the cavity, not the solute charge; the ionic forces include their cavity term. The published SCCS presets were fitted with electronic mode.
+- **Default**: electronic
+
+### sccs_corespread
+
+- **Type**: Vector of Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom, including hydrogen. Otherwise exactly nat values are required, in STRU atom order (grouped by atom type). A value &lt;= 0 disables the cavity Gaussian on that atom. Values must be finite. These Gaussians do not change the solute charge.
+- **Default**: 0.5
+- **Unit**: bohr
 
 ### eb_k
 

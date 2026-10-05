@@ -86,6 +86,24 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
         error = "sccs_lowpass_p1 and sccs_lowpass_p2 require assume_isolated pcc_0d or pcc_2d";
         return false;
     }
+    if (input.sccs_solvent_mode != "electronic" && input.sccs_solvent_mode != "full")
+    {
+        error = "sccs_solvent_mode must be electronic or full";
+        return false;
+    }
+    if (input.sccs_corespread.empty())
+    {
+        error = "sccs_corespread must contain one value or exactly nat values";
+        return false;
+    }
+    for (double spread : input.sccs_corespread)
+    {
+        if (!std::isfinite(spread))
+        {
+            error = "sccs_corespread values must be finite";
+            return false;
+        }
+    }
     return true;
 }
 
@@ -253,6 +271,35 @@ void ReadInput::item_sccs()
         item.unit = "";
         item.set_availability("imp_sol==2");
         read_sync_double(input.sccs_lowpass_p2);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_solvent_mode");
+        item.annotation = "density that defines the SCCS cavity";
+        item.category = "Implicit solvation model";
+        item.type = "String";
+        item.description = "Allowed values: electronic (default) and full, as Environ solvent_mode. electronic builds the dielectric cavity from the valence electron density. full adds a valence-charge Gaussian on each atom with positive sccs_corespread. The Gaussians shape only the cavity, not the solute charge; the ionic forces include their cavity term. The published SCCS presets were fitted with electronic mode.";
+        item.default_value = "electronic";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_string(input.sccs_solvent_mode);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_corespread");
+        item.annotation = "Widths of the full-cavity Gaussians";
+        item.category = "Implicit solvation model";
+        item.type = "Vector of Real";
+        item.description = "Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom, including hydrogen. Otherwise exactly nat values are required, in STRU atom order (grouped by atom type). A value <= 0 disables the cavity Gaussian on that atom. Values must be finite. These Gaussians do not change the solute charge.";
+        item.default_value = "0.5";
+        item.unit = "bohr";
+        item.set_availability("imp_sol==2");
+        item.read_value = [](const Input_Item& item, Parameter& para) {
+            std::vector<double> values;
+            for (const std::string& value : item.str_values) { values.push_back(std::stod(value)); }
+            para.input.sccs_corespread.swap(values);
+        };
+        sync_doublevec(input.sccs_corespread, para.input.sccs_corespread.size(), 0.0);
         this->add_item(item);
     }
 }

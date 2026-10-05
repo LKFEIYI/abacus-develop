@@ -49,6 +49,13 @@ bool make_sccs_config_from_input(const Input_para& input,
         candidate.pressure = ModuleSccs::gpa_to_hartree_per_bohr3(input.sccs_pressure);
     }
     else if (!ModuleSccs::make_sccs_config(preset, candidate, error)) { return false; }
+    if (input.sccs_solvent_mode != "electronic" && input.sccs_solvent_mode != "full")
+    {
+        error = "sccs_solvent_mode must be electronic or full";
+        return false;
+    }
+    candidate.core_electrons = input.sccs_solvent_mode == "full";
+    candidate.core_spreads = input.sccs_corespread;
     candidate.surface_regularization = input.sccs_surface_eta;
     candidate.cavity.lowpass_p1 = input.sccs_lowpass_p1;
     candidate.cavity.lowpass_p2 = input.sccs_lowpass_p2;
@@ -107,6 +114,11 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     const int atom_count = atoms.size();
     const bool count_valid = atom_count == cell->nat;
     require_valid_on_pool(count_valid, "SCCS atom count does not match UnitCell");
+    if (config_.core_electrons)
+    {
+        const bool widths_valid = config_.core_spreads.size() == 1 || config_.core_spreads.size() == atoms.size();
+        require_valid_on_pool(widths_valid, "sccs_corespread must contain one value or exactly nat values");
+    }
     std::vector<double> ions;
     std::string error;
     const bool ions_valid = ModuleSccs::gaussian_ionic_density(atoms, basis, cell->tpiba,

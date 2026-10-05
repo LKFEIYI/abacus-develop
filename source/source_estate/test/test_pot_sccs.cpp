@@ -251,3 +251,17 @@ TEST_F(PotSccsTest, FullCavityForceIncludesNonElectrostaticDerivative)
         }
     }
 }
+
+TEST_F(PotSccsTest, FullCavityInputUsesOriginalParameterNameAndKeepsPresetWidths)
+{
+    Input_para input;
+    input.sccs_preset = "water-cation";
+    input.sccs_solvent_mode = "full";
+    input.sccs_corespread = {0.8, 0.0, -1.0};
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    EXPECT_TRUE(config.core_electrons);
+    EXPECT_EQ(config.core_spreads, input.sccs_corespread);
+    EXPECT_DOUBLE_EQ(config.cavity.epsilon_bulk, 78.3);
+}

@@ -93,3 +93,23 @@ TEST(ReadInpSccs, LowpassRequiresPairedFiniteValuesAndPcc)
     input.sccs_lowpass_p2 = std::numeric_limits<double>::infinity();
     EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
 }
+
+TEST(ReadInpSccs, FullCavityWidthsAndModeValidation)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    input.sccs_solvent_mode = "full";
+    std::string error;
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.7, 0.0, -1.0};
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.0};
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {std::numeric_limits<double>::infinity()};
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread.clear();
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.5};
+    input.sccs_solvent_mode = "invalid";
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+}

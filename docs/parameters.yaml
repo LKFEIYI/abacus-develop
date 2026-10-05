@@ -4434,6 +4434,22 @@ parameters:
     default_value: "-1"
     unit: ""
     availability: imp_sol==2
+  - name: sccs_solvent_mode
+    category: Implicit solvation model
+    type: String
+    description: |
+      Allowed values: electronic (default) and full, as Environ solvent_mode. electronic builds the dielectric cavity from the valence electron density. full adds a valence-charge Gaussian on each atom with positive sccs_corespread. The Gaussians shape only the cavity, not the solute charge; the ionic forces include their cavity term. The published SCCS presets were fitted with electronic mode.
+    default_value: electronic
+    unit: ""
+    availability: imp_sol==2
+  - name: sccs_corespread
+    category: Implicit solvation model
+    type: Vector of Real
+    description: |
+      Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom, including hydrogen. Otherwise exactly nat values are required, in STRU atom order (grouped by atom type). A value <= 0 disables the cavity Gaussian on that atom. Values must be finite. These Gaussians do not change the solute charge.
+    default_value: "0.5"
+    unit: bohr
+    availability: imp_sol==2
   - name: eb_k
     category: Implicit solvation model
     type: Real
