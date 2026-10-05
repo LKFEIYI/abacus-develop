@@ -63,6 +63,7 @@ bool evaluate_functional(const std::vector<double>& charge,
     FunctionalResult candidate;
     candidate.reaction_potential.resize(size);
     candidate.electron_potential.resize(size);
+    candidate.cavity_potential = response.cavity_potential;
     for (std::size_t i = 0; i < size; ++i)
     {
         const double reaction = response.polarization.potential[i] - vacuum[i];
@@ -97,6 +98,7 @@ bool evaluate_functional(const std::vector<double>& charge,
         const double nonel = (config.pressure - config.surface_tension * divergence[i])
                              * response.dsolute_drho[i];
         candidate.electron_potential[i] += nonel;
+        candidate.cavity_potential[i] += nonel;
     }
     if (!validate_grid_values(candidate.reaction_potential, basis, error)
         || !validate_grid_values(candidate.electron_potential, basis, error))

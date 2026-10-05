@@ -28,5 +28,23 @@ bool gaussian_ionic_force(const std::vector<unitcell::AtomData>& atoms,
                           double spread,
                           std::vector<ModuleBase::Vector3<double>>& forces,
                           std::string& error);
+
+// One finite positive width per atom; scalar interface remains available.
+bool gaussian_ionic_force(const std::vector<unitcell::AtomData>& atoms,
+                          const std::vector<double>& reaction_potential,
+                          const ModulePW::PW_Basis& basis,
+                          double tpiba,
+                          const std::vector<double>& spreads,
+                          std::vector<ModuleBase::Vector3<double>>& forces,
+                          std::string& error);
+
+// Full cavity: one width applies to all atoms, nonpositive widths disable atoms.
+bool gaussian_core_force(const std::vector<unitcell::AtomData>& atoms,
+                          const std::vector<double>& reaction_potential,
+                          const ModulePW::PW_Basis& basis,
+                          double tpiba,
+                            const std::vector<double>& atom_spreads,
+                          std::vector<ModuleBase::Vector3<double>>& forces,
+                          std::string& error);
 } // namespace ModuleSccs
 #endif

@@ -26,6 +26,29 @@ bool gaussian_ionic_density(const std::vector<unitcell::AtomData>& atoms,
                             double spread,
                             std::vector<double>& density,
                             std::string& error);
+
+// One finite positive width per atom; scalar interface remains available.
+bool gaussian_ionic_density(const std::vector<unitcell::AtomData>& atoms,
+                            const ModulePW::PW_Basis& basis,
+                            double tpiba,
+                            const std::vector<double>& spreads,
+                            std::vector<double>& density,
+                            std::string& error);
+
+// Resolve full-cavity widths without changing the physical ionic charge.
+bool prepare_core_gaussians(const std::vector<unitcell::AtomData>& atoms,
+                            const std::vector<double>& atom_spreads,
+                            std::vector<unitcell::AtomData>& core_atoms,
+                            std::vector<double>& widths,
+                            std::string& error);
+
+// Full cavity: one width applies to all atoms, nonpositive widths disable atoms.
+bool gaussian_core_density(const std::vector<unitcell::AtomData>& atoms,
+                            const ModulePW::PW_Basis& basis,
+                            double tpiba,
+                            const std::vector<double>& atom_spreads,
+                            std::vector<double>& density,
+                            std::string& error);
 } // namespace ModuleSccs
 
 #endif

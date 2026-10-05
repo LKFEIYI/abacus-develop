@@ -74,3 +74,41 @@ TEST_F(SccsIonicChargeTest, InvalidIonAndSpreadPreserveOutput)
         EXPECT_DOUBLE_EQ(value, 0.0);
     }
 }
+
+TEST_F(SccsIonicChargeTest, FullCavityDefaultsAndAtomWidths)
+{
+    std::vector<unitcell::AtomData> atoms(3);
+    atoms[0].valence_charge = 6.0;
+    atoms[1].valence_charge = 1.0;
+    atoms[2].valence_charge = 7.0;
+    atoms[0].position.x = length / 4.0;
+    std::vector<double> widths = {0.5};
+    std::vector<double> density;
+    auto integral = [&]() {
+        double sum = 0.0;
+        for (double value : density) { sum += value; }
+        Parallel_Reduce::reduce_pool(sum);
+        return sum * basis.omega / basis.nxyz;
+    };
+    ASSERT_TRUE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_NEAR(integral(), 14.0, 1e-12);
+    widths = {0.8};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_NEAR(integral(), 14.0, 1e-12);
+    widths = {0.7, 0.0, -1.0};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_NEAR(integral(), 6.0, 1e-12);
+    std::vector<unitcell::AtomData> selected;
+    std::vector<double> resolved;
+    ASSERT_TRUE(ModuleSccs::prepare_core_gaussians(atoms, widths, selected, resolved, error));
+    EXPECT_DOUBLE_EQ(resolved[0], 0.7);
+    EXPECT_DOUBLE_EQ(selected[1].valence_charge, 0.0);
+    EXPECT_DOUBLE_EQ(atoms[1].valence_charge, 1.0);
+    widths = {0.0};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_DOUBLE_EQ(integral(), 0.0);
+    widths = {0.5, 0.5};
+    density.assign(1, 42.0);
+    EXPECT_FALSE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_DOUBLE_EQ(density[0], 42.0);
+}

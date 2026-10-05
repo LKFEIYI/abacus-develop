@@ -31,6 +31,7 @@ private:
     double non_electrostatic_rydberg_ = 0.0;
     std::vector<double> electrostatic_potential_;
     std::vector<double> restart_potential_;
+    std::vector<double> cavity_potential_;
 };
 } // namespace elecstate
 #endif

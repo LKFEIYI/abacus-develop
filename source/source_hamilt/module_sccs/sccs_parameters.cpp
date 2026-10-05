@@ -131,6 +131,22 @@ bool validate_config(const SccsConfig& config, std::string& error)
         error = "SCCS requires finite positive surface regularization";
         return false;
     }
+    if (config.core_electrons)
+    {
+        if (config.core_spreads.empty())
+        {
+            error = "SCCS full cavity requires one width or one per atom";
+            return false;
+        }
+        for (double spread : config.core_spreads)
+        {
+            if (!std::isfinite(spread))
+            {
+                error = "SCCS core widths must be finite";
+                return false;
+            }
+        }
+    }
     return true;
 }
 } // namespace ModuleSccs

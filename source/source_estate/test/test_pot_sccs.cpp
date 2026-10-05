@@ -179,3 +179,75 @@ TEST_F(PotSccsTest, LowpassControlsSurvivePresetAndInvalidInputPreservesConfig)
     EXPECT_EQ(config.boundary, ModuleSccs::Boundary::Pcc2d);
     EXPECT_DOUBLE_EQ(config.cavity.lowpass_p1, 10.0);
 }
+
+TEST_F(PotSccsTest, FullCavityForceIncludesNonElectrostaticDerivative)
+{
+    UnitCell cell;
+    Atom atom;
+    cell.lat0 = length;
+    cell.tpiba = tpiba;
+    cell.omega = basis.omega;
+    cell.ntype = 1;
+    cell.nat = 2;
+    cell.atoms = &atom;
+    atom.na = 2;
+    atom.ncpp.zv = 1.0;
+    atom.tau = {ModuleBase::Vector3<double>(0.21, 0.32, 0.43),
+                ModuleBase::Vector3<double>(0.64, 0.51, 0.27)};
+    const double density_value = 2.0 / basis.omega;
+    std::vector<double> density(basis.nrxx, density_value);
+    double* channels[] = {density.data()};
+    Charge charge;
+    charge.nspin = 1;
+    charge.rho = channels;
+    Input_para input;
+    input.sccs_epsilon = 1.0;
+    input.sccs_tol_rms = 1e-13;
+    input.sccs_tol_max = 1e-12;
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    config.core_electrons = true;
+    config.core_spreads = {2.0};
+    config.surface_tension = 1e-5;
+    config.pressure = 1e-6;
+    elecstate::PotSccs component(&basis, config, solver);
+    ModuleBase::matrix potential(1, basis.nrxx);
+    component.cal_v_eff(&charge, &cell, potential);
+    ModuleBase::matrix force(2, 3);
+    component.add_solvation_force(cell, force);
+    const double step = 1e-4;
+    for (int ia = 0; ia < 2; ++ia)
+    {
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            const double original = atom.tau[ia][axis];
+            atom.tau[ia][axis] = original + step / length;
+            potential.zero_out();
+            component.cal_v_eff(&charge, &cell, potential);
+            const double positive = component.get_energy();
+            atom.tau[ia][axis] = original - step / length;
+            potential.zero_out();
+            component.cal_v_eff(&charge, &cell, potential);
+            const double negative = component.get_energy();
+            atom.tau[ia][axis] = original;
+            const double finite_difference = -(positive - negative) / (2.0 * step);
+            EXPECT_NEAR(force(ia, axis), finite_difference, 1e-8);
+        }
+    }
+    potential.zero_out();
+    component.cal_v_eff(&charge, &cell, potential);
+    ModuleBase::matrix accumulated(2, 3);
+    for (int ia = 0; ia < 2; ++ia)
+    {
+        for (int axis = 0; axis < 3; ++axis) { accumulated(ia, axis) = 7.0; }
+    }
+    component.add_solvation_force(cell, accumulated);
+    for (int ia = 0; ia < 2; ++ia)
+    {
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            EXPECT_NEAR(accumulated(ia, axis), 7.0 + force(ia, axis), 1e-10);
+        }
+    }
+}

@@ -115,3 +115,25 @@ TEST_F(SccsIonicForceTest, DistributedInvalidInputPreservesOutput)
     EXPECT_FALSE(ModuleSccs::gaussian_ionic_force(atoms, potential, basis, tpiba, 0.5, forces, error));
     EXPECT_DOUBLE_EQ(forces[0].z, 9.0);
 }
+
+TEST_F(SccsIonicForceTest, FullCavityForceTracksPerAtomWidthAndDisabling)
+{
+    std::vector<unitcell::AtomData> atoms(2);
+    atoms[0].valence_charge = 6.0;
+    atoms[1].valence_charge = 1.0;
+    for (unitcell::AtomData& atom : atoms) { atom.position.x = length / 4.0; }
+    const std::vector<double> potential = cosine_mode(0);
+    std::vector<ModuleBase::Vector3<double>> force;
+    std::vector<double> widths = {0.8, 0.0};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, force, error));
+    const double expected = 6.0 * tpiba * std::exp(-0.25 * 0.8 * 0.8 * tpiba * tpiba);
+    EXPECT_NEAR(force[0].x, expected, 1e-12);
+    EXPECT_DOUBLE_EQ(force[1].x, 0.0);
+    widths = {0.8};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, force, error));
+    EXPECT_NEAR(force[1].x, expected / 6.0, 1e-12);
+    widths = {0.0};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, force, error));
+    EXPECT_DOUBLE_EQ(force[0].x, 0.0);
+    EXPECT_DOUBLE_EQ(force[1].x, 0.0);
+}
