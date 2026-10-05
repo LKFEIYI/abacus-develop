@@ -324,3 +324,20 @@ TEST_F(PotSccsTest, WaitingSccsContributesNoPotentialEnergyOrForce)
     delayed.cal_v_eff(&charge, &cell, potential);
     EXPECT_LT(delayed.get_energy(), 0.0);
 }
+
+TEST_F(PotSccsTest, PresetKeepsDelayedStartControlsAndInvalidInputPreservesConfig)
+{
+    Input_para input;
+    input.sccs_preset = "water-cation";
+    input.sccs_start_drho = 1e-3;
+    input.sccs_start_nmax = 3;
+    input.scf_nmax = 10;
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    EXPECT_DOUBLE_EQ(config.start_drho, 1e-3);
+    EXPECT_EQ(config.start_nmax, 3);
+    input.sccs_start_drho = input.scf_thr;
+    EXPECT_FALSE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    EXPECT_DOUBLE_EQ(config.start_drho, 1e-3);
+}

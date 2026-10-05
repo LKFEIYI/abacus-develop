@@ -545,6 +545,8 @@
     - [sccs\_lowpass\_p2](#sccs_lowpass_p2)
     - [sccs\_solvent\_mode](#sccs_solvent_mode)
     - [sccs\_corespread](#sccs_corespread)
+    - [sccs\_start\_drho](#sccs_start_drho)
+    - [sccs\_start\_nmax](#sccs_start_nmax)
     - [eb\_k](#eb_k)
     - [tau](#tau)
     - [sigma\_k](#sigma_k)
@@ -5029,6 +5031,20 @@
 - **Description**: Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom except those whose known atomic number equals the pseudopotential valence charge (within 1e-8); if the pseudopotential element is unknown, the value is applied. More than one value requires exactly nat values in STRU atom order (grouped by atom type), and overrides this automatic exclusion. A value &lt;= 0 disables the cavity Gaussian on that atom. Values must be finite. These Gaussians do not change the solute charge.
 - **Default**: 0.5
 - **Unit**: bohr
+
+### sccs_start_drho
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Delay SCCS at the start of the run until DRHO is at or below this value. Zero starts SCCS immediately; a positive value must exceed scf_thr so that the SCF cannot converge before SCCS starts, and the SCF does not stop in the iteration that activates SCCS. Once activated, SCCS remains active for all later electronic and ionic steps. PCC remains active during the delay. User-controlled for every sccs_preset, default 0.
+- **Default**: 0.0
+
+### sccs_start_nmax
+
+- **Type**: Integer
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. The value must be positive, and smaller than scf_nmax when delayed start is enabled. User-controlled for every sccs_preset, default 30; inactive when sccs_start_drho=0.
+- **Default**: 30
 
 ### eb_k
 

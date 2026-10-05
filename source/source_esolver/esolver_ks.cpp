@@ -269,7 +269,7 @@ ESolver_KS::DensityStage ESolver_KS::density_stage(const int istep, const int it
 void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &conv_esolver)
 {
     bool potential_changed = false;
-    if (this->inp_->imp_sol == 2)
+    if (this->inp_->imp_sol == 2 && this->inp_->sccs_start_drho > 0.0)
     {
         double density_residual = this->drho;
         Parallel_Common::bcast_double(density_residual);

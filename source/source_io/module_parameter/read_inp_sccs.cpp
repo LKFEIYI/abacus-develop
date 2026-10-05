@@ -104,6 +104,22 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
             return false;
         }
     }
+    if (!std::isfinite(input.sccs_start_drho) || input.sccs_start_drho < 0.0)
+    {
+        error = "sccs_start_drho must be finite and non-negative";
+        return false;
+    }
+    if (input.sccs_start_drho > 0.0 && input.sccs_start_drho <= input.scf_thr)
+    {
+        error = "sccs_start_drho must be zero or larger than scf_thr";
+        return false;
+    }
+    if (input.sccs_start_nmax <= 0
+        || (input.sccs_start_drho > 0.0 && input.sccs_start_nmax >= input.scf_nmax))
+    {
+        error = "sccs_start_nmax must be positive and smaller than scf_nmax when delayed start is enabled";
+        return false;
+    }
     return true;
 }
 
@@ -300,6 +316,30 @@ void ReadInput::item_sccs()
             para.input.sccs_corespread.swap(values);
         };
         sync_doublevec(input.sccs_corespread, para.input.sccs_corespread.size(), 0.0);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_start_drho");
+        item.annotation = "SCCS delayed-start density threshold";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Delay SCCS at the start of the run until DRHO is at or below this value. Zero starts SCCS immediately; a positive value must exceed scf_thr so that the SCF cannot converge before SCCS starts, and the SCF does not stop in the iteration that activates SCCS. Once activated, SCCS remains active for all later electronic and ionic steps. PCC remains active during the delay. User-controlled for every sccs_preset, default 0.";
+        item.default_value = "0.0";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_start_drho);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_start_nmax");
+        item.annotation = "SCCS delayed-start iteration limit";
+        item.category = "Implicit solvation model";
+        item.type = "Integer";
+        item.description = "Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. The value must be positive, and smaller than scf_nmax when delayed start is enabled. User-controlled for every sccs_preset, default 30; inactive when sccs_start_drho=0.";
+        item.default_value = "30";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_int(input.sccs_start_nmax);
         this->add_item(item);
     }
 }

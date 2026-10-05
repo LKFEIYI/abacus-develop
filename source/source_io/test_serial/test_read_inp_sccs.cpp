@@ -113,3 +113,29 @@ TEST(ReadInpSccs, FullCavityWidthsAndModeValidation)
     input.sccs_solvent_mode = "invalid";
     EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
 }
+
+TEST(ReadInpSccs, DelayedStartRequiresRoomBeforeScfConvergenceAndIterationLimit)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    input.scf_thr = 1e-9;
+    input.scf_nmax = 10;
+    std::string error;
+    ASSERT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_start_drho = 1e-3;
+    input.sccs_start_nmax = 3;
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_start_drho = input.scf_thr;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_start_drho = -1.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_start_drho = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_start_drho = 1e-3;
+    input.sccs_start_nmax = 10;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_start_drho = 0.0;
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_start_nmax = 0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+}

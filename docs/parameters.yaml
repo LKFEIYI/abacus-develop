@@ -4450,6 +4450,22 @@ parameters:
     default_value: "0.5"
     unit: bohr
     availability: imp_sol==2
+  - name: sccs_start_drho
+    category: Implicit solvation model
+    type: Real
+    description: |
+      Delay SCCS at the start of the run until DRHO is at or below this value. Zero starts SCCS immediately; a positive value must exceed scf_thr so that the SCF cannot converge before SCCS starts, and the SCF does not stop in the iteration that activates SCCS. Once activated, SCCS remains active for all later electronic and ionic steps. PCC remains active during the delay. User-controlled for every sccs_preset, default 0.
+    default_value: "0.0"
+    unit: ""
+    availability: imp_sol==2
+  - name: sccs_start_nmax
+    category: Implicit solvation model
+    type: Integer
+    description: |
+      Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. The value must be positive, and smaller than scf_nmax when delayed start is enabled. User-controlled for every sccs_preset, default 30; inactive when sccs_start_drho=0.
+    default_value: "30"
+    unit: ""
+    availability: imp_sol==2
   - name: eb_k
     category: Implicit solvation model
     type: Real

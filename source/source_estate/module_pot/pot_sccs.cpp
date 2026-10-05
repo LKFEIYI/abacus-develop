@@ -54,6 +54,14 @@ bool make_sccs_config_from_input(const Input_para& input,
         error = "sccs_solvent_mode must be electronic or full";
         return false;
     }
+    candidate.start_drho = input.sccs_start_drho;
+    candidate.start_nmax = input.sccs_start_nmax;
+    const bool delayed = candidate.start_drho > 0.0;
+    if (delayed && (candidate.start_drho <= input.scf_thr || candidate.start_nmax >= input.scf_nmax))
+    {
+        error = "Delayed SCCS requires sccs_start_drho > scf_thr and sccs_start_nmax < scf_nmax";
+        return false;
+    }
     candidate.core_electrons = input.sccs_solvent_mode == "full";
     candidate.core_spreads = input.sccs_corespread;
     candidate.surface_regularization = input.sccs_surface_eta;
