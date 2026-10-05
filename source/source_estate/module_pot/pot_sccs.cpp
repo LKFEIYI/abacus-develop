@@ -184,8 +184,6 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
 void PotSccs::add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const
 {
     ModuleBase::timer::start("PotSccs", "add_solvation_force");
-    const bool force_supported = config_.boundary != ModuleSccs::Boundary::Pcc2d;
-    require_valid_on_pool(force_supported, "SCCS PCC 2D forces are not supported yet");
     const bool shape_valid = force.nr == cell.nat && force.nc == 3
                              && this->rho_basis_ != nullptr && cell.atoms != nullptr && cell.ntype > 0;
     require_valid_on_pool(shape_valid, "SCCS force requires initialized cell and atom-major storage");
