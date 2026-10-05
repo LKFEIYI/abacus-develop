@@ -1,5 +1,6 @@
 #include "sccs_cavity_derivatives.h"
 #include "sccs_cavity.h"
+#include "sccs_lowpass.h"
 #include "sccs_response.h"
 #include "sccs_pw_coulomb.h"
 
@@ -19,9 +20,21 @@ bool prepare_cavity_derivatives(const std::vector<double>& density,
                     double tpiba,
                     bool open_boundary,
                     SccsResponse& response,
-                    std::vector<double>& coefficient,
+                    CavityDerivatives& derivatives,
                     std::string& error)
 {
+    if (!make_switching_filter(cavity, basis, derivatives.filter, error))
+    {
+        return false;
+    }
+    const bool lowpass = uses_switching_lowpass(cavity);
+    if (lowpass && !open_boundary)
+    {
+        error = "SCCS lowpass requires an open-boundary Coulomb operator";
+        return false;
+    }
+    derivatives.gradient.clear();
+    std::vector<double>& coefficient = derivatives.coefficient;
     const std::size_t size = density.size();
     response.solute.resize(size);
     response.dsolute_drho.resize(size);
@@ -55,6 +68,13 @@ bool prepare_cavity_derivatives(const std::vector<double>& density,
         // grid, since its chain coefficient is not converged at the cavity edge.
         std::vector<std::complex<double>> boundary_g(basis.npw);
         basis.real2recip(response.solute.data(), boundary_g.data());
+        if (lowpass)
+        {
+            for (int ig = 0; ig < basis.npw; ++ig)
+            {
+                boundary_g[ig] *= derivatives.filter[ig];
+            }
+        }
         std::vector<ModuleBase::Vector3<double>> gradient(size);
         std::vector<double> laplacian(size);
         XC_Functional::grad_rho(boundary_g.data(), gradient.data(), &basis, tpiba);
@@ -73,6 +93,7 @@ bool prepare_cavity_derivatives(const std::vector<double>& density,
                              * (0.5 * lap_log + 0.25 * log_bulk * log_bulk * gradient_square)
                              / ModuleBase::FOUR_PI;
         }
+        if (lowpass) { derivatives.gradient.swap(gradient); }
         return validate_grid_values(coefficient, basis, error);
     }
 

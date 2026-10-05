@@ -5,6 +5,11 @@
 
 namespace ModuleSccs
 {
+bool uses_switching_lowpass(const CavityParameters& parameters)
+{
+    return parameters.lowpass_p1 > 0.0 && parameters.lowpass_p2 > 0.0;
+}
+
 bool validate_cavity_parameters(const CavityParameters& parameters, std::string& error)
 {
     error.clear();
@@ -17,6 +22,12 @@ bool validate_cavity_parameters(const CavityParameters& parameters, std::string&
     if (!std::isfinite(parameters.epsilon_bulk) || parameters.epsilon_bulk < 1.0)
     {
         error = "SCCS requires a finite bulk dielectric constant >= 1";
+        return false;
+    }
+    if (!std::isfinite(parameters.lowpass_p1) || !std::isfinite(parameters.lowpass_p2)
+        || (parameters.lowpass_p1 > 0.0) != (parameters.lowpass_p2 > 0.0))
+    {
+        error = "SCCS lowpass parameters must be finite and both positive or both non-positive";
         return false;
     }
     return true;

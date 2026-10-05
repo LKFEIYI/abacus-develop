@@ -204,9 +204,10 @@ TEST_F(SccsPcc0dCoulombTest, NonuniformResponseSatisfiesFixedPointAndFarFieldCha
     EXPECT_GT(response.polarization.iterations, 1);
     const bool open_boundary = true;
     ModuleSccs::SccsResponse derivatives;
-    std::vector<double> coefficient;
+    ModuleSccs::CavityDerivatives cavity_derivatives;
+    const std::vector<double>& coefficient = cavity_derivatives.coefficient;
     ASSERT_TRUE(ModuleSccs::prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary,
-                                                       derivatives, coefficient, error)) << error;
+                                                       derivatives, cavity_derivatives, error)) << error;
     std::vector<double> source(basis.nrxx);
     for (int ir = 0; ir < basis.nrxx; ++ir)
     {
