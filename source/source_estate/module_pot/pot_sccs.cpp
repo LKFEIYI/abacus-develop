@@ -121,6 +121,17 @@ bool PotSccs::update_scf_state(int electronic_iteration, double density_residual
     return true;
 }
 
+void PotSccs::inherit_scf_state(const PotBase& previous)
+{
+    const PotSccs* sccs = dynamic_cast<const PotSccs*>(&previous);
+    if (sccs == nullptr || !sccs->sccs_is_active()) { return; }
+    if (config_.start_drho != sccs->config_.start_drho
+        || config_.start_nmax != sccs->config_.start_nmax) { return; }
+    // Activation remains owned by update_scf_state; a new ionic step must not
+    // repeat the initial vacuum stage. Sources and warm starts remain fresh.
+    this->update_scf_state(0, 0.0);
+}
+
 void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential)
 {
     ModuleBase::timer::start("PotSccs", "cal_v_eff");

@@ -130,6 +130,23 @@ class MockPotComponent : public PotBase
         }
     }
 
+    bool update_scf_state(int electronic_iteration, double density_residual) override
+    {
+        if (type_ != "delayed" || active_) { return false; }
+        if (electronic_iteration < 3 && density_residual > 1e-3) { return false; }
+        active_ = true;
+        return true;
+    }
+
+    void inherit_scf_state(const PotBase& previous) override
+    {
+        const MockPotComponent* component = dynamic_cast<const MockPotComponent*>(&previous);
+        if (component != nullptr && component->type_ == type_ && component->active_)
+        {
+            this->update_scf_state(0, 0.0);
+        }
+    }
+
     void add_solvation_force(const UnitCell&, ModuleBase::matrix& force) const override
     {
         if (type_ != "solvation") { return; }
@@ -153,6 +170,7 @@ class MockPotComponent : public PotBase
     static int dynamic_calls;
 
   private:
+    bool active_ = false;
     std::string type_;
     int grid_size_;
 };
@@ -442,4 +460,20 @@ TEST_F(PotentialNewTest, SolvationForcesUseRegisteredComponentsOnce)
     {
         for (int axis = 0; axis < 3; ++axis) { EXPECT_DOUBLE_EQ(force(ia, axis), 8.25); }
     }
+}
+
+TEST_F(PotentialNewTest, ReregistrationKeepsActivationAcrossReorderedComponents)
+{
+    potential.reset(new elecstate::Potential);
+    Input_para input;
+    potential->pot_register({"fixed", "delayed"}, input);
+    EXPECT_FALSE(potential->update_scf_state(1, 0.1));
+    EXPECT_TRUE(potential->update_scf_state(3, 0.1));
+    potential->pot_register({"delayed", "fixed"}, input);
+    EXPECT_FALSE(potential->update_scf_state(1, 0.1));
+    EXPECT_FALSE(potential->update_scf_state(3, 0.1));
+    EXPECT_EQ(elecstate::MockPotComponent::destroyed, 2);
+    potential->pot_register({"fixed"}, input);
+    potential->pot_register({"delayed"}, input);
+    EXPECT_TRUE(potential->update_scf_state(3, 0.1));
 }

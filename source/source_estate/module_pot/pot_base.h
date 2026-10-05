@@ -37,6 +37,10 @@ class PotBase
     // another electronic iteration before accepting convergence.
     virtual bool update_scf_state(int electronic_iteration, double density_residual) { return false; }
 
+    // Preserve component-owned SCF workflow state when ionic steps rebuild
+    // the Hamiltonian. Numerical results and grid storage are not inherited.
+    virtual void inherit_scf_state(const PotBase& previous) {}
+
     // Prefer active solvation (3), otherwise PCC (2), then deferred solvation (1).
     virtual int correction_output_priority() const { return 0; }
     virtual void write_correction_iteration(std::ostream&, int, double, double) const {}

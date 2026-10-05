@@ -180,25 +180,20 @@ void Potential::pot_register(const std::vector<std::string>& components_list)
 void Potential::pot_register(const std::vector<std::string>& components_list, const Input_para& input)
 {
     ModuleBase::TITLE("Potential", "pot_register");
-    // delete old components first.
-    if (this->components.size() > 0)
+    // Keep the previous components alive while replacements inherit their
+    // workflow state. Each component decides which state is compatible.
+    std::vector<PotBase*> previous;
+    previous.swap(this->components);
+    for (const std::string& name : components_list)
     {
-        for (auto comp: this->components)
+        PotBase* component = this->get_pot_type(name, input);
+        for (const PotBase* old_component : previous)
         {
-            delete comp;
+            component->inherit_scf_state(*old_component);
         }
-        this->components.clear();
+        this->components.push_back(component);
     }
-
-    // register components
-    //---------------------------
-    // mapping for register
-    //---------------------------
-    for (auto comp: components_list)
-    {
-        PotBase* tmp = this->get_pot_type(comp, input);
-        this->components.push_back(tmp);
-    }
+    for (PotBase* component : previous) { delete component; }
 
     // after register, reset fixed_done to false
     this->fixed_done = false;

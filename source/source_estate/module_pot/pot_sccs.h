@@ -23,6 +23,7 @@ public:
     void cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential) override;
     double get_energy() const override;
     bool update_scf_state(int electronic_iteration, double density_residual) override;
+    void inherit_scf_state(const PotBase& previous) override;
     int correction_output_priority() const override;
     void write_correction_iteration(std::ostream& output, int level, double residual, double pcc_energy) const override;
     void write_correction_final(std::ostream& output, int level, double pcc_energy) const override;

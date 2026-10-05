@@ -341,3 +341,30 @@ TEST_F(PotSccsTest, PresetKeepsDelayedStartControlsAndInvalidInputPreservesConfi
     EXPECT_FALSE(elecstate::make_sccs_config_from_input(input, config, solver, error));
     EXPECT_DOUBLE_EQ(config.start_drho, 1e-3);
 }
+
+TEST_F(PotSccsTest, IonicReregistrationPreservesOnlyCompatibleActivation)
+{
+    ModuleSccs::SccsConfig config;
+    config.start_drho = 1e-3;
+    config.start_nmax = 3;
+    ModuleSccs::PolarizationSolverParameters solver;
+    elecstate::PotSccs previous(&basis, config, solver);
+    elecstate::PotSccs waiting(&basis, config, solver);
+    waiting.inherit_scf_state(previous);
+    EXPECT_FALSE(waiting.sccs_is_active());
+    ASSERT_TRUE(previous.update_scf_state(3, 0.1));
+    elecstate::PotSccs next_ionic_step(&basis, config, solver);
+    next_ionic_step.inherit_scf_state(previous);
+    EXPECT_TRUE(next_ionic_step.sccs_is_active());
+    EXPECT_FALSE(next_ionic_step.update_scf_state(1, 0.1));
+    EXPECT_DOUBLE_EQ(next_ionic_step.get_energy(), 0.0);
+    const std::vector<double>* potential = next_ionic_step.solvent_electrostatic_potential();
+    EXPECT_TRUE(potential->empty());
+    config.start_drho = 1e-2;
+    elecstate::PotSccs changed_controls(&basis, config, solver);
+    changed_controls.inherit_scf_state(previous);
+    EXPECT_FALSE(changed_controls.sccs_is_active());
+    elecstate::PotBase other;
+    changed_controls.inherit_scf_state(other);
+    EXPECT_FALSE(changed_controls.sccs_is_active());
+}
