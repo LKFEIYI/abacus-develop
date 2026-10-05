@@ -16,6 +16,24 @@ bool make_sccs_pcc_0d_operator(const UnitCell& cell,
                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb,
                               std::string& error)
 {
+    std::vector<ModuleBase::Vector3<double>> positions;
+    const bool valid = ModulePW::grid_positions(basis, cell.latvec, cell.lat0, positions, error);
+    double invalid = valid ? 0.0 : 1.0;
+    Parallel_Reduce::reduce_max_pool(basis.poolnproc, invalid);
+    if (invalid != 0.0)
+    {
+        if (error.empty()) { error = "SCCS PCC grid positions are invalid on another pool rank"; }
+        return false;
+    }
+    return make_sccs_pcc_0d_operator(cell, basis, atoms, positions, coulomb, error);
+}
+bool make_sccs_pcc_0d_operator(const UnitCell& cell,
+                              const ModulePW::PW_Basis& basis,
+                              const std::vector<unitcell::AtomData>& atoms,
+                              const std::vector<ModuleBase::Vector3<double>>& grid_positions,
+                              std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb,
+                              std::string& error)
+{
     unitcell::OrthogonalCell geometry;
     Pcc0dParameters parameters;
     bool valid = unitcell::make_orthogonal_cell(cell.latvec, cell.lat0, 1e-10, geometry, error);
@@ -28,8 +46,8 @@ bool make_sccs_pcc_0d_operator(const UnitCell& cell,
         masses.push_back(atom.mass);
     }
     if (valid) { valid = unitcell::weighted_center(positions, masses, geometry, geometry.origin, error); }
-    std::vector<ModuleBase::Vector3<double>> relative_positions;
-    if (valid) { valid = ModulePW::grid_positions(basis, cell.latvec, cell.lat0, relative_positions, error); }
+    std::vector<ModuleBase::Vector3<double>> relative_positions = grid_positions;
+    valid = valid && relative_positions.size() == static_cast<std::size_t>(basis.nrxx);
     double invalid = valid ? 0.0 : 1.0;
     Parallel_Reduce::reduce_max_pool(basis.poolnproc, invalid);
     if (invalid != 0.0)

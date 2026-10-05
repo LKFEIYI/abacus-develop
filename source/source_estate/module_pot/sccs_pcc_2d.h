@@ -1,6 +1,7 @@
 #ifndef SCCS_PCC_2D_ADAPTER_H
 #define SCCS_PCC_2D_ADAPTER_H
 
+#include "source_base/vector3.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,6 +30,15 @@ bool make_sccs_pcc_2d_operator(const UnitCell& cell,
                               const ModulePW::PW_Basis& basis,
                               const std::vector<unitcell::AtomData>& atoms,
                               int open_axis,
+                              std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb,
+                              std::string& error);
+
+// Use caller-owned Cartesian grid coordinates, e.g. from a fixed-source cache.
+bool make_sccs_pcc_2d_operator(const UnitCell& cell,
+                              const ModulePW::PW_Basis& basis,
+                              const std::vector<unitcell::AtomData>& atoms,
+                              int open_axis,
+                              const std::vector<ModuleBase::Vector3<double>>& grid_positions,
                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb,
                               std::string& error);
 // Keep the original slab far-field charge consistency check. Counts are

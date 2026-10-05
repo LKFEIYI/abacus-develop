@@ -51,6 +51,7 @@ struct SccsOutput
 bool collect_sccs_output(const UnitCell& cell,
                           const ModulePW::PW_Basis& basis,
                           const std::vector<unitcell::AtomData>& atoms,
+                          const std::vector<ModuleBase::Vector3<double>>& grid_positions,
                           const std::vector<double>& ions,
                           const std::vector<double>& charge,
                           const ModuleSccs::SccsConfig& config,

@@ -1,6 +1,5 @@
 #include "sccs_output.h"
 #include "source_base/parallel_reduce.h"
-#include "source_basis/module_pw/pw_grid_geometry.h"
 #include "source_basis/module_pw/pw_basis.h"
 #include "source_cell/cell_geometry.h"
 #include "source_cell/cell_tools.h"
@@ -35,6 +34,7 @@ namespace elecstate
 bool collect_sccs_output(const UnitCell& cell,
                           const ModulePW::PW_Basis& basis,
                           const std::vector<unitcell::AtomData>& atoms,
+                          const std::vector<ModuleBase::Vector3<double>>& grid_positions,
                           const std::vector<double>& ions,
                           const std::vector<double>& charge,
                           const ModuleSccs::SccsConfig& config,
@@ -79,8 +79,8 @@ bool collect_sccs_output(const UnitCell& cell,
         valid = valid && unitcell::weighted_center(positions, masses, geometry, geometry.origin, error);
         candidate.origin = geometry.origin;
     }
-    std::vector<ModuleBase::Vector3<double>> grid;
-    valid = valid && ModulePW::grid_positions(basis, cell.latvec, cell.lat0, grid, error);
+    std::vector<ModuleBase::Vector3<double>> grid = grid_positions;
+    valid = valid && grid.size() == static_cast<std::size_t>(basis.nrxx);
     if (!pool_valid(valid, basis.poolnproc, error)) { return false; }
     for (auto& position : grid)
     {

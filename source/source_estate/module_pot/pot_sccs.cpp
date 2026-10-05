@@ -3,6 +3,7 @@
 #include "sccs_pcc_2d.h"
 
 #include "source_base/parallel_reduce.h"
+#include "source_basis/module_pw/pw_grid_geometry.h"
 #include "source_base/timer.h"
 #include "source_base/tool_quit.h"
 #include "source_cell/cell_tools.h"
@@ -187,16 +188,22 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     {
         require_valid_on_pool(neutral, "Periodic SCCS currently requires a neutral cell");
     }
+    std::vector<ModuleBase::Vector3<double>> grid_positions;
+    if (config_.boundary != ModuleSccs::Boundary::Periodic)
+    {
+        const bool positions_valid = ModulePW::grid_positions(basis, cell->latvec, cell->lat0, grid_positions, error);
+        require_valid_on_pool(positions_valid, error);
+    }
     std::unique_ptr<ModuleSccs::CoulombOperator> coulomb;
     if (config_.boundary == ModuleSccs::Boundary::Pcc0d)
     {
-        const bool geometry_valid = make_sccs_pcc_0d_operator(*cell, basis, atoms, coulomb, error);
+        const bool geometry_valid = make_sccs_pcc_0d_operator(*cell, basis, atoms, grid_positions, coulomb, error);
         require_valid_on_pool(geometry_valid, error);
     }
     else if (config_.boundary == ModuleSccs::Boundary::Pcc2d)
     {
         const bool geometry_valid = make_sccs_pcc_2d_operator(*cell, basis, atoms, config_.pcc_2d_axis,
-                                                              coulomb, error);
+                                                              grid_positions, coulomb, error);
         require_valid_on_pool(geometry_valid, error);
     }
     else
@@ -242,7 +249,7 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     output_.far_field_charge = response.far_field_polarization_charge;
     if (solver_.check_fixed_point && config_.boundary != ModuleSccs::Boundary::Periodic)
     {
-        const bool diagnostics_valid = collect_sccs_output(*cell, basis, atoms, ions, solute_charge,
+        const bool diagnostics_valid = collect_sccs_output(*cell, basis, atoms, grid_positions, ions, solute_charge,
                                                            config_, response, output_, error);
         require_valid_on_pool(diagnostics_valid, error);
     }
