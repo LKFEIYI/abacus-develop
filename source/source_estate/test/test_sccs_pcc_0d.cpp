@@ -5,6 +5,7 @@
 #include "source_hamilt/module_sccs/sccs_coulomb.h"
 #include "source_hamilt/module_sccs/sccs_functional.h"
 #include "source_hamilt/module_sccs/sccs_ionic_charge.h"
+#include "source_hamilt/module_sccs/sccs_ionic_force.h"
 #include "source_hamilt/module_sccs/sccs_response.h"
 #include "source_hamilt/module_sccs/test/sccs_test.h"
 #include "source_io/module_parameter/input_parameter.h"
@@ -97,6 +98,18 @@ TEST_F(SccsPcc0dTest, ChargedDielectricAddsOnlyReactionAndCavityTerms)
     const double combined_energy = solvent.get_energy() + correction.get_energy();
     const double expected_energy = point_energy + 2.0 * functional.reaction_energy;
     EXPECT_NEAR(combined_energy, expected_energy, 1e-12);
+    std::vector<ModuleBase::Vector3<double>> reaction_force;
+    ASSERT_TRUE(ModuleSccs::gaussian_ionic_force(atoms, functional.reaction_potential, basis,
+                   tpiba, ModuleSccs::gaussian_ion_spread, reaction_force, error)) << error;
+    ModuleBase::matrix point_force(cell.nat, 3);
+    correction.add_force(cell, point_force);
+    ModuleBase::matrix combined_force = point_force;
+    solvent.add_solvation_force(cell, combined_force);
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        const double expected = point_force(0, axis) + 2.0 * reaction_force[0][axis];
+        EXPECT_NEAR(combined_force(0, axis), expected, 1e-12);
+    }
     const auto* electrostatic = solvent.solvent_electrostatic_potential();
     ASSERT_NE(electrostatic, nullptr);
     for (int ir = 0; ir < basis.nrxx; ++ir)
