@@ -1,0 +1,176 @@
+#include "sccs_test.h"
+#include "../sccs_pcc_0d_coulomb.h"
+#include "../sccs_functional.h"
+#include "../sccs_parameters.h"
+#include "../sccs_response.h"
+
+#include "source_base/parallel_reduce.h"
+#include "source_basis/module_pw/pw_grid_geometry.h"
+#include "source_cell/cell_geometry.h"
+
+#include <limits>
+
+class SccsPcc0dCoulombTest : public SccsTest::PwTest
+{
+protected:
+    void SetUp() override
+    {
+        SccsTest::PwTest::SetUp();
+        const ModuleBase::Matrix3 lattice;
+        unitcell::OrthogonalCell cell;
+        ASSERT_TRUE(unitcell::make_orthogonal_cell(lattice, length, 1e-10, cell, error)) << error;
+        ASSERT_TRUE(elecstate::make_pcc_0d_parameters(cell, 1e-10, parameters, error)) << error;
+        const double half_length = 0.5 * length;
+        cell.origin = ModuleBase::Vector3<double>(half_length, half_length, half_length);
+        ASSERT_TRUE(ModulePW::grid_positions(basis, lattice, length, positions, error)) << error;
+        for (auto& position : positions)
+        {
+            position = unitcell::relative_position(position, cell);
+        }
+    }
+
+    double integrate_product(const std::vector<double>& left, const std::vector<double>& right) const
+    {
+        double value = 0.0;
+        for (int ir = 0; ir < basis.nrxx; ++ir)
+        {
+            value += left[ir] * right[ir];
+        }
+        Parallel_Reduce::reduce_pool(value);
+        return value * basis.omega / basis.nxyz;
+    }
+
+    elecstate::Pcc0dParameters parameters;
+    std::vector<ModuleBase::Vector3<double>> positions;
+};
+
+TEST_F(SccsPcc0dCoulombTest, CorrectionMatchesExistingPccEnergyAndIsSymmetric)
+{
+    std::vector<double> charge = cosine_mode(0);
+    std::vector<double> direction = cosine_mode(1);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        charge[ir] = 1e-3 + 2e-4 * charge[ir];
+        direction[ir] = 3e-4 + 1e-4 * direction[ir];
+    }
+    ModuleSccs::PeriodicCoulombOperator periodic(basis, tpiba);
+    ModuleSccs::Pcc0dCoulombOperator corrected(basis, tpiba, positions, parameters);
+    EXPECT_TRUE(corrected.has_boundary_correction());
+    std::vector<double> periodic_potential;
+    std::vector<double> potential;
+    std::vector<double> direction_potential;
+    ASSERT_TRUE(periodic.apply_potential(charge, periodic_potential, error)) << error;
+    ASSERT_TRUE(corrected.apply_potential(charge, potential, error)) << error;
+    ASSERT_TRUE(corrected.apply_potential(direction, direction_potential, error)) << error;
+    const double charge_direction = integrate_product(charge, direction_potential);
+    const double direction_charge = integrate_product(direction, potential);
+    EXPECT_NEAR(charge_direction, direction_charge, 1e-13);
+
+    elecstate::ChargeMoments moments;
+    const double dv = basis.omega / basis.nxyz;
+    ASSERT_TRUE(elecstate::charge_moments(charge.data(), positions.data(), basis.nrxx, dv, moments, error));
+    Parallel_Reduce::reduce_pool(moments.charge);
+    Parallel_Reduce::reduce_pool(moments.dipole.x);
+    Parallel_Reduce::reduce_pool(moments.dipole.y);
+    Parallel_Reduce::reduce_pool(moments.dipole.z);
+    Parallel_Reduce::reduce_pool(moments.second_moment);
+    std::vector<double> correction(basis.nrxx);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        correction[ir] = potential[ir] - periodic_potential[ir];
+        const double expected = elecstate::pcc_0d_potential(moments, positions[ir], parameters);
+        EXPECT_NEAR(correction[ir], expected, 1e-14);
+    }
+    const double grid_energy = 0.5 * integrate_product(charge, correction);
+    const double moment_energy = elecstate::pcc_0d_energy(moments, parameters);
+    EXPECT_NEAR(grid_energy, moment_energy, 1e-13);
+}
+
+TEST_F(SccsPcc0dCoulombTest, ChargedUniformDielectricPreservesGaugeAndVacuumSubtraction)
+{
+    std::vector<double> charge = cosine_mode(0);
+    std::vector<double> direction = cosine_mode(1);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        charge[ir] = 1e-3 + 2e-4 * charge[ir];
+        direction[ir] = 1e-3 + 3e-4 * direction[ir];
+    }
+    ModuleSccs::Pcc0dCoulombOperator coulomb(basis, tpiba, positions, parameters);
+    const std::vector<double> density(basis.nrxx, 0.0);
+    const std::vector<double> cold;
+    std::vector<double> vacuum;
+    ASSERT_TRUE(coulomb.apply_potential(charge, vacuum, error)) << error;
+    const std::vector<double> ones(basis.nrxx, 1.0);
+    const double vacuum_mean = integrate_product(vacuum, ones) / basis.omega;
+    EXPECT_GT(std::abs(vacuum_mean), 1e-3);
+    ModuleSccs::PolarizationSolverParameters solver;
+    const double dielectrics[] = {1.0, 5.0};
+    for (double epsilon : dielectrics)
+    {
+        ModuleSccs::SccsConfig config;
+        ASSERT_TRUE(ModuleSccs::make_sccs_config(ModuleSccs::Preset::Vacuum, config, error));
+        config.cavity.epsilon_bulk = epsilon;
+        ModuleSccs::SccsResponse response;
+        ASSERT_TRUE(ModuleSccs::solve_sccs_response(density, charge, config.cavity, solver, cold,
+                                                   basis, tpiba, coulomb, response, error)) << error;
+        EXPECT_EQ(response.polarization.iterations, 1);
+        ModuleSccs::FunctionalResult result;
+        ASSERT_TRUE(ModuleSccs::evaluate_functional(charge, response, config, basis, tpiba,
+                                                    coulomb, result, error)) << error;
+        for (int ir = 0; ir < basis.nrxx; ++ir)
+        {
+            const double dielectric_potential = vacuum[ir] / epsilon;
+            const double reaction = dielectric_potential - vacuum[ir];
+            EXPECT_NEAR(response.polarization.potential[ir], dielectric_potential, 1e-13);
+            EXPECT_NEAR(result.reaction_potential[ir], reaction, 1e-13);
+            EXPECT_NEAR(result.electron_potential[ir], -reaction, 1e-13);
+        }
+        const double expected_energy = 0.5 * (1.0 / epsilon - 1.0) * integrate_product(charge, vacuum);
+        EXPECT_NEAR(result.reaction_energy, expected_energy, 1e-13);
+        // Electron potential carries the opposite sign to signed solute charge.
+        const double predicted = -integrate_product(result.electron_potential, direction);
+        const double step = 1e-4;
+        const double signs[] = {-1.0, 1.0};
+        double energy[2];
+        int index = 0;
+        for (double sign : signs)
+        {
+            std::vector<double> shifted = charge;
+            for (int ir = 0; ir < basis.nrxx; ++ir)
+            {
+                shifted[ir] += sign * step * direction[ir];
+            }
+            ModuleSccs::SccsResponse shifted_response;
+            ModuleSccs::FunctionalResult shifted_result;
+            ASSERT_TRUE(ModuleSccs::solve_sccs_response(density, shifted, config.cavity, solver, cold,
+                                                       basis, tpiba, coulomb, shifted_response, error)) << error;
+            ASSERT_TRUE(ModuleSccs::evaluate_functional(shifted, shifted_response, config, basis, tpiba,
+                                                        coulomb, shifted_result, error)) << error;
+            energy[index++] = shifted_result.reaction_energy;
+        }
+        const double derivative = (energy[1] - energy[0]) / (2.0 * step);
+        EXPECT_NEAR(derivative, predicted, 1e-10);
+    }
+}
+
+TEST_F(SccsPcc0dCoulombTest, RankLocalInvalidGeometryLeavesOutputUnchanged)
+{
+    const std::vector<double> charge(basis.nrxx, 1e-3);
+    for (int failure = 0; failure < 3; ++failure)
+    {
+        std::vector<ModuleBase::Vector3<double>> invalid_positions = positions;
+        elecstate::Pcc0dParameters invalid_parameters = parameters;
+        if (basis.poolrank == 0)
+        {
+            if (failure == 0) { invalid_positions.pop_back(); }
+            if (failure == 1) { invalid_positions[0].x = std::numeric_limits<double>::quiet_NaN(); }
+            if (failure == 2) { invalid_parameters.length *= 2.0; }
+        }
+        ModuleSccs::Pcc0dCoulombOperator coulomb(basis, tpiba, invalid_positions, invalid_parameters);
+        std::vector<double> potential(1, 12.0);
+        EXPECT_FALSE(coulomb.apply_potential(charge, potential, error));
+        EXPECT_FALSE(error.empty());
+        ASSERT_EQ(potential.size(), 1u);
+        EXPECT_DOUBLE_EQ(potential[0], 12.0);
+    }
+}
