@@ -342,5 +342,23 @@ void ReadInput::item_sccs()
         read_sync_int(input.sccs_start_nmax);
         this->add_item(item);
     }
+    {
+        Input_Item item("sccs_debug");
+        item.annotation = "detailed SCCS diagnostics";
+        item.category = "Implicit solvation model";
+        item.type = "Integer";
+        item.description = "SCCS/PCC output level: 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation. Applies to standalone PCC as well as SCCS. Timings appear in the standard ABACUS timer summary.";
+        item.default_value = "0";
+        item.unit = "";
+        read_sync_int(input.sccs_debug);
+        item.check_value = [](const Input_Item&, const Parameter& para) {
+            if (para.input.sccs_debug < 0 || para.input.sccs_debug > 2)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "sccs_debug must be 0, 1, or 2");
+            }
+        };
+        this->add_item(item);
+    }
+
 }
 } // namespace ModuleIO

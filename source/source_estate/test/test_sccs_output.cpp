@@ -102,3 +102,25 @@ TEST_F(SccsOutputTest, AdvancedDiagnosticsPreservePccPotentialEnergyAndForce)
         EXPECT_NE(waiting.str().find("SCCS_DEFERRED"), std::string::npos);
     }
 }
+
+TEST_F(SccsOutputTest, InputDebugLevelIsExplicitAndInvalidValuesPreserveConfiguration)
+{
+    Input_para input;
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    for (int level = 0; level <= 2; ++level)
+    {
+        input.sccs_debug = level;
+        ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+        EXPECT_EQ(solver.check_fixed_point, level == 2);
+    }
+    const double epsilon = config.cavity.epsilon_bulk;
+    const int invalid_levels[] = {-1, 3};
+    for (int level : invalid_levels)
+    {
+        input.sccs_debug = level;
+        EXPECT_FALSE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+        EXPECT_DOUBLE_EQ(config.cavity.epsilon_bulk, epsilon);
+        EXPECT_TRUE(solver.check_fixed_point);
+    }
+}

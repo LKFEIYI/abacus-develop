@@ -589,6 +589,7 @@ struct Input_para
     double sccs_lowpass_p2 = -1.0; // PCC switching-derivative filter offset
     double sccs_start_drho = 0.0;
     int sccs_start_nmax = 30;
+    int sccs_debug = 0; // 0: silent, 1: iteration summary, 2: full diagnostics
     std::string sccs_solvent_mode = "electronic";
     std::vector<double> sccs_corespread = {0.5}; // Bohr: one value or one per atom
 

@@ -547,6 +547,7 @@
     - [sccs\_corespread](#sccs_corespread)
     - [sccs\_start\_drho](#sccs_start_drho)
     - [sccs\_start\_nmax](#sccs_start_nmax)
+    - [sccs\_debug](#sccs_debug)
     - [eb\_k](#eb_k)
     - [tau](#tau)
     - [sigma\_k](#sigma_k)
@@ -5045,6 +5046,12 @@
 - **Availability**: *[`imp_sol`](#imp_sol)==2*
 - **Description**: Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. The value must be positive, and smaller than scf_nmax when delayed start is enabled. User-controlled for every sccs_preset, default 30; inactive when sccs_start_drho=0.
 - **Default**: 30
+
+### sccs_debug
+
+- **Type**: Integer
+- **Description**: SCCS/PCC output level: 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation. Applies to standalone PCC as well as SCCS. Timings appear in the standard ABACUS timer summary.
+- **Default**: 0
 
 ### eb_k
 

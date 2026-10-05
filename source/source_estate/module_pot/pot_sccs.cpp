@@ -38,6 +38,11 @@ bool make_sccs_config_from_input(const Input_para& input,
                                  ModuleSccs::PolarizationSolverParameters& solver,
                                  std::string& error)
 {
+    if (input.sccs_debug < 0 || input.sccs_debug > 2)
+    {
+        error = "sccs_debug must be 0, 1, or 2";
+        return false;
+    }
     ModuleSccs::Preset preset;
     if (!ModuleSccs::parse_preset(input.sccs_preset, preset, error)) { return false; }
     ModuleSccs::SccsConfig candidate;
@@ -87,6 +92,7 @@ bool make_sccs_config_from_input(const Input_para& input,
     }
     if (!ModuleSccs::validate_config(candidate, error)) { return false; }
     config = candidate;
+    solver.check_fixed_point = input.sccs_debug >= 2;
     solver.max_iterations = input.sccs_maxiter;
     solver.tolerance_rms = input.sccs_tol_rms;
     solver.tolerance_max = input.sccs_tol_max;

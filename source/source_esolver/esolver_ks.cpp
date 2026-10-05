@@ -268,13 +268,22 @@ ESolver_KS::DensityStage ESolver_KS::density_stage(const int istep, const int it
 
 void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &conv_esolver)
 {
+    const bool is_output_rank = this->kv.para_k.my_pool == 0 && this->kv.para_k.rank_in_pool == 0;
     bool potential_changed = false;
     if (this->inp_->imp_sol == 2 && this->inp_->sccs_start_drho > 0.0)
     {
         double density_residual = this->drho;
         Parallel_Common::bcast_double(density_residual);
         potential_changed = this->pelec->pot->update_scf_state(iter, density_residual);
-        if (potential_changed) { this->p_chgmix->mix_reset(); }
+        if (potential_changed)
+        {
+            this->p_chgmix->mix_reset();
+            if (is_output_rank && this->inp_->sccs_debug > 0)
+            {
+                std::cout << " SCCS activated at electronic iteration " << iter
+                          << ", DRHO = " << density_residual << std::endl;
+            }
+        }
     }
 
     // 1.1) print out band gap 
@@ -383,6 +392,12 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     // print energies
     elecstate::print_etot(ucell.magnet, *pelec, conv_esolver, iter, drho,
     dkin, duration, *this->inp_, PARAM.globalv.two_fermi, diag_ethr, 0, true, this->ds_rms_);
+
+    if (is_output_rank && this->inp_->sccs_debug > 0)
+    {
+        const double pcc_energy = this->pelec->pot->pcc_energy_rydberg();
+        this->pelec->pot->write_correction_iteration(std::cout, this->inp_->sccs_debug, this->drho, pcc_energy);
+    }
 
 
 #ifdef __JSON
