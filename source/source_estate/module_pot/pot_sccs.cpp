@@ -157,6 +157,13 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
                                                                solver_, restart_potential_, basis, cell->tpiba,
                                                                *coulomb, response, error);
     require_valid_on_pool(response_valid, error);
+    if (config_.boundary == ModuleSccs::Boundary::Pcc2d)
+    {
+        const double electron_count = ionic_sum - net_charge;
+        const bool screening_valid = validate_sccs_pcc_2d_screening(response, config_, solver_, electron_count,
+                                                                    ionic_sum, basis.omega, error);
+        require_valid_on_pool(screening_valid, error);
+    }
     ModuleSccs::FunctionalResult functional;
     const bool functional_valid = ModuleSccs::evaluate_functional(solute_charge, response, config_, basis,
                                                                   cell->tpiba, *coulomb, functional, error);

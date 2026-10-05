@@ -76,6 +76,7 @@ TEST_F(SccsPcc2dTest, ChargedDielectricAddsOnlyReactionAndCavityTerms)
     Input_para input;
     input.assume_isolated = "pcc_2d";
     input.sccs_epsilon = 5.0;
+    input.sccs_rho_min = 1e-3;
     ModuleSccs::SccsConfig config;
     ModuleSccs::PolarizationSolverParameters solver;
     ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
@@ -139,4 +140,27 @@ TEST_F(SccsPcc2dTest, OpenAxisIsExplicitAndInvalidGeometryPreservesOperator)
     EXPECT_FALSE(elecstate::make_sccs_pcc_2d_operator(cell, basis, atoms, axis, coulomb, error));
     EXPECT_EQ(coulomb.get(), original);
     EXPECT_FALSE(error.empty());
+}
+
+TEST_F(SccsPcc2dTest, FarFieldScreeningPreservesOriginalTolerance)
+{
+    Input_para input;
+    input.assume_isolated = "pcc_2d";
+    input.sccs_epsilon = 5.0;
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    ModuleSccs::SccsResponse response;
+    const double electrons = 0.6;
+    const double ions = 1.0;
+    response.far_field_polarization_charge = -0.32;
+    EXPECT_TRUE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
+                                                         ions, basis.omega, error));
+    response.far_field_polarization_charge += 5e-5;
+    EXPECT_TRUE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
+                                                         ions, basis.omega, error));
+    response.far_field_polarization_charge += 1e-3;
+    EXPECT_FALSE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
+                                                          ions, basis.omega, error));
+    EXPECT_NE(error.find("far-field polarization charge"), std::string::npos);
 }

@@ -13,6 +13,9 @@ class PW_Basis;
 namespace ModuleSccs
 {
 class CoulombOperator;
+struct SccsResponse;
+struct SccsConfig;
+struct PolarizationSolverParameters;
 }
 namespace unitcell
 {
@@ -28,6 +31,15 @@ bool make_sccs_pcc_2d_operator(const UnitCell& cell,
                               int open_axis,
                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb,
                               std::string& error);
+// Keep the original slab far-field charge consistency check. Counts are
+// positive electron/ionic charge integrals; energies and INPUT are not read.
+bool validate_sccs_pcc_2d_screening(const ModuleSccs::SccsResponse& response,
+                                   const ModuleSccs::SccsConfig& config,
+                                   const ModuleSccs::PolarizationSolverParameters& solver,
+                                   double electron_count,
+                                   double ionic_charge,
+                                   double cell_volume,
+                                   std::string& error);
 } // namespace elecstate
 
 #endif
