@@ -1,0 +1,27 @@
+INPUT_PARAMETERS
+suffix autotest
+calculation scf
+basis_type lcao
+ks_solver genelpa
+pseudo_dir ../../PP_ORB
+orbital_dir ../../PP_ORB
+ntype 1
+nbands 2
+ecutwfc 20
+scf_thr 1e-7
+scf_nmax 200
+mixing_type pulay
+mixing_beta 0.2
+smearing_method fixed
+symmetry 0
+cal_force 1
+init_wfc atomic
+imp_sol 2
+sccs_preset custom
+sccs_epsilon 1.1
+assume_isolated pcc_2d
+nspin 2
+gamma_only 1
+pcc_2d_axis 0
+sccs_lowpass_p1 10
+sccs_lowpass_p2 5

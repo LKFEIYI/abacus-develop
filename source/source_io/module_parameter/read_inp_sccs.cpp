@@ -73,6 +73,19 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
         error = "Invalid SCCS numerical parameters";
         return false;
     }
+    const bool p1_positive = input.sccs_lowpass_p1 > 0.0;
+    const bool p2_positive = input.sccs_lowpass_p2 > 0.0;
+    if (!std::isfinite(input.sccs_lowpass_p1) || !std::isfinite(input.sccs_lowpass_p2)
+        || p1_positive != p2_positive)
+    {
+        error = "sccs_lowpass_p1 and sccs_lowpass_p2 must be finite and both positive or both non-positive";
+        return false;
+    }
+    if (p1_positive && input.assume_isolated != "pcc_0d" && input.assume_isolated != "pcc_2d")
+    {
+        error = "sccs_lowpass_p1 and sccs_lowpass_p2 require assume_isolated pcc_0d or pcc_2d";
+        return false;
+    }
     return true;
 }
 
@@ -216,6 +229,30 @@ void ReadInput::item_sccs()
         item.unit = "bohr^-1";
         item.set_availability("imp_sol==2");
         read_sync_double(input.sccs_surface_eta);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_lowpass_p1");
+        item.annotation = "SCCS switching-derivative low-pass slope";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Low-pass filter of the SCCS switching-function derivatives, as Environ deriv_lowpass_p1 with deriv_method fft: when sccs_lowpass_p1 and sccs_lowpass_p2 are both positive, every Fourier derivative of the switching function is multiplied by 0.5 erfc(p1 G^2/Gcut^2 - p2), Gcut^2 being the ecutrho sphere, and the electronic potential becomes the exact derivative of the discrete SCCS energy, so forces agree with energy differences. Only with assume_isolated pcc_0d or pcc_2d. The default -1 turns it off and reproduces Environ deriv_method fft (continuum cavity potential). With lowpass disabled (the default), analytical forces may differ from finite differences of the self-consistent energy. For geometry optimization with PCC, consider enabling lowpass and check force accuracy against finite differences. With lowpass disabled, the cavity potential uses the FFT gradient of the PCC-corrected potential, which oscillates around the potential step at the cell boundary half a cell from the system center; keep the dielectric transition region several bohr away from that boundary. 10 with sccs_lowpass_p2 5 was validated at ecutrho 300-500 Ry; the filter changes the model energy (about 10 meV for H3O+).";
+        item.default_value = "-1";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_lowpass_p1);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_lowpass_p2");
+        item.annotation = "SCCS switching-derivative low-pass offset";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Offset of the SCCS switching-function low-pass filter, as Environ deriv_lowpass_p2; see sccs_lowpass_p1. Both must be positive or both non-positive. Default -1 (off).";
+        item.default_value = "-1";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_lowpass_p2);
         this->add_item(item);
     }
 }

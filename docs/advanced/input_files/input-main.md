@@ -541,6 +541,8 @@
     - [sccs\_tol\_rms](#sccs_tol_rms)
     - [sccs\_tol\_max](#sccs_tol_max)
     - [sccs\_surface\_eta](#sccs_surface_eta)
+    - [sccs\_lowpass\_p1](#sccs_lowpass_p1)
+    - [sccs\_lowpass\_p2](#sccs_lowpass_p2)
     - [eb\_k](#eb_k)
     - [tau](#tau)
     - [sigma\_k](#sigma_k)
@@ -4996,6 +4998,20 @@
 - **Description**: Positive regularization of the SCCS surface gradient norm.
 - **Default**: 1e-8
 - **Unit**: bohr^-1
+
+### sccs_lowpass_p1
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Low-pass filter of the SCCS switching-function derivatives, as Environ deriv_lowpass_p1 with deriv_method fft: when sccs_lowpass_p1 and sccs_lowpass_p2 are both positive, every Fourier derivative of the switching function is multiplied by 0.5 erfc(p1 G^2/Gcut^2 - p2), Gcut^2 being the ecutrho sphere, and the electronic potential becomes the exact derivative of the discrete SCCS energy, so forces agree with energy differences. Only with assume_isolated pcc_0d or pcc_2d. The default -1 turns it off and reproduces Environ deriv_method fft (continuum cavity potential). With lowpass disabled (the default), analytical forces may differ from finite differences of the self-consistent energy. For geometry optimization with PCC, consider enabling lowpass and check force accuracy against finite differences. With lowpass disabled, the cavity potential uses the FFT gradient of the PCC-corrected potential, which oscillates around the potential step at the cell boundary half a cell from the system center; keep the dielectric transition region several bohr away from that boundary. 10 with sccs_lowpass_p2 5 was validated at ecutrho 300-500 Ry; the filter changes the model energy (about 10 meV for H3O+).
+- **Default**: -1
+
+### sccs_lowpass_p2
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Offset of the SCCS switching-function low-pass filter, as Environ deriv_lowpass_p2; see sccs_lowpass_p1. Both must be positive or both non-positive. Default -1 (off).
+- **Default**: -1
 
 ### eb_k
 

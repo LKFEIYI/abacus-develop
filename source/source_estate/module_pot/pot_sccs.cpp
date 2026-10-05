@@ -50,6 +50,8 @@ bool make_sccs_config_from_input(const Input_para& input,
     }
     else if (!ModuleSccs::make_sccs_config(preset, candidate, error)) { return false; }
     candidate.surface_regularization = input.sccs_surface_eta;
+    candidate.cavity.lowpass_p1 = input.sccs_lowpass_p1;
+    candidate.cavity.lowpass_p2 = input.sccs_lowpass_p2;
     if (input.sccs_maxiter <= 0 || !std::isfinite(input.sccs_tol_rms) || input.sccs_tol_rms <= 0.0
         || !std::isfinite(input.sccs_tol_max) || input.sccs_tol_max <= 0.0)
     {

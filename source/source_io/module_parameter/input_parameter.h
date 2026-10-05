@@ -585,6 +585,8 @@ struct Input_para
     double sccs_tol_rms = 1e-10;
     double sccs_tol_max = 1e-8;
     double sccs_surface_eta = 1e-8; // Bohr^-1
+    double sccs_lowpass_p1 = -1.0; // PCC switching-derivative filter slope
+    double sccs_lowpass_p2 = -1.0; // PCC switching-derivative filter offset
 
     // ==============  #Parameters (14.vdW Correction) ===========================
     // ==========================================================

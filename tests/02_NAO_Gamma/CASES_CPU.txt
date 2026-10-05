@@ -43,3 +43,4 @@ scf_pcc2d_water
 scf_sccs_h2
 scf_sccs_pcc0d_h2
 scf_sccs_pcc2d_h2
+scf_sccs_pcc2d_lowpass_h2

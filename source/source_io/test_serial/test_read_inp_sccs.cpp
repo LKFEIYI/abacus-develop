@@ -1,6 +1,7 @@
 #include "source_io/module_parameter/read_inp_sccs.h"
 #include "source_io/module_parameter/input_parameter.h"
 #include <gtest/gtest.h>
+#include <limits>
 
 TEST(ReadInpSccs, LegacyBooleansAndModelSelection)
 {
@@ -64,4 +65,31 @@ TEST(ReadInpSccs, SupportedScopeAndNumericalValidation)
     input.imp_sol = 1;
     input.sccs_preset = "unused";
     EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+}
+
+TEST(ReadInpSccs, LowpassRequiresPairedFiniteValuesAndPcc)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    std::string error;
+    EXPECT_DOUBLE_EQ(input.sccs_lowpass_p1, -1.0);
+    EXPECT_DOUBLE_EQ(input.sccs_lowpass_p2, -1.0);
+    input.sccs_lowpass_p1 = 10.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p2 = 5.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.assume_isolated = "pcc_0d";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.assume_isolated = "pcc_2d";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p1 = 0.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p2 = 0.0;
+    input.assume_isolated = "none";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p1 = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p1 = -1.0;
+    input.sccs_lowpass_p2 = std::numeric_limits<double>::infinity();
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
 }

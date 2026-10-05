@@ -157,3 +157,25 @@ TEST_F(PotSccsTest, IonicForceAddsRydbergDerivativeOnce)
         }
     }
 }
+
+TEST_F(PotSccsTest, LowpassControlsSurvivePresetAndInvalidInputPreservesConfig)
+{
+    Input_para input;
+    input.assume_isolated = "pcc_0d";
+    input.sccs_preset = "water-cation";
+    input.sccs_lowpass_p1 = 10.0;
+    input.sccs_lowpass_p2 = 5.0;
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    EXPECT_DOUBLE_EQ(config.cavity.lowpass_p1, 10.0);
+    EXPECT_DOUBLE_EQ(config.cavity.lowpass_p2, 5.0);
+    EXPECT_DOUBLE_EQ(config.cavity.density_min, 2e-4);
+    input.assume_isolated = "pcc_2d";
+    ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    EXPECT_EQ(config.boundary, ModuleSccs::Boundary::Pcc2d);
+    input.assume_isolated = "none";
+    EXPECT_FALSE(elecstate::make_sccs_config_from_input(input, config, solver, error));
+    EXPECT_EQ(config.boundary, ModuleSccs::Boundary::Pcc2d);
+    EXPECT_DOUBLE_EQ(config.cavity.lowpass_p1, 10.0);
+}
