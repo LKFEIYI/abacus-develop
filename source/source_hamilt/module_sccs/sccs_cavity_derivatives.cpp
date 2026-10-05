@@ -17,6 +17,7 @@ bool prepare_cavity_derivatives(const std::vector<double>& density,
                     const CavityParameters& cavity,
                     const ModulePW::PW_Basis& basis,
                     double tpiba,
+                    bool open_boundary,
                     SccsResponse& response,
                     std::vector<double>& coefficient,
                     std::string& error)
@@ -46,6 +47,33 @@ bool prepare_cavity_derivatives(const std::vector<double>& density,
     {
         error = "SCCS cavity evaluation failed on a pool rank";
         return false;
+    }
+
+    if (open_boundary)
+    {
+        // Original PCC path: differentiate the switching boundary on the FFT
+        // grid, since its chain coefficient is not converged at the cavity edge.
+        std::vector<std::complex<double>> boundary_g(basis.npw);
+        basis.real2recip(response.solute.data(), boundary_g.data());
+        std::vector<ModuleBase::Vector3<double>> gradient(size);
+        std::vector<double> laplacian(size);
+        XC_Functional::grad_rho(boundary_g.data(), gradient.data(), &basis, tpiba);
+        XC_Functional::laplacian_rho(boundary_g.data(), laplacian.data(), &basis, tpiba);
+        const double log_bulk = std::log(cavity.epsilon_bulk);
+        coefficient.resize(size);
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            const double log_epsilon = log_bulk * (1.0 - response.solute[i]);
+            response.epsilon[i] = std::exp(log_epsilon);
+            const ModuleBase::Vector3<double>& local_gradient = gradient[i];
+            const double gradient_square = local_gradient * local_gradient;
+            response.grad_log_epsilon[i] = local_gradient * (-log_bulk);
+            const double lap_log = -log_bulk * laplacian[i];
+            coefficient[i] = response.epsilon[i]
+                             * (0.5 * lap_log + 0.25 * log_bulk * log_bulk * gradient_square)
+                             / ModuleBase::FOUR_PI;
+        }
+        return validate_grid_values(coefficient, basis, error);
     }
 
     std::vector<std::complex<double>> density_g(basis.npw);

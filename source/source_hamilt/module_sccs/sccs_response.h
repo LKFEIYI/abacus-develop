@@ -24,7 +24,7 @@ struct PolarizationResult
     double residual_rms = 0.0;
     double residual_max = 0.0;
     bool warm_started = false;
-    std::vector<double> potential; // Hartree, shifted to periodic zero mean
+    std::vector<double> potential; // Hartree; zero mean only for periodic cells
     std::vector<ModuleBase::Vector3<double>> gradient; // Hartree/Bohr
 };
 
@@ -38,6 +38,7 @@ struct SccsResponse
     PolarizationResult polarization;
     std::vector<double> cavity_potential; // -epsilon' |grad v|^2/(8 pi), Hartree
     std::vector<double> restart_potential; // unshifted solution for explicit warm starts
+    double far_field_polarization_charge = 0.0; // open-boundary screened charge minus solute charge
 };
 
 // Original chain-derivative sqrt-CG periodic response; charge is ions minus electrons.

@@ -1,5 +1,6 @@
 #include "sccs_test.h"
 #include "../sccs_pcc_0d_coulomb.h"
+#include "../sccs_cavity_derivatives.h"
 #include "../sccs_functional.h"
 #include "../sccs_parameters.h"
 #include "../sccs_response.h"
@@ -114,6 +115,9 @@ TEST_F(SccsPcc0dCoulombTest, ChargedUniformDielectricPreservesGaugeAndVacuumSubt
         ASSERT_TRUE(ModuleSccs::solve_sccs_response(density, charge, config.cavity, solver, cold,
                                                    basis, tpiba, coulomb, response, error)) << error;
         EXPECT_EQ(response.polarization.iterations, 1);
+        const double solute_sum = integrate_product(charge, ones);
+        const double screening = (1.0 / epsilon - 1.0) * solute_sum;
+        EXPECT_NEAR(response.far_field_polarization_charge, screening, 1e-13);
         ModuleSccs::FunctionalResult result;
         ASSERT_TRUE(ModuleSccs::evaluate_functional(charge, response, config, basis, tpiba,
                                                     coulomb, result, error)) << error;
@@ -172,5 +176,63 @@ TEST_F(SccsPcc0dCoulombTest, RankLocalInvalidGeometryLeavesOutputUnchanged)
         EXPECT_FALSE(error.empty());
         ASSERT_EQ(potential.size(), 1u);
         EXPECT_DOUBLE_EQ(potential[0], 12.0);
+    }
+}
+
+TEST_F(SccsPcc0dCoulombTest, NonuniformResponseSatisfiesFixedPointAndFarFieldCharge)
+{
+    ModuleSccs::CavityParameters cavity;
+    cavity.density_min = 1e-4;
+    cavity.density_max = 5e-3;
+    cavity.epsilon_bulk = 5.0;
+    const std::vector<double> mode = cosine_mode(0);
+    std::vector<double> density(basis.nrxx);
+    std::vector<double> charge(basis.nrxx);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        density[ir] = 1e-3 + 2e-5 * mode[ir];
+        charge[ir] = 1e-3 + 2e-4 * mode[ir];
+    }
+    ModuleSccs::Pcc0dCoulombOperator coulomb(basis, tpiba, positions, parameters);
+    ModuleSccs::PolarizationSolverParameters solver;
+    solver.tolerance_rms = 1e-12;
+    solver.tolerance_max = 1e-12;
+    const std::vector<double> cold;
+    ModuleSccs::SccsResponse response;
+    ASSERT_TRUE(ModuleSccs::solve_sccs_response(density, charge, cavity, solver, cold,
+                                               basis, tpiba, coulomb, response, error)) << error;
+    EXPECT_GT(response.polarization.iterations, 1);
+    const bool open_boundary = true;
+    ModuleSccs::SccsResponse derivatives;
+    std::vector<double> coefficient;
+    ASSERT_TRUE(ModuleSccs::prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary,
+                                                       derivatives, coefficient, error)) << error;
+    std::vector<double> source(basis.nrxx);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        const double invsqrt = 1.0 / std::sqrt(response.epsilon[ir]);
+        source[ir] = (charge[ir] - coefficient[ir] * response.polarization.potential[ir]) * invsqrt;
+    }
+    std::vector<double> reconstructed;
+    ASSERT_TRUE(coulomb.apply_potential(source, reconstructed, error)) << error;
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        const double expected = reconstructed[ir] / std::sqrt(response.epsilon[ir]);
+        EXPECT_NEAR(response.polarization.potential[ir], expected, 1e-10);
+    }
+    const std::vector<double> ones(basis.nrxx, 1.0);
+    const double source_sum = integrate_product(source, ones);
+    const double solute_sum = integrate_product(charge, ones);
+    const double expected_screening = source_sum / std::sqrt(cavity.epsilon_bulk) - solute_sum;
+    EXPECT_NEAR(response.far_field_polarization_charge, expected_screening, 1e-13);
+    ModuleSccs::SccsResponse restarted;
+    ASSERT_TRUE(ModuleSccs::solve_sccs_response(density, charge, cavity, solver, response.restart_potential,
+                                               basis, tpiba, coulomb, restarted, error)) << error;
+    EXPECT_TRUE(restarted.polarization.warm_started);
+    EXPECT_LT(restarted.polarization.iterations, response.polarization.iterations);
+    EXPECT_NEAR(restarted.far_field_polarization_charge, response.far_field_polarization_charge, 1e-10);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        EXPECT_NEAR(restarted.polarization.potential[ir], response.polarization.potential[ir], 1e-10);
     }
 }

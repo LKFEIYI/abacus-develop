@@ -17,6 +17,38 @@ namespace ModuleSccs
 {
 namespace
 {
+// sqrt(eps) v = C_PCC(s), s = (q - f v)/sqrt(eps). The far-field
+// screening charge is int(s)/sqrt(eps_bulk) - int(q), including its physical sign.
+bool finish_open_boundary_response(const std::vector<double>& charge,
+                                   const std::vector<double>& coefficient,
+                                   const std::vector<double>& invsqrt,
+                                   const CavityParameters& cavity,
+                                   const ModulePW::PW_Basis& basis,
+                                   SccsResponse& result,
+                                   std::string& error)
+{
+    const std::size_t size = charge.size();
+    const std::vector<double>& potential = result.polarization.potential;
+    double source_sum = 0.0;
+    double solute_sum = 0.0;
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        source_sum += (charge[i] - coefficient[i] * potential[i]) * invsqrt[i];
+        solute_sum += charge[i];
+    }
+    Parallel_Reduce::reduce_pool(source_sum);
+    Parallel_Reduce::reduce_pool(solute_sum);
+    const double volume_element = basis.omega / basis.nxyz;
+    const double bulk_invsqrt = 1.0 / std::sqrt(cavity.epsilon_bulk);
+    result.far_field_polarization_charge = (source_sum * bulk_invsqrt - solute_sum) * volume_element;
+    if (!std::isfinite(result.far_field_polarization_charge))
+    {
+        error = "SCCS open-boundary screening charge must be finite";
+        return false;
+    }
+    return true;
+}
+
 bool residual_norms(const std::vector<double>& values,
                     const ModulePW::PW_Basis& basis,
                     double& rms,
@@ -147,9 +179,10 @@ bool solve_sccs_response(const std::vector<double>& density,
         return false;
     }
 
+    const bool open_boundary = coulomb.has_boundary_correction();
     SccsResponse candidate;
     std::vector<double> coefficient;
-    if (!prepare_cavity_derivatives(density, cavity, basis, tpiba, candidate, coefficient, error))
+    if (!prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary, candidate, coefficient, error))
     {
         return false;
     }
@@ -251,7 +284,7 @@ bool solve_sccs_response(const std::vector<double>& density,
     }
     candidate.restart_potential = potential;
     // Preserve the physical gauge fixed by a boundary correction.
-    if (!coulomb.has_boundary_correction())
+    if (!open_boundary)
     {
         double mean = 0.0;
         for (double value : potential)
@@ -270,6 +303,11 @@ bool solve_sccs_response(const std::vector<double>& density,
     polarization.gradient.resize(size);
     XC_Functional::grad_rho(potential_g.data(), polarization.gradient.data(), &basis, tpiba);
     polarization.potential.swap(potential);
+    if (open_boundary
+        && !finish_open_boundary_response(charge, coefficient, invsqrt, cavity, basis, candidate, error))
+    {
+        return false;
+    }
     candidate.cavity_potential.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {

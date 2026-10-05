@@ -5,7 +5,7 @@ AddTest(TARGET MODULE_HAMILT_sccs_parameters
 
 AddTest(TARGET MODULE_HAMILT_sccs_poisson
   LIBS parameter planewave device base
-  SOURCES test_sccs_pcc_0d_coulomb.cpp test_sccs_pw_coulomb.cpp test_sccs_ionic_charge.cpp test_sccs_ionic_force.cpp test_sccs_response.cpp test_sccs_functional.cpp
+  SOURCES test_sccs_cavity_derivatives.cpp test_sccs_pcc_0d_coulomb.cpp test_sccs_pw_coulomb.cpp test_sccs_ionic_charge.cpp test_sccs_ionic_force.cpp test_sccs_response.cpp test_sccs_functional.cpp
     ../../../source_estate/test/test_pot_sccs.cpp
     ../../../source_estate/module_pot/pot_sccs.cpp
     ../../../source_cell/cell_geometry.cpp ../../../source_cell/cell_tools.cpp ../../../source_cell/atom_spec.cpp
