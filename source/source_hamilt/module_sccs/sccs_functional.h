@@ -11,6 +11,8 @@ class PW_Basis;
 
 namespace ModuleSccs
 {
+class CoulombOperator;
+
 struct SccsConfig;
 struct SccsResponse;
 
@@ -31,6 +33,16 @@ bool evaluate_functional(const std::vector<double>& charge,
                           const SccsConfig& config,
                           const ModulePW::PW_Basis& basis,
                           double tpiba,
+                          FunctionalResult& result,
+                          std::string& error);
+
+// Use the same operator for the dielectric response and vacuum subtraction.
+bool evaluate_functional(const std::vector<double>& charge,
+                          const SccsResponse& response,
+                          const SccsConfig& config,
+                          const ModulePW::PW_Basis& basis,
+                          double tpiba,
+                          CoulombOperator& coulomb,
                           FunctionalResult& result,
                           std::string& error);
 } // namespace ModuleSccs

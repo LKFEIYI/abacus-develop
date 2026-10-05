@@ -2,6 +2,7 @@
 #include "../sccs_functional.h"
 #include "../sccs_parameters.h"
 #include "../sccs_response.h"
+#include "../sccs_pw_coulomb.h"
 #include "source_base/parallel_reduce.h"
 
 using SccsFunctionalTest = SccsTest::PwTest;
@@ -82,4 +83,43 @@ TEST_F(SccsFunctionalTest, NonElectrostaticDiscreteEnergyDerivative)
     EXPECT_NEAR(fd, predicted, 1e-8);
     const double expected_volume = 0.5 * basis.omega;
     EXPECT_NEAR(center.volume, expected_volume, 1e-10);
+}
+
+TEST_F(SccsFunctionalTest, ExplicitPeriodicOperatorPreservesResponseAndFunctional)
+{
+    ModuleSccs::SccsConfig config;
+    ASSERT_TRUE(ModuleSccs::make_sccs_config(ModuleSccs::Preset::WaterNeutral, config, error));
+    const std::vector<double> mode = cosine_mode(0);
+    std::vector<double> charge(basis.nrxx);
+    std::vector<double> density(basis.nrxx);
+    for (int ir = 0; ir < basis.nrxx; ++ir)
+    {
+        charge[ir] = 1e-3 * mode[ir];
+        density[ir] = 1e-3 + 1e-5 * mode[ir];
+    }
+    ModuleSccs::PolarizationSolverParameters solver;
+    const std::vector<double> cold;
+    ModuleSccs::SccsResponse legacy;
+    ModuleSccs::SccsResponse explicit_response;
+    ASSERT_TRUE(ModuleSccs::solve_sccs_response(density, charge, config.cavity, solver, cold,
+                                               basis, tpiba, legacy, error)) << error;
+    ModuleSccs::PeriodicCoulombOperator coulomb(basis, tpiba);
+    EXPECT_FALSE(coulomb.has_boundary_correction());
+    ASSERT_TRUE(ModuleSccs::solve_sccs_response(density, charge, config.cavity, solver, cold,
+                                               basis, tpiba, coulomb, explicit_response, error)) << error;
+    EXPECT_EQ(legacy.polarization.iterations, explicit_response.polarization.iterations);
+    EXPECT_EQ(legacy.polarization.potential, explicit_response.polarization.potential);
+    EXPECT_EQ(legacy.cavity_potential, explicit_response.cavity_potential);
+    EXPECT_EQ(legacy.restart_potential, explicit_response.restart_potential);
+    ModuleSccs::FunctionalResult legacy_result;
+    ModuleSccs::FunctionalResult explicit_result;
+    ASSERT_TRUE(ModuleSccs::evaluate_functional(charge, legacy, config, basis, tpiba,
+                                                legacy_result, error)) << error;
+    ASSERT_TRUE(ModuleSccs::evaluate_functional(charge, explicit_response, config, basis, tpiba,
+                                                coulomb, explicit_result, error)) << error;
+    EXPECT_DOUBLE_EQ(legacy_result.reaction_energy, explicit_result.reaction_energy);
+    EXPECT_DOUBLE_EQ(legacy_result.surface_energy, explicit_result.surface_energy);
+    EXPECT_DOUBLE_EQ(legacy_result.volume_energy, explicit_result.volume_energy);
+    EXPECT_EQ(legacy_result.reaction_potential, explicit_result.reaction_potential);
+    EXPECT_EQ(legacy_result.electron_potential, explicit_result.electron_potential);
 }

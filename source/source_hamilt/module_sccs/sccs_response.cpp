@@ -137,7 +137,7 @@ double grid_dot(const std::vector<double>& left,
 // P r = eps^-1/2 G eps^-1/2 r; only FFT scratch survives an application.
 bool apply_preconditioner(const std::vector<double>& rhs,
                           const std::vector<double>& invsqrt,
-                          PeriodicCoulombOperator& coulomb,
+                          CoulombOperator& coulomb,
                           std::vector<double>& weighted,
                           std::vector<double>& value,
                           std::string& error)
@@ -167,6 +167,22 @@ bool solve_sccs_response(const std::vector<double>& density,
                          const std::vector<double>& initial_potential,
                          const ModulePW::PW_Basis& basis,
                          double tpiba,
+                         SccsResponse& result,
+                         std::string& error)
+{
+    PeriodicCoulombOperator coulomb(basis, tpiba);
+    return solve_sccs_response(density, charge, cavity, solver, initial_potential, basis, tpiba,
+                               coulomb, result, error);
+}
+
+bool solve_sccs_response(const std::vector<double>& density,
+                         const std::vector<double>& charge,
+                         const CavityParameters& cavity,
+                         const PolarizationSolverParameters& solver,
+                         const std::vector<double>& initial_potential,
+                         const ModulePW::PW_Basis& basis,
+                         double tpiba,
+                         CoulombOperator& coulomb,
                          SccsResponse& result,
                          std::string& error)
 {
@@ -210,7 +226,6 @@ bool solve_sccs_response(const std::vector<double>& density,
     {
         invsqrt[i] = 1.0 / std::sqrt(candidate.epsilon[i]);
     }
-    PeriodicCoulombOperator coulomb(basis, tpiba);
     std::vector<double> residual = charge;
     std::vector<double> potential(size, 0.0);
     std::vector<double> direction(size, 0.0);
@@ -302,16 +317,20 @@ bool solve_sccs_response(const std::vector<double>& density,
         return false;
     }
     candidate.restart_potential = potential;
-    double mean = 0.0;
-    for (double value : potential)
+    // Preserve the physical gauge fixed by a boundary correction.
+    if (!coulomb.has_boundary_correction())
     {
-        mean += value;
-    }
-    Parallel_Reduce::reduce_pool(mean);
-    mean /= basis.nxyz;
-    for (double& value : potential)
-    {
-        value -= mean;
+        double mean = 0.0;
+        for (double value : potential)
+        {
+            mean += value;
+        }
+        Parallel_Reduce::reduce_pool(mean);
+        mean /= basis.nxyz;
+        for (double& value : potential)
+        {
+            value -= mean;
+        }
     }
     std::vector<std::complex<double>> potential_g(basis.npw);
     basis.real2recip(potential.data(), potential_g.data());

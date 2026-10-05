@@ -1,6 +1,8 @@
 #ifndef SCCS_PW_COULOMB_H
 #define SCCS_PW_COULOMB_H
 
+#include "sccs_coulomb.h"
+
 #include <complex>
 #include <string>
 #include <vector>
@@ -20,13 +22,14 @@ bool validate_grid_values(const std::vector<double>& values,
 
 // Potential in Hartree for a signed charge density in e/Bohr^3.
 // G=0 is removed: this is the periodic Coulomb inverse with a uniform background.
-class PeriodicCoulombOperator
+class PeriodicCoulombOperator : public CoulombOperator
 {
 public:
     PeriodicCoulombOperator(const ModulePW::PW_Basis& basis, double tpiba);
+    bool has_boundary_correction() const override;
     bool apply_potential(const std::vector<double>& charge,
                          std::vector<double>& potential,
-                         std::string& error);
+                         std::string& error) override;
 
 private:
     const ModulePW::PW_Basis& basis_;

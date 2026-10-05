@@ -14,6 +14,8 @@ class PW_Basis;
 
 namespace ModuleSccs
 {
+class CoulombOperator;
+
 struct PolarizationSolverParameters;
 
 struct PolarizationResult
@@ -49,6 +51,18 @@ bool solve_sccs_response(const std::vector<double>& cavity_density,
                          const std::vector<double>& initial_potential,
                          const ModulePW::PW_Basis& basis,
                          double tpiba,
+                         SccsResponse& result,
+                         std::string& error);
+
+// Use the same operator for the dielectric response and vacuum subtraction.
+bool solve_sccs_response(const std::vector<double>& cavity_density,
+                         const std::vector<double>& solute_charge,
+                         const CavityParameters& cavity,
+                         const PolarizationSolverParameters& solver,
+                         const std::vector<double>& initial_potential,
+                         const ModulePW::PW_Basis& basis,
+                         double tpiba,
+                         CoulombOperator& coulomb,
                          SccsResponse& result,
                          std::string& error);
 } // namespace ModuleSccs

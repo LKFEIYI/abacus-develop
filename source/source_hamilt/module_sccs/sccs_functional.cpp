@@ -21,6 +21,19 @@ bool evaluate_functional(const std::vector<double>& charge,
                           FunctionalResult& result,
                           std::string& error)
 {
+    PeriodicCoulombOperator coulomb(basis, tpiba);
+    return evaluate_functional(charge, response, config, basis, tpiba, coulomb, result, error);
+}
+
+bool evaluate_functional(const std::vector<double>& charge,
+                          const SccsResponse& response,
+                          const SccsConfig& config,
+                          const ModulePW::PW_Basis& basis,
+                          double tpiba,
+                          CoulombOperator& coulomb,
+                          FunctionalResult& result,
+                          std::string& error)
+{
     if (!validate_pw_grid(basis, tpiba, error) || !validate_grid_values(charge, basis, error)
         || !validate_grid_values(response.polarization.potential, basis, error)
         || !validate_grid_values(response.cavity_potential, basis, error)
@@ -42,7 +55,6 @@ bool evaluate_functional(const std::vector<double>& charge,
     }
     const std::size_t size = charge.size();
     const double dv = basis.omega / basis.nxyz;
-    PeriodicCoulombOperator coulomb(basis, tpiba);
     std::vector<double> vacuum;
     if (!coulomb.apply_potential(charge, vacuum, error))
     {

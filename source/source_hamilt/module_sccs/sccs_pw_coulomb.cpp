@@ -60,6 +60,11 @@ PeriodicCoulombOperator::PeriodicCoulombOperator(const ModulePW::PW_Basis& basis
 {
 }
 
+bool PeriodicCoulombOperator::has_boundary_correction() const
+{
+    return false;
+}
+
 bool PeriodicCoulombOperator::apply_potential(const std::vector<double>& charge,
                                              std::vector<double>& potential,
                                              std::string& error)
