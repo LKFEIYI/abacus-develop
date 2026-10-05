@@ -1,5 +1,6 @@
 #include "pot_sccs.h"
 #include "sccs_pcc_0d.h"
+#include "sccs_pcc_2d.h"
 
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
@@ -49,7 +50,6 @@ bool make_sccs_config_from_input(const Input_para& input,
     }
     else if (!ModuleSccs::make_sccs_config(preset, candidate, error)) { return false; }
     candidate.surface_regularization = input.sccs_surface_eta;
-    if (!ModuleSccs::validate_config(candidate, error)) { return false; }
     if (input.sccs_maxiter <= 0 || !std::isfinite(input.sccs_tol_rms) || input.sccs_tol_rms <= 0.0
         || !std::isfinite(input.sccs_tol_max) || input.sccs_tol_max <= 0.0)
     {
@@ -57,11 +57,17 @@ bool make_sccs_config_from_input(const Input_para& input,
         return false;
     }
     if (input.assume_isolated == "pcc_0d") { candidate.boundary = ModuleSccs::Boundary::Pcc0d; }
+    else if (input.assume_isolated == "pcc_2d")
+    {
+        candidate.boundary = ModuleSccs::Boundary::Pcc2d;
+        candidate.pcc_2d_axis = input.pcc_2d_axis;
+    }
     else if (input.assume_isolated != "none")
     {
-        error = "SCCS supports assume_isolated none or pcc_0d";
+        error = "SCCS supports assume_isolated none, pcc_0d or pcc_2d";
         return false;
     }
+    if (!ModuleSccs::validate_config(candidate, error)) { return false; }
     config = candidate;
     solver.max_iterations = input.sccs_maxiter;
     solver.tolerance_rms = input.sccs_tol_rms;
@@ -136,6 +142,12 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
         const bool geometry_valid = make_sccs_pcc_0d_operator(*cell, basis, atoms, coulomb, error);
         require_valid_on_pool(geometry_valid, error);
     }
+    else if (config_.boundary == ModuleSccs::Boundary::Pcc2d)
+    {
+        const bool geometry_valid = make_sccs_pcc_2d_operator(*cell, basis, atoms, config_.pcc_2d_axis,
+                                                              coulomb, error);
+        require_valid_on_pool(geometry_valid, error);
+    }
     else
     {
         coulomb.reset(new ModuleSccs::PeriodicCoulombOperator(basis, cell->tpiba));
@@ -165,6 +177,8 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
 void PotSccs::add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const
 {
     ModuleBase::timer::start("PotSccs", "add_solvation_force");
+    const bool force_supported = config_.boundary != ModuleSccs::Boundary::Pcc2d;
+    require_valid_on_pool(force_supported, "SCCS PCC 2D forces are not supported yet");
     const bool shape_valid = force.nr == cell.nat && force.nc == 3
                              && this->rho_basis_ != nullptr && cell.atoms != nullptr && cell.ntype > 0;
     require_valid_on_pool(shape_valid, "SCCS force requires initialized cell and atom-major storage");

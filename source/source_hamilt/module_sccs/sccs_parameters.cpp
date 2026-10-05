@@ -111,6 +111,11 @@ bool validate_config(const SccsConfig& config, std::string& error)
     {
         return false;
     }
+    if (config.boundary == Boundary::Pcc2d && (config.pcc_2d_axis < 0 || config.pcc_2d_axis > 2))
+    {
+        error = "SCCS PCC 2D requires pcc_2d_axis 0, 1 or 2";
+        return false;
+    }
     if (!std::isfinite(config.surface_tension) || !std::isfinite(config.pressure))
     {
         error = "SCCS requires finite surface tension and pressure";
