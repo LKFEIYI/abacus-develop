@@ -112,3 +112,32 @@ TEST_F(SccsIonicChargeTest, FullCavityDefaultsAndAtomWidths)
     EXPECT_FALSE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
     EXPECT_DOUBLE_EQ(density[0], 42.0);
 }
+
+TEST_F(SccsIonicChargeTest, SingletonSkipsCoreFreeAtomsButAtomListOverrides)
+{
+    std::vector<unitcell::AtomData> atoms(4);
+    atoms[0].atomic_number = 8;
+    atoms[0].valence_charge = 6.0;
+    atoms[1].atomic_number = 1;
+    atoms[1].valence_charge = 1.0;
+    atoms[2].atomic_number = 2;
+    atoms[2].valence_charge = 2.0;
+    atoms[3].valence_charge = 3.0; // Unknown element: do not silently exclude.
+    std::vector<double> density;
+    std::vector<double> widths = {0.8};
+    auto integral = [&]() {
+        double sum = 0.0;
+        for (double value : density) { sum += value; }
+        Parallel_Reduce::reduce_pool(sum);
+        return sum * basis.omega / basis.nxyz;
+    };
+    ASSERT_TRUE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_NEAR(integral(), 9.0, 1e-12);
+    widths = {0.8, 0.8, 0.8, 0.8};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_NEAR(integral(), 12.0, 1e-12);
+    widths = {0.8, 0.0, -1.0, 0.8};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density, error));
+    EXPECT_NEAR(integral(), 9.0, 1e-12);
+    EXPECT_DOUBLE_EQ(atoms[1].valence_charge, 1.0);
+}

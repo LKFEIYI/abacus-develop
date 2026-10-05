@@ -38,7 +38,8 @@ bool gaussian_ionic_force(const std::vector<unitcell::AtomData>& atoms,
                           std::vector<ModuleBase::Vector3<double>>& forces,
                           std::string& error);
 
-// Full cavity: one width applies to all atoms, nonpositive widths disable atoms.
+// Full cavity: a singleton skips known Z == zv atoms; per-atom lists override
+// that choice. Nonpositive widths always disable the atom.
 bool gaussian_core_force(const std::vector<unitcell::AtomData>& atoms,
                           const std::vector<double>& reaction_potential,
                           const ModulePW::PW_Basis& basis,

@@ -113,7 +113,10 @@ bool prepare_core_gaussians(const std::vector<unitcell::AtomData>& atoms,
     {
         const std::size_t index = atom_spreads.size() == 1 ? 0 : ia;
         const double width = atom_spreads[index];
-        if (width <= 0.0) { selected[ia].valence_charge = 0.0; }
+        const double charge_difference = atoms[ia].atomic_number - atoms[ia].valence_charge;
+        const bool no_core = atoms[ia].atomic_number > 0 && std::abs(charge_difference) < 1e-8;
+        const bool automatic_skip = atom_spreads.size() == 1 && no_core;
+        if (width <= 0.0 || automatic_skip) { selected[ia].valence_charge = 0.0; }
         else { selected_widths[ia] = width; }
     }
     core_atoms.swap(selected);

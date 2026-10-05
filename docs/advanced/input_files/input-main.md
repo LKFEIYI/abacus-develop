@@ -5019,14 +5019,14 @@
 
 - **Type**: String
 - **Availability**: *[`imp_sol`](#imp_sol)==2*
-- **Description**: Allowed values: electronic (default) and full, as Environ solvent_mode. electronic builds the dielectric cavity from the valence electron density. full adds a valence-charge Gaussian on each atom with positive sccs_corespread. The Gaussians shape only the cavity, not the solute charge; the ionic forces include their cavity term. The published SCCS presets were fitted with electronic mode.
+- **Description**: Allowed values: electronic (default) and full, as Environ solvent_mode. electronic builds the dielectric cavity from the valence electron density. full adds valence-charge Gaussians selected by sccs_corespread. The Gaussians shape only the cavity, not the solute charge; the ionic forces include their cavity term. The published SCCS presets were fitted with electronic mode.
 - **Default**: electronic
 
 ### sccs_corespread
 
 - **Type**: Vector of Real
 - **Availability**: *[`imp_sol`](#imp_sol)==2*
-- **Description**: Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom, including hydrogen. Otherwise exactly nat values are required, in STRU atom order (grouped by atom type). A value &lt;= 0 disables the cavity Gaussian on that atom. Values must be finite. These Gaussians do not change the solute charge.
+- **Description**: Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom except those whose known atomic number equals the pseudopotential valence charge (within 1e-8); if the pseudopotential element is unknown, the value is applied. More than one value requires exactly nat values in STRU atom order (grouped by atom type), and overrides this automatic exclusion. A value &lt;= 0 disables the cavity Gaussian on that atom. Values must be finite. These Gaussians do not change the solute charge.
 - **Default**: 0.5
 - **Unit**: bohr
 

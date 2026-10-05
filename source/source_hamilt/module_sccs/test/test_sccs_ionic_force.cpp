@@ -222,3 +222,23 @@ TEST_F(SccsIonicForceTest, FullCavityPccLowpassTotalCorrectionForceFiniteDiffere
         }
     }
 }
+
+TEST_F(SccsIonicForceTest, SingletonAndExplicitListUseSameDensityAndForceSelection)
+{
+    std::vector<unitcell::AtomData> atoms(2);
+    atoms[0].atomic_number = 8;
+    atoms[0].valence_charge = 6.0;
+    atoms[1].atomic_number = 1;
+    atoms[1].valence_charge = 1.0;
+    for (auto& atom : atoms) { atom.position.x = length / 4.0; }
+    const std::vector<double> potential = cosine_mode(0);
+    std::vector<ModuleBase::Vector3<double>> forces;
+    std::vector<double> widths = {0.8};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, forces, error));
+    EXPECT_DOUBLE_EQ(forces[1].x, 0.0);
+    const double oxygen_force = forces[0].x;
+    widths = {0.8, 0.8};
+    ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, forces, error));
+    EXPECT_DOUBLE_EQ(forces[0].x, oxygen_force);
+    EXPECT_NEAR(forces[1].x, oxygen_force / 6.0, 1e-12);
+}

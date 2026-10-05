@@ -42,7 +42,8 @@ bool prepare_core_gaussians(const std::vector<unitcell::AtomData>& atoms,
                             std::vector<double>& widths,
                             std::string& error);
 
-// Full cavity: one width applies to all atoms, nonpositive widths disable atoms.
+// Full cavity: a singleton skips known Z == zv atoms; per-atom lists override
+// that choice. Nonpositive widths always disable the atom.
 bool gaussian_core_density(const std::vector<unitcell::AtomData>& atoms,
                             const ModulePW::PW_Basis& basis,
                             double tpiba,
