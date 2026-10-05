@@ -17,6 +17,7 @@ public:
                          const std::vector<ModuleBase::Vector3<double>>& relative_positions,
                          const elecstate::Pcc0dParameters& parameters);
     bool has_boundary_correction() const override;
+    CoulombTransformCounts transform_counts() const override { return periodic_.transform_counts(); }
     bool apply_potential(const std::vector<double>& charge,
                          std::vector<double>& potential,
                          std::string& error) override;

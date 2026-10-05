@@ -75,6 +75,7 @@ bool PeriodicCoulombOperator::apply_potential(const std::vector<double>& charge,
     }
     reciprocal_work_.resize(basis_.npw);
     basis_.real2recip(charge.data(), reciprocal_work_.data());
+    ++counts_.forward_calls;
     const double tpiba2 = tpiba_ * tpiba_;
     for (int ig = 0; ig < basis_.npw; ++ig)
     {
@@ -89,6 +90,7 @@ bool PeriodicCoulombOperator::apply_potential(const std::vector<double>& charge,
     }
     std::vector<double> candidate(basis_.nrxx);
     basis_.recip2real(reciprocal_work_.data(), candidate.data());
+    ++counts_.inverse_calls;
     if (!validate_grid_values(candidate, basis_, error))
     {
         return false;

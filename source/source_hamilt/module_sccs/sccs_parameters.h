@@ -28,6 +28,7 @@ struct SccsConfig
 
 struct PolarizationSolverParameters
 {
+    bool check_fixed_point = false;
     int max_iterations = 200;
     double tolerance_rms = 1e-10;
     double tolerance_max = 1e-8;

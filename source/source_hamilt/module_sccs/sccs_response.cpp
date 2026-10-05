@@ -1,4 +1,5 @@
 #include "sccs_response.h"
+#include "sccs_diagnostics.h"
 #include "sccs_cavity_derivatives.h"
 #include "sccs_lowpass.h"
 #include "sccs_parameters.h"
@@ -281,6 +282,11 @@ bool solve_sccs_response(const std::vector<double>& density,
     }
 
     if (!validate_grid_values(potential, basis, error))
+    {
+        return false;
+    }
+    if (solver.check_fixed_point
+        && !check_sccs_fixed_point(charge, coefficient, potential, invsqrt, basis, coulomb, polarization, error))
     {
         return false;
     }

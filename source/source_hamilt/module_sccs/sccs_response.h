@@ -24,6 +24,9 @@ struct PolarizationResult
     double residual_rms = 0.0;
     double residual_max = 0.0;
     bool warm_started = false;
+    bool fixed_point_checked = false;
+    double fixed_point_defect_rms = 0.0;
+    double fixed_point_defect_max = 0.0;
     std::vector<double> potential; // Hartree; zero mean only for periodic cells
     std::vector<ModuleBase::Vector3<double>> gradient; // Hartree/Bohr; empty with lowpass
 };
