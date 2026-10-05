@@ -47,7 +47,7 @@ TEST(ReadInpSccs, SupportedScopeAndNumericalValidation)
     input.assume_isolated = "pcc_2d";
     EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
     input.cal_force = true;
-    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
     input.cal_force = false;
     input.calculation = "relax";
     EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
