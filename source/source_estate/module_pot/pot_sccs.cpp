@@ -3,7 +3,6 @@
 #include "sccs_pcc_2d.h"
 
 #include "source_base/parallel_reduce.h"
-#include "source_basis/module_pw/pw_grid_geometry.h"
 #include "source_base/timer.h"
 #include "source_base/tool_quit.h"
 #include "source_cell/cell_tools.h"
@@ -157,11 +156,15 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
         const bool widths_valid = config_.core_spreads.size() == 1 || config_.core_spreads.size() == atoms.size();
         require_valid_on_pool(widths_valid, "sccs_corespread must contain one value or exactly nat values");
     }
-    std::vector<double> ions;
     std::string error;
-    const bool ions_valid = ModuleSccs::gaussian_ionic_density(atoms, basis, cell->tpiba,
-                                                              ModuleSccs::gaussian_ion_spread, ions, error);
-    require_valid_on_pool(ions_valid, error);
+    bool reused_fixed_sources = false;
+    const bool sources_valid = fixed_sources_.update(*cell, basis, atoms, config_, reused_fixed_sources, error);
+    require_valid_on_pool(sources_valid, error);
+    // A changed atom/cell/grid invalidates a previous warm-start solution too.
+    if (!reused_fixed_sources) { restart_potential_.clear(); }
+    output_.reused_fixed_sources = reused_fixed_sources;
+    const std::vector<double>& ions = fixed_sources_.ionic_density();
+    const std::vector<ModuleBase::Vector3<double>>& grid_positions = fixed_sources_.positions();
     std::vector<double> density(basis.nrxx, 0.0);
     std::vector<double> solute_charge(basis.nrxx);
     double ionic_sum = 0.0;
@@ -188,12 +191,6 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     {
         require_valid_on_pool(neutral, "Periodic SCCS currently requires a neutral cell");
     }
-    std::vector<ModuleBase::Vector3<double>> grid_positions;
-    if (config_.boundary != ModuleSccs::Boundary::Periodic)
-    {
-        const bool positions_valid = ModulePW::grid_positions(basis, cell->latvec, cell->lat0, grid_positions, error);
-        require_valid_on_pool(positions_valid, error);
-    }
     std::unique_ptr<ModuleSccs::CoulombOperator> coulomb;
     if (config_.boundary == ModuleSccs::Boundary::Pcc0d)
     {
@@ -212,10 +209,7 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     }
     if (config_.core_electrons)
     {
-        std::vector<double> core_density;
-        const bool core_valid = ModuleSccs::gaussian_core_density(atoms, basis, cell->tpiba,
-                                                                 config_.core_spreads, core_density, error);
-        require_valid_on_pool(core_valid, error);
+        const std::vector<double>& core_density = fixed_sources_.core_density();
         for (int ir = 0; ir < basis.nrxx; ++ir) { density[ir] += core_density[ir]; }
     }
     ModuleSccs::SccsResponse response;

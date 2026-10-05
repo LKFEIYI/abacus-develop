@@ -1,12 +1,15 @@
 #ifndef SCCS_PCC_2D_ADAPTER_H
 #define SCCS_PCC_2D_ADAPTER_H
 
-#include "source_base/vector3.h"
 #include <memory>
 #include <string>
 #include <vector>
 
 class UnitCell;
+namespace ModuleBase
+{
+template <typename T> class Vector3;
+}
 namespace ModulePW
 {
 class PW_Basis;

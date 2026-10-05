@@ -85,7 +85,8 @@ void write_sccs_output(std::ostream& output, const SccsOutput& result, int level
     }
     output << " SCCS_CAVITY VOLUME/Bohr3 " << result.volume << " SURFACE/Bohr2 " << result.surface << '\n'
            << " SCCS_FFT R2G_CALLS " << result.transforms.forward_calls
-           << " G2R_CALLS " << result.transforms.inverse_calls << " CACHED_SOURCES 0\n";
+           << " G2R_CALLS " << result.transforms.inverse_calls
+           << " CACHED_SOURCES " << result.reused_fixed_sources << '\n';
     if (!pcc) { return; }
     output << std::setprecision(12);
     const PccOutput& data = result.pcc;

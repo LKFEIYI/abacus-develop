@@ -32,6 +32,7 @@ struct PccOutput
 struct SccsOutput
 {
     bool valid = false;
+    bool reused_fixed_sources = false;
     int iterations = 0;
     bool warm_started = false;
     bool fixed_point_checked = false;

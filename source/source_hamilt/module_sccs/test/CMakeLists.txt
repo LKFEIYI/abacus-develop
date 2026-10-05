@@ -9,6 +9,8 @@ AddTest(TARGET MODULE_HAMILT_sccs_poisson
     ../../../source_estate/test/test_pot_sccs.cpp
     ../../../source_estate/test/test_sccs_pcc_0d.cpp
     ../../../source_estate/test/test_sccs_pcc_2d.cpp
+    ../../../source_estate/test/test_sccs_fixed_sources.cpp
+    ../../../source_estate/module_pot/sccs_fixed_sources.cpp
     ../../../source_estate/test/test_sccs_output.cpp
     ../../../source_estate/module_pot/sccs_output.cpp
     ../../../source_estate/module_pot/sccs_output_collect.cpp

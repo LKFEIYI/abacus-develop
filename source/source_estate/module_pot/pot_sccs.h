@@ -3,6 +3,7 @@
 
 #include "pot_base.h"
 #include "sccs_output.h"
+#include "sccs_fixed_sources.h"
 #include "source_hamilt/module_sccs/sccs_parameters.h"
 
 struct Input_para;
@@ -37,6 +38,7 @@ private:
     const ModuleSccs::SccsConfig config_;
     const ModuleSccs::PolarizationSolverParameters solver_;
     SccsOutput output_;
+    SccsFixedSources fixed_sources_;
     double electrostatic_rydberg_ = 0.0;
     double non_electrostatic_rydberg_ = 0.0;
     std::vector<double> electrostatic_potential_;
