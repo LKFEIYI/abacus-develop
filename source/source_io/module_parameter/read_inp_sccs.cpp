@@ -46,8 +46,8 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
     { error = "SCCS currently supports assume_isolated none, pcc_0d or pcc_2d"; }
     else if (input.device != "cpu" || input.esolver_type != "ksdft") { error = "SCCS requires CPU KS-DFT"; }
     else if (input.basis_type != "pw" && input.basis_type != "lcao") { error = "SCCS requires basis_type pw or lcao"; }
-    else if (input.calculation != "scf" || input.cal_stress)
-    { error = "SCCS currently supports SCF energies and forces without stress"; }
+    else if ((input.calculation != "scf" && input.calculation != "relax") || input.cal_stress)
+    { error = "SCCS supports calculation scf or fixed-cell relax without stress"; }
     else if (input.nspin != 1 && input.nspin != 2) { error = "SCCS requires nspin 1 or 2"; }
     else if (input.efield_flag || input.gate_flag || input.dfthalf_type != 0
              || input.deepks_scf || input.deepks_out_labels || input.deepks_bandgap
@@ -130,7 +130,7 @@ void ReadInput::item_sccs()
         item.annotation = "implicit solvent model";
         item.category = "Implicit solvation model";
         item.type = "Integer";
-        item.description = "Select 0 for vacuum, 1 for the original ABACUS implicit solvation model, or 2 for SCCS. Legacy Boolean values remain accepted as 0 or 1. SCCS supports CPU KS-DFT SCF calculations with basis_type pw or lcao and nspin 1 or 2: neutral periodic cells (assume_isolated none), neutral/charged molecules in cubic cells (assume_isolated pcc_0d), or neutral/charged slabs (assume_isolated pcc_2d). Forces are supported for periodic SCCS and SCCS with pcc_0d or pcc_2d. Stress, external fields and other correction models are not supported.";
+        item.description = "Select 0 for vacuum, 1 for the original ABACUS implicit solvation model, or 2 for SCCS. Legacy Boolean values remain accepted as 0 or 1. SCCS supports CPU KS-DFT SCF and fixed-cell relax calculations with basis_type pw or lcao and nspin 1 or 2: neutral periodic cells (assume_isolated none), neutral/charged molecules in cubic cells (assume_isolated pcc_0d), or neutral/charged slabs (assume_isolated pcc_2d). Forces are supported for periodic SCCS and SCCS with pcc_0d or pcc_2d. Stress, external fields and other correction models are not supported.";
         item.default_value = "0";
         item.read_value = [](const Input_Item& item, Parameter& para) {
             std::string error;

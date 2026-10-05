@@ -51,7 +51,7 @@ TEST(ReadInpSccs, SupportedScopeAndNumericalValidation)
     EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
     input.cal_force = false;
     input.calculation = "relax";
-    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
     input.calculation = "scf";
     input.assume_isolated = "none";
     input.sccs_rho_min = input.sccs_rho_max;
@@ -138,4 +138,37 @@ TEST(ReadInpSccs, DelayedStartRequiresRoomBeforeScfConvergenceAndIterationLimit)
     EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
     input.sccs_start_nmax = 0;
     EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+}
+
+TEST(ReadInpSccs, FixedCellRelaxSupportsAllBoundariesAndKeepsStressOutOfScope)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    input.calculation = "relax";
+    input.cal_force = true;
+    input.sccs_solvent_mode = "full";
+    input.sccs_corespread = {0.0, 0.5};
+    input.sccs_start_drho = 1e-3;
+    input.sccs_start_nmax = 3;
+    std::string error;
+    const std::string boundaries[] = {"none", "pcc_0d", "pcc_2d"};
+    const std::string bases[] = {"pw", "lcao"};
+    for (const std::string& basis : bases)
+    {
+        input.basis_type = basis;
+        for (const std::string& boundary : boundaries)
+        {
+            input.assume_isolated = boundary;
+            ASSERT_TRUE(ModuleIO::validate_sccs_input(input, error)) << error;
+            input.cal_stress = true;
+            EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+            input.cal_stress = false;
+        }
+    }
+    const std::string unsupported[] = {"cell-relax", "md", "nscf"};
+    for (const std::string& calculation : unsupported)
+    {
+        input.calculation = calculation;
+        EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    }
 }
