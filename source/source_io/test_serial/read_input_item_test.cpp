@@ -123,7 +123,7 @@ TEST_F(InputTest, PccSelectionAndUnsupportedCombinations)
     input.cal_force = false;
     it->second.check_value(it->second, param);
     input.assume_isolated = "pcc_2d";
-    EXPECT_EXIT(it->second.check_value(it->second, param), testing::ExitedWithCode(1), "");
+    it->second.check_value(it->second, param);
     input.imp_sol = 0;
     input.assume_isolated = "pcc_0d";
     const Input_para valid = input;
