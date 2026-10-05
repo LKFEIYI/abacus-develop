@@ -7,11 +7,14 @@
 
 namespace ModuleSccs
 {
+enum class Boundary { Periodic, Pcc0d };
+
 enum class Preset { Custom, Vacuum, WaterNeutral, WaterCation, WaterAnion };
 
 struct SccsConfig
 {
     CavityParameters cavity;
+    Boundary boundary = Boundary::Periodic;
     double surface_tension = 0.0; // Hartree/Bohr^2
     double pressure = 0.0; // Hartree/Bohr^3
     double surface_regularization = 0.0;

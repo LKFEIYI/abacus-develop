@@ -1,4 +1,5 @@
 #include "pot_sccs.h"
+#include "sccs_pcc_0d.h"
 
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
@@ -8,6 +9,7 @@
 #include "source_hamilt/module_sccs/sccs_ionic_charge.h"
 #include "source_hamilt/module_sccs/sccs_ionic_force.h"
 #include "source_hamilt/module_sccs/sccs_response.h"
+#include "source_hamilt/module_sccs/sccs_pw_coulomb.h"
 #include "source_io/module_parameter/input_parameter.h"
 
 #include <cmath>
@@ -52,6 +54,12 @@ bool make_sccs_config_from_input(const Input_para& input,
         || !std::isfinite(input.sccs_tol_max) || input.sccs_tol_max <= 0.0)
     {
         error = "SCCS requires a positive iteration limit and finite positive residual tolerances";
+        return false;
+    }
+    if (input.assume_isolated == "pcc_0d") { candidate.boundary = ModuleSccs::Boundary::Pcc0d; }
+    else if (input.assume_isolated != "none")
+    {
+        error = "SCCS supports assume_isolated none or pcc_0d";
         return false;
     }
     config = candidate;
@@ -118,15 +126,28 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     const bool normalization_valid = std::isfinite(normalization_error) && std::abs(normalization_error) < 1e-6;
     require_valid_on_pool(normalization_valid, "SCCS Gaussian ionic charge normalization failed");
     const bool neutral = std::isfinite(net_charge) && std::abs(net_charge) < 1e-6;
-    require_valid_on_pool(neutral, "Periodic SCCS currently requires a neutral cell");
+    if (config_.boundary == ModuleSccs::Boundary::Periodic)
+    {
+        require_valid_on_pool(neutral, "Periodic SCCS currently requires a neutral cell");
+    }
+    std::unique_ptr<ModuleSccs::CoulombOperator> coulomb;
+    if (config_.boundary == ModuleSccs::Boundary::Pcc0d)
+    {
+        const bool geometry_valid = make_sccs_pcc_0d_operator(*cell, basis, atoms, coulomb, error);
+        require_valid_on_pool(geometry_valid, error);
+    }
+    else
+    {
+        coulomb.reset(new ModuleSccs::PeriodicCoulombOperator(basis, cell->tpiba));
+    }
     ModuleSccs::SccsResponse response;
     const bool response_valid = ModuleSccs::solve_sccs_response(density, solute_charge, config_.cavity,
                                                                solver_, restart_potential_, basis, cell->tpiba,
-                                                               response, error);
+                                                               *coulomb, response, error);
     require_valid_on_pool(response_valid, error);
     ModuleSccs::FunctionalResult functional;
     const bool functional_valid = ModuleSccs::evaluate_functional(solute_charge, response, config_, basis,
-                                                                  cell->tpiba, functional, error);
+                                                                  cell->tpiba, *coulomb, functional, error);
     require_valid_on_pool(functional_valid, error);
     electrostatic_rydberg_ = 2.0 * functional.reaction_energy;
     non_electrostatic_rydberg_ = 2.0 * (functional.surface_energy + functional.volume_energy);
@@ -144,6 +165,8 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
 void PotSccs::add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const
 {
     ModuleBase::timer::start("PotSccs", "add_solvation_force");
+    const bool periodic = config_.boundary == ModuleSccs::Boundary::Periodic;
+    require_valid_on_pool(periodic, "SCCS PCC 0D forces are not supported yet");
     const bool shape_valid = force.nr == cell.nat && force.nc == 3
                              && this->rho_basis_ != nullptr && cell.atoms != nullptr && cell.ntype > 0;
     require_valid_on_pool(shape_valid, "SCCS force requires initialized cell and atom-major storage");
