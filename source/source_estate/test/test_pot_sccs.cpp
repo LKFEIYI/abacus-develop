@@ -265,3 +265,62 @@ TEST_F(PotSccsTest, FullCavityInputUsesOriginalParameterNameAndKeepsPresetWidths
     EXPECT_EQ(config.core_spreads, input.sccs_corespread);
     EXPECT_DOUBLE_EQ(config.cavity.epsilon_bulk, 78.3);
 }
+
+TEST_F(PotSccsTest, DelayedActivationHasOneIrreversibleTransition)
+{
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    config.start_drho = 1e-3;
+    config.start_nmax = 3;
+    elecstate::PotSccs threshold(&basis, config, solver);
+    EXPECT_FALSE(threshold.sccs_is_active());
+    EXPECT_FALSE(threshold.update_scf_state(1, 0.1));
+    EXPECT_TRUE(threshold.update_scf_state(2, 1e-3));
+    EXPECT_TRUE(threshold.sccs_is_active());
+    EXPECT_FALSE(threshold.update_scf_state(3, 0.2));
+    EXPECT_FALSE(threshold.update_scf_state(1, 0.2));
+    elecstate::PotSccs forced(&basis, config, solver);
+    EXPECT_FALSE(forced.update_scf_state(2, 0.1));
+    EXPECT_TRUE(forced.update_scf_state(3, 0.1));
+    config.start_drho = 0.0;
+    elecstate::PotSccs immediate(&basis, config, solver);
+    EXPECT_TRUE(immediate.sccs_is_active());
+    EXPECT_FALSE(immediate.update_scf_state(1, 0.0));
+}
+
+TEST_F(PotSccsTest, WaitingSccsContributesNoPotentialEnergyOrForce)
+{
+    UnitCell cell;
+    Atom atom;
+    cell.lat0 = length;
+    cell.tpiba = tpiba;
+    cell.omega = basis.omega;
+    cell.ntype = 1;
+    cell.nat = 1;
+    cell.atoms = &atom;
+    atom.na = 1;
+    atom.ncpp.zv = 1.0;
+    atom.tau = {ModuleBase::Vector3<double>(0.25, 0.25, 0.25)};
+    const double value = 1.0 / basis.omega;
+    std::vector<double> density(basis.nrxx, value);
+    double* channels[] = {density.data()};
+    Charge charge;
+    charge.nspin = 1;
+    charge.rho = channels;
+    ModuleSccs::SccsConfig config;
+    ASSERT_TRUE(ModuleSccs::make_sccs_config(ModuleSccs::Preset::WaterNeutral, config, error));
+    config.start_drho = 1e-3;
+    ModuleSccs::PolarizationSolverParameters solver;
+    elecstate::PotSccs delayed(&basis, config, solver);
+    ModuleBase::matrix potential(1, basis.nrxx);
+    delayed.cal_v_eff(&charge, &cell, potential);
+    EXPECT_DOUBLE_EQ(delayed.get_energy(), 0.0);
+    for (int ir = 0; ir < basis.nrxx; ++ir) { EXPECT_DOUBLE_EQ(potential(0, ir), 0.0); }
+    ModuleBase::matrix force(1, 3);
+    force(0, 0) = 42.0;
+    delayed.add_solvation_force(cell, force);
+    EXPECT_DOUBLE_EQ(force(0, 0), 42.0);
+    EXPECT_TRUE(delayed.update_scf_state(2, 1e-4));
+    delayed.cal_v_eff(&charge, &cell, potential);
+    EXPECT_LT(delayed.get_energy(), 0.0);
+}

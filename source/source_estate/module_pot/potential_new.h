@@ -83,6 +83,7 @@ class Potential : public PotBase
 
     PotBase* get_pot_type(const std::string& pot_type, const Input_para& input);
 
+    bool update_scf_state(int electronic_iteration, double density_residual) override;
     void get_solvation_energy(double& electrostatic, double& non_electrostatic) const override;
     void add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const override;
     const std::vector<double>* solvent_electrostatic_potential() const override;

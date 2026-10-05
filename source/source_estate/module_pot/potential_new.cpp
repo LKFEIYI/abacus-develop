@@ -15,6 +15,17 @@
 
 namespace elecstate
 {
+bool Potential::update_scf_state(int electronic_iteration, double density_residual)
+{
+    bool changed = false;
+    for (PotBase* component : this->components)
+    {
+        const bool component_changed = component->update_scf_state(electronic_iteration, density_residual);
+        changed = changed || component_changed;
+    }
+    return changed;
+}
+
 void Potential::add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const
 {
     for (const PotBase* component : this->components)

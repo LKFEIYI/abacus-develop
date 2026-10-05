@@ -30,6 +30,11 @@ class PotBase
 
     virtual double get_energy() const { return 0.0; }
 
+    // Called with the synchronized output-density residual before SCF mixing.
+    // True means the potential changed its model: restart mixing and require
+    // another electronic iteration before accepting convergence.
+    virtual bool update_scf_state(int electronic_iteration, double density_residual) { return false; }
+
     // Solvation contributions in Ry, added once after the band-energy potential subtraction.
     virtual void get_solvation_energy(double& electrostatic, double& non_electrostatic) const
     {

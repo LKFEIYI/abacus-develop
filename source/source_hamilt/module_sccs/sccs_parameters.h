@@ -17,6 +17,8 @@ struct SccsConfig
     CavityParameters cavity;
     Boundary boundary = Boundary::Periodic;
     int pcc_2d_axis = 2;
+    double start_drho = 0.0; // Outer SCF activation threshold; zero starts immediately
+    int start_nmax = 30; // Force activation at this electronic iteration
     bool core_electrons = false;
     std::vector<double> core_spreads = {0.5}; // Bohr: singleton skips Z == zv; per-atom list overrides; <= 0 disables
     double surface_tension = 0.0; // Hartree/Bohr^2

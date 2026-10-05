@@ -1,5 +1,6 @@
 #include "esolver_ks.h"
 #include "source_base/timer_wrapper.h"
+#include "source_base/parallel_common.h"
 
 // for jason output information
 #include "source_io/module_json/output_info.h"
@@ -267,6 +268,14 @@ ESolver_KS::DensityStage ESolver_KS::density_stage(const int istep, const int it
 
 void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &conv_esolver)
 {
+    bool potential_changed = false;
+    if (this->inp_->imp_sol == 2)
+    {
+        double density_residual = this->drho;
+        Parallel_Common::bcast_double(density_residual);
+        potential_changed = this->pelec->pot->update_scf_state(iter, density_residual);
+        if (potential_changed) { this->p_chgmix->mix_reset(); }
+    }
 
     // 1.1) print out band gap 
     if (!PARAM.globalv.two_fermi)
@@ -310,6 +319,7 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     module_charge::ScfMixingCtx ctx;
     ctx.hsolver_error = hsolver_error;
     ctx.scf_thr = this->scf_thr;
+    if (potential_changed) { ctx.scf_thr = -1.0; }
     ctx.scf_ene_thr = this->scf_ene_thr;
     ctx.converged_u = converged_u;
     ctx.ks_run = PARAM.globalv.ks_run;

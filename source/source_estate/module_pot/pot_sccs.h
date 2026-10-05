@@ -20,11 +20,16 @@ public:
             const ModuleSccs::PolarizationSolverParameters& solver);
     void cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential) override;
     double get_energy() const override;
+    bool update_scf_state(int electronic_iteration, double density_residual) override;
+    bool sccs_is_active() const { return sccs_active_; }
     void add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const override;
     void get_solvation_energy(double& electrostatic, double& non_electrostatic) const override;
     const std::vector<double>* solvent_electrostatic_potential() const override;
 
 private:
+    // Initialized in the constructor; update_scf_state is the sole transition
+    // owner. There is no external setter and activation is irreversible.
+    bool sccs_active_ = false;
     const ModuleSccs::SccsConfig config_;
     const ModuleSccs::PolarizationSolverParameters solver_;
     double electrostatic_rydberg_ = 0.0;

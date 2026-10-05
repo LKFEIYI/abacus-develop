@@ -131,6 +131,11 @@ bool validate_config(const SccsConfig& config, std::string& error)
         error = "SCCS requires finite positive surface regularization";
         return false;
     }
+    if (!std::isfinite(config.start_drho) || config.start_drho < 0.0 || config.start_nmax <= 0)
+    {
+        error = "SCCS start threshold must be finite and non-negative and iteration limit positive";
+        return false;
+    }
     if (config.core_electrons)
     {
         if (config.core_spreads.empty())

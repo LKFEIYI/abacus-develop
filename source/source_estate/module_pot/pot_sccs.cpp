@@ -91,6 +91,19 @@ PotSccs::PotSccs(const ModulePW::PW_Basis* basis,
 {
     this->rho_basis_ = basis;
     this->dynamic_mode = true;
+    sccs_active_ = config_.start_drho <= 0.0;
+}
+
+bool PotSccs::update_scf_state(int electronic_iteration, double density_residual)
+{
+    if (sccs_active_) { return false; }
+    if (density_residual > config_.start_drho && electronic_iteration < config_.start_nmax)
+    {
+        return false;
+    }
+    sccs_active_ = true;
+    restart_potential_.clear();
+    return true;
 }
 
 void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential)
@@ -110,6 +123,15 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
         if (basis.nrxx > 0 && charge->rho[spin] == nullptr) { density_valid = false; }
     }
     require_valid_on_pool(density_valid, "SCCS charge density is not available");
+    if (!sccs_active_)
+    {
+        electrostatic_rydberg_ = 0.0;
+        non_electrostatic_rydberg_ = 0.0;
+        electrostatic_potential_.assign(basis.nrxx, 0.0);
+        cavity_potential_.assign(basis.nrxx, 0.0);
+        ModuleBase::timer::end("PotSccs", "cal_v_eff");
+        return;
+    }
     const std::vector<unitcell::AtomData> atoms = unitcell::get_atom_data(cell->atoms, cell->ntype, cell->lat0);
     const int atom_count = atoms.size();
     const bool count_valid = atom_count == cell->nat;
@@ -207,6 +229,11 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
 void PotSccs::add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const
 {
     ModuleBase::timer::start("PotSccs", "add_solvation_force");
+    if (!sccs_active_)
+    {
+        ModuleBase::timer::end("PotSccs", "add_solvation_force");
+        return;
+    }
     const bool shape_valid = force.nr == cell.nat && force.nc == 3
                              && this->rho_basis_ != nullptr && cell.atoms != nullptr && cell.ntype > 0;
     require_valid_on_pool(shape_valid, "SCCS force requires initialized cell and atom-major storage");
