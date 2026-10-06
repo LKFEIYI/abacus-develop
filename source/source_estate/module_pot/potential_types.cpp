@@ -27,6 +27,11 @@ PotBase* Potential::make_sccs_potential(const Input_para& input)
     ModuleSccs::SccsConfig config;
     ModuleSccs::PolarizationSolverParameters solver;
     make_sccs_config_from_input(input, config, solver);
+    if (this->ucell_ != nullptr)
+    {
+        const std::string warning = check_sccs_structure(config, *this->ucell_);
+        if (!warning.empty()) { ModuleBase::WARNING("Potential::make_sccs_potential", warning); }
+    }
     return new PotSccs(this->rho_basis_, config, solver);
 }
 

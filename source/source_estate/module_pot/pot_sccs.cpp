@@ -14,6 +14,7 @@
 #include "source_io/module_parameter/input_parameter.h"
 
 #include <cmath>
+#include <sstream>
 #include <utility>
 
 namespace elecstate
@@ -36,7 +37,11 @@ void make_sccs_config_from_input(const Input_para& input,
     {
         config = ModuleSccs::make_sccs_config(preset);
     }
+    config.core_electrons = input.sccs_solvent_mode == "full";
+    config.core_spreads = input.sccs_corespread;
     config.surface_regularization = input.sccs_surface_eta;
+    config.cavity.lowpass_p1 = input.sccs_lowpass_p1;
+    config.cavity.lowpass_p2 = input.sccs_lowpass_p2;
     if (input.assume_isolated == "pcc_0d") { config.boundary = ModuleSccs::Boundary::Pcc0d; }
     else if (input.assume_isolated == "pcc_2d")
     {
@@ -47,6 +52,29 @@ void make_sccs_config_from_input(const Input_para& input,
     solver.max_iterations = input.sccs_maxiter;
     solver.tolerance_rms = input.sccs_tol_rms;
     solver.tolerance_max = input.sccs_tol_max;
+}
+
+std::string check_sccs_structure(const ModuleSccs::SccsConfig& config, const UnitCell& cell)
+{
+    if (!config.core_electrons) { return std::string(); }
+    const std::size_t width_count = config.core_spreads.size();
+    const std::size_t atom_count = cell.nat;
+    if (width_count != 1 && width_count != atom_count)
+    {
+        ModuleBase::WARNING_QUIT("check_sccs_structure", "sccs_corespread must contain one value or exactly nat values");
+    }
+    if (width_count != 1) { return std::string(); }
+    std::ostringstream message;
+    for (int it = 0; it < cell.ntype; ++it)
+    {
+        const int atomic_number = unitcell::pseudo_atomic_number(cell.atoms[it]);
+        if (atomic_number != 0) { continue; }
+        message << "sccs_solvent_mode full: the element of atom type " << cell.atoms[it].label
+                << " (pseudopotential element '" << cell.atoms[it].ncpp.psd
+                << "') is unknown, so the single sccs_corespread value is applied to it even if its"
+                << " pseudopotential has no core electrons; give one value per atom to control it.\n";
+    }
+    return message.str();
 }
 
 PotSccs::PotSccs(const ModulePW::PW_Basis* basis,
@@ -96,6 +124,12 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     {
         coulomb.reset(new ModuleSccs::PeriodicCoulombOperator(basis, cell->tpiba));
     }
+    if (config_.core_electrons)
+    {
+        std::vector<double> core_density;
+        ModuleSccs::gaussian_core_density(atoms, basis, cell->tpiba, config_.core_spreads, core_density);
+        for (int ir = 0; ir < basis.nrxx; ++ir) { density[ir] += core_density[ir]; }
+    }
     ModuleSccs::SccsResponse response;
     ModuleSccs::solve_sccs_response(density, solute_charge, config_.cavity, solver_, restart_potential_, basis,
                                     cell->tpiba, *coulomb, response);
@@ -110,6 +144,7 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
         const double value = 2.0 * functional.electron_potential[ir];
         for (int spin = 0; spin < charge->nspin; ++spin) { potential(spin, ir) += value; }
     }
+    cavity_potential_ = std::move(functional.cavity_potential);
     restart_potential_ = std::move(response.restart_potential);
     ModuleBase::timer::end("PotSccs", "cal_v_eff");
 }
@@ -127,6 +162,13 @@ void PotSccs::add_solvation_force(const UnitCell& cell, ModuleBase::matrix& forc
     std::vector<ModuleBase::Vector3<double>> ionic_force;
     ModuleSccs::gaussian_ionic_force(atoms, reaction, basis, cell.tpiba, ModuleSccs::gaussian_ion_spread,
                                      ionic_force);
+    if (config_.core_electrons)
+    {
+        std::vector<ModuleBase::Vector3<double>> core_force;
+        ModuleSccs::gaussian_core_force(atoms, cavity_potential_, basis, cell.tpiba, config_.core_spreads,
+                                        core_force);
+        for (int ia = 0; ia < cell.nat; ++ia) { ionic_force[ia] += core_force[ia]; }
+    }
     for (int ia = 0; ia < cell.nat; ++ia)
     {
         for (int axis = 0; axis < 3; ++axis)

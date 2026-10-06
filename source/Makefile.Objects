@@ -625,6 +625,7 @@ OBJS_SURCHEM=surchem.o\
 OBJS_SCCS=sccs_cavity.o\
     sccs_cavity_derivatives.o\
     sccs_functional.o\
+    sccs_lowpass.o\
     sccs_parameters.o\
     sccs_ionic_charge.o\
     sccs_ionic_force.o\

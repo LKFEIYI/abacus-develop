@@ -65,3 +65,43 @@ TEST(ReadInpSccs, SupportedScopeAndNumericalValidation)
     input.sccs_preset = "unused";
     EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
 }
+
+TEST(ReadInpSccs, LowpassRequiresPairedValuesAndPcc)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    std::string error;
+    EXPECT_DOUBLE_EQ(input.sccs_lowpass_p1, -1.0);
+    EXPECT_DOUBLE_EQ(input.sccs_lowpass_p2, -1.0);
+    input.sccs_lowpass_p1 = 10.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p2 = 5.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.assume_isolated = "pcc_0d";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.assume_isolated = "pcc_2d";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p1 = 0.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p2 = 0.0;
+    input.assume_isolated = "none";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+}
+
+TEST(ReadInpSccs, FullCavityWidthsAndModeValidation)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    input.sccs_solvent_mode = "full";
+    std::string error;
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.7, 0.0, -1.0};
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.0};
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread.clear();
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.5};
+    input.sccs_solvent_mode = "invalid";
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+}

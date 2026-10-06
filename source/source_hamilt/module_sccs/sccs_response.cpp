@@ -1,5 +1,6 @@
 #include "sccs_response.h"
 #include "sccs_cavity_derivatives.h"
+#include "sccs_lowpass.h"
 #include "sccs_parameters.h"
 #include "sccs_pw_coulomb.h"
 
@@ -134,8 +135,9 @@ void solve_sccs_response(const std::vector<double>& density,
 
     const bool open_boundary = coulomb.has_boundary_correction();
     SccsResponse candidate;
-    std::vector<double> coefficient;
-    prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary, candidate, coefficient);
+    CavityDerivatives derivatives;
+    prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary, candidate, derivatives);
+    const std::vector<double>& coefficient = derivatives.coefficient;
     const std::size_t size = density.size();
     std::vector<double> invsqrt(size);
     for (std::size_t i = 0; i < size; ++i)
@@ -231,21 +233,32 @@ void solve_sccs_response(const std::vector<double>& density,
             value -= mean;
         }
     }
-    std::vector<std::complex<double>> potential_g(basis.npw);
-    basis.real2recip(potential.data(), potential_g.data());
-    polarization.gradient.resize(size);
-    XC_Functional::grad_rho(potential_g.data(), polarization.gradient.data(), &basis, tpiba);
+    const bool lowpass = uses_switching_lowpass(cavity);
+    if (!lowpass)
+    {
+        std::vector<std::complex<double>> potential_g(basis.npw);
+        basis.real2recip(potential.data(), potential_g.data());
+        polarization.gradient.resize(size);
+        XC_Functional::grad_rho(potential_g.data(), polarization.gradient.data(), &basis, tpiba);
+    }
     polarization.potential.swap(potential);
     if (open_boundary)
     {
         finish_open_boundary_response(charge, coefficient, invsqrt, cavity, basis, candidate);
     }
-    candidate.cavity_potential.resize(size);
-    for (std::size_t i = 0; i < size; ++i)
+    if (lowpass)
     {
-        const ModuleBase::Vector3<double>& gradient = polarization.gradient[i];
-        const double gradient_square = gradient * gradient;
-        candidate.cavity_potential[i] = -candidate.depsilon_drho[i] * gradient_square / (8.0 * ModuleBase::PI);
+        evaluate_lowpass_cavity_potential(charge, cavity, derivatives, basis, tpiba, candidate);
+    }
+    else
+    {
+        candidate.cavity_potential.resize(size);
+        for (std::size_t i = 0; i < size; ++i)
+        {
+            const ModuleBase::Vector3<double>& gradient = polarization.gradient[i];
+            const double gradient_square = gradient * gradient;
+            candidate.cavity_potential[i] = -candidate.depsilon_drho[i] * gradient_square / (8.0 * ModuleBase::PI);
+        }
     }
     result = std::move(candidate);
 }

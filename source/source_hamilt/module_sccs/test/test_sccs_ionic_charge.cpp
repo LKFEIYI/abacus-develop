@@ -51,3 +51,66 @@ TEST_F(SccsIonicChargeTest, ValenceNormalizationAndFourierPhase)
         EXPECT_NEAR(translated[ir], density[ir], 1e-13);
     }
 }
+
+TEST_F(SccsIonicChargeTest, FullCavityDefaultsAndAtomWidths)
+{
+    std::vector<unitcell::AtomData> atoms(3);
+    atoms[0].valence_charge = 6.0;
+    atoms[1].valence_charge = 1.0;
+    atoms[2].valence_charge = 7.0;
+    atoms[0].position.x = length / 4.0;
+    std::vector<double> widths = {0.5};
+    std::vector<double> density;
+    auto integral = [&]() {
+        double sum = 0.0;
+        for (double value : density) { sum += value; }
+        Parallel_Reduce::reduce_pool(sum);
+        return sum * basis.omega / basis.nxyz;
+    };
+    ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density);
+    EXPECT_NEAR(integral(), 14.0, 1e-12);
+    widths = {0.8};
+    ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density);
+    EXPECT_NEAR(integral(), 14.0, 1e-12);
+    widths = {0.7, 0.0, -1.0};
+    ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density);
+    EXPECT_NEAR(integral(), 6.0, 1e-12);
+    std::vector<unitcell::AtomData> selected;
+    std::vector<double> resolved;
+    ModuleSccs::prepare_core_gaussians(atoms, widths, selected, resolved);
+    EXPECT_DOUBLE_EQ(resolved[0], 0.7);
+    EXPECT_DOUBLE_EQ(selected[1].valence_charge, 0.0);
+    EXPECT_DOUBLE_EQ(atoms[1].valence_charge, 1.0);
+    widths = {0.0};
+    ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density);
+    EXPECT_DOUBLE_EQ(integral(), 0.0);
+}
+
+TEST_F(SccsIonicChargeTest, SingletonSkipsCoreFreeAtomsButAtomListOverrides)
+{
+    std::vector<unitcell::AtomData> atoms(4);
+    atoms[0].atomic_number = 8;
+    atoms[0].valence_charge = 6.0;
+    atoms[1].atomic_number = 1;
+    atoms[1].valence_charge = 1.0;
+    atoms[2].atomic_number = 2;
+    atoms[2].valence_charge = 2.0;
+    atoms[3].valence_charge = 3.0; // Unknown element: do not silently exclude.
+    std::vector<double> density;
+    std::vector<double> widths = {0.8};
+    auto integral = [&]() {
+        double sum = 0.0;
+        for (double value : density) { sum += value; }
+        Parallel_Reduce::reduce_pool(sum);
+        return sum * basis.omega / basis.nxyz;
+    };
+    ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density);
+    EXPECT_NEAR(integral(), 9.0, 1e-12);
+    widths = {0.8, 0.8, 0.8, 0.8};
+    ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density);
+    EXPECT_NEAR(integral(), 12.0, 1e-12);
+    widths = {0.8, 0.0, -1.0, 0.8};
+    ModuleSccs::gaussian_core_density(atoms, basis, tpiba, widths, density);
+    EXPECT_NEAR(integral(), 9.0, 1e-12);
+    EXPECT_DOUBLE_EQ(atoms[1].valence_charge, 1.0);
+}

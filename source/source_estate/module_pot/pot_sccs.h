@@ -4,6 +4,8 @@
 #include "pot_base.h"
 #include "source_hamilt/module_sccs/sccs_parameters.h"
 
+#include <string>
+
 struct Input_para;
 namespace elecstate
 {
@@ -11,6 +13,12 @@ namespace elecstate
 void make_sccs_config_from_input(const Input_para& input,
                                  ModuleSccs::SccsConfig& config,
                                  ModuleSccs::PolarizationSolverParameters& solver);
+
+// Structure-dependent checks that the INPUT reader cannot make: a
+// sccs_corespread count other than one or nat stops the run. Returns a warning
+// (empty if none) when a single width meets an unknown pseudopotential
+// element, whose automatic core exclusion is then not possible.
+std::string check_sccs_structure(const ModuleSccs::SccsConfig& config, const UnitCell& cell);
 
 class PotSccs : public PotBase
 {
@@ -31,6 +39,7 @@ private:
     double non_electrostatic_rydberg_ = 0.0;
     std::vector<double> electrostatic_potential_;
     std::vector<double> restart_potential_;
+    std::vector<double> cavity_potential_;
 };
 } // namespace elecstate
 #endif

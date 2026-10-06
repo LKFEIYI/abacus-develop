@@ -61,6 +61,9 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
         error = "Unknown sccs_preset";
         return false;
     }
+    const bool p1_positive = input.sccs_lowpass_p1 > 0.0;
+    const bool p2_positive = input.sccs_lowpass_p2 > 0.0;
+    const bool pcc = input.assume_isolated == "pcc_0d" || input.assume_isolated == "pcc_2d";
     if (input.sccs_epsilon < 1.0) { error = "sccs_epsilon must be at least 1"; }
     else if (input.sccs_rho_min <= 0.0 || input.sccs_rho_max <= input.sccs_rho_min)
     { error = "sccs_rho_min and sccs_rho_max must satisfy 0 < sccs_rho_min < sccs_rho_max"; }
@@ -68,6 +71,14 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
     else if (input.sccs_tol_rms <= 0.0) { error = "sccs_tol_rms must be positive"; }
     else if (input.sccs_tol_max <= 0.0) { error = "sccs_tol_max must be positive"; }
     else if (input.sccs_surface_eta <= 0.0) { error = "sccs_surface_eta must be positive"; }
+    else if (p1_positive != p2_positive)
+    { error = "sccs_lowpass_p1 and sccs_lowpass_p2 must be both positive or both non-positive"; }
+    else if (p1_positive && !pcc)
+    { error = "sccs_lowpass_p1 and sccs_lowpass_p2 require assume_isolated pcc_0d or pcc_2d"; }
+    else if (input.sccs_solvent_mode != "electronic" && input.sccs_solvent_mode != "full")
+    { error = "sccs_solvent_mode must be electronic or full"; }
+    else if (input.sccs_corespread.empty())
+    { error = "sccs_corespread must contain one value or exactly nat values"; }
     return error.empty();
 }
 
@@ -211,6 +222,59 @@ void ReadInput::item_sccs()
         item.unit = "bohr^-1";
         item.set_availability("imp_sol==2");
         read_sync_double(input.sccs_surface_eta);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_lowpass_p1");
+        item.annotation = "SCCS switching-derivative low-pass slope";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Low-pass filter of the SCCS switching-function derivatives, as Environ deriv_lowpass_p1 with deriv_method fft: when sccs_lowpass_p1 and sccs_lowpass_p2 are both positive, every Fourier derivative of the switching function is multiplied by 0.5 erfc(p1 G^2/Gcut^2 - p2), Gcut^2 being the ecutrho sphere. The filter reduces force errors relative to energy finite differences. Only with assume_isolated pcc_0d or pcc_2d. The default -1 turns it off and reproduces Environ deriv_method fft (continuum cavity potential). With lowpass disabled (the default), analytical forces may differ from finite differences of the self-consistent energy. For geometry optimization with PCC, consider enabling lowpass and check force accuracy against finite differences. With lowpass disabled, the cavity potential uses the FFT gradient of the PCC-corrected potential, which oscillates around the potential step at the cell boundary half a cell from the system center; keep the dielectric transition region several bohr away from that boundary. 10 with sccs_lowpass_p2 5 was validated at ecutrho 300-500 Ry; the filter changes the model energy (about 10 meV for H3O+).";
+        item.default_value = "-1";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_lowpass_p1);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_lowpass_p2");
+        item.annotation = "SCCS switching-derivative low-pass offset";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Offset of the SCCS switching-function low-pass filter, as Environ deriv_lowpass_p2; see sccs_lowpass_p1. Both must be positive or both non-positive. Default -1 (off).";
+        item.default_value = "-1";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_lowpass_p2);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_solvent_mode");
+        item.annotation = "density that defines the SCCS cavity";
+        item.category = "Implicit solvation model";
+        item.type = "String";
+        item.description = "Allowed values: electronic (default) and full, as Environ solvent_mode. electronic builds the dielectric cavity from the valence electron density. full adds valence-charge Gaussians selected by sccs_corespread. The Gaussians shape only the cavity, not the solute charge; the ionic forces include their cavity term. The published SCCS presets were fitted with electronic mode.";
+        item.default_value = "electronic";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_string(input.sccs_solvent_mode);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_corespread");
+        item.annotation = "Widths of the full-cavity Gaussians";
+        item.category = "Implicit solvation model";
+        item.type = "Vector of Real";
+        item.description = "Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom except those whose known atomic number equals the pseudopotential valence charge (within 1e-8); if the pseudopotential element is unknown, the value is applied. More than one value requires exactly nat values in STRU atom order (grouped by atom type), and overrides this automatic exclusion. A value <= 0 disables the cavity Gaussian on that atom. These Gaussians do not change the solute charge.";
+        item.default_value = "0.5";
+        item.unit = "bohr";
+        item.set_availability("imp_sol==2");
+        item.read_value = [](const Input_Item& item, Parameter& para) {
+            std::vector<double> values;
+            for (const std::string& value : item.str_values) { values.push_back(std::stod(value)); }
+            para.input.sccs_corespread.swap(values);
+        };
+        sync_doublevec(input.sccs_corespread, para.input.sccs_corespread.size(), 0.0);
         this->add_item(item);
     }
 }
