@@ -278,6 +278,11 @@ OBJS_ELECSTAT=elecstate.o\
     pcc_2d.o\
     pot_pcc.o\
     pot_sccs.o\
+    sccs_fixed_sources.o\
+    sccs_output.o\
+    sccs_output_collect.o\
+    sccs_pcc_0d.o\
+    sccs_pcc_2d.o\
     elecstate_op.o\
     efield.o\
     gatefield.o\
@@ -614,10 +619,15 @@ OBJS_SURCHEM=surchem.o\
     sol_force.o\
 
 OBJS_SCCS=sccs_cavity.o\
+    sccs_cavity_derivatives.o\
+    sccs_diagnostics.o\
     sccs_functional.o\
+    sccs_lowpass.o\
     sccs_parameters.o\
     sccs_ionic_charge.o\
     sccs_ionic_force.o\
+    sccs_pcc_0d_coulomb.o\
+    sccs_pcc_2d_coulomb.o\
     sccs_pw_coulomb.o\
     sccs_response.o
 
