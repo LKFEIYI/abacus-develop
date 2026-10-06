@@ -128,12 +128,14 @@ TEST_F(SccsIonicForceTest, FullCavityForceTracksPerAtomWidthAndDisabling)
     std::vector<ModuleBase::Vector3<double>> force;
     std::vector<double> widths = {0.8, 0.0};
     ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, force, error));
-    const double expected = 6.0 * tpiba * std::exp(-0.25 * 0.8 * 0.8 * tpiba * tpiba);
+    const double gaussian_exponent = -0.25 * 0.8 * 0.8 * tpiba * tpiba;
+    const double expected = 6.0 * tpiba * std::exp(gaussian_exponent);
     EXPECT_NEAR(force[0].x, expected, 1e-12);
     EXPECT_DOUBLE_EQ(force[1].x, 0.0);
     widths = {0.8};
     ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, force, error));
-    EXPECT_NEAR(force[1].x, expected / 6.0, 1e-12);
+    const double expected_hydrogen_force = expected / 6.0;
+    EXPECT_NEAR(force[1].x, expected_hydrogen_force, 1e-12);
     widths = {0.0};
     ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, force, error));
     EXPECT_DOUBLE_EQ(force[0].x, 0.0);
@@ -240,5 +242,6 @@ TEST_F(SccsIonicForceTest, SingletonAndExplicitListUseSameDensityAndForceSelecti
     widths = {0.8, 0.8};
     ASSERT_TRUE(ModuleSccs::gaussian_core_force(atoms, potential, basis, tpiba, widths, forces, error));
     EXPECT_DOUBLE_EQ(forces[0].x, oxygen_force);
-    EXPECT_NEAR(forces[1].x, oxygen_force / 6.0, 1e-12);
+    const double hydrogen_force = oxygen_force / 6.0;
+    EXPECT_NEAR(forces[1].x, hydrogen_force, 1e-12);
 }

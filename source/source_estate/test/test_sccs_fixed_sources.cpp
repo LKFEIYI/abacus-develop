@@ -159,7 +159,8 @@ TEST_F(SccsFixedSourcesTest, CachedHostMatchesFreshFullCavityEnergyPotentialAndF
     atom.mass = 1.0;
     atom.ncpp.zv = 1.0;
     atom.tau = {ModuleBase::Vector3<double>(0.25, 0.25, 0.25)};
-    std::vector<double> density(basis.nrxx, 0.6 / basis.omega);
+    const double density_value = 0.6 / basis.omega;
+    std::vector<double> density(basis.nrxx, density_value);
     double* channel = density.data();
     Charge charge;
     charge.nspin = 1;

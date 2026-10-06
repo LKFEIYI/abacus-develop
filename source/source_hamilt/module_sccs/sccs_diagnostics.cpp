@@ -59,7 +59,8 @@ bool check_sccs_fixed_point(const std::vector<double>& charge,
         error = "SCCS fixed-point diagnostic is not finite";
         return false;
     }
-    result.fixed_point_defect_rms = std::sqrt(square / basis.nxyz);
+    const double mean_square = square / basis.nxyz;
+    result.fixed_point_defect_rms = std::sqrt(mean_square);
     result.fixed_point_defect_max = maximum;
     result.fixed_point_checked = true;
     return true;

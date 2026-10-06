@@ -29,14 +29,16 @@ bool Pcc2dCoulombOperator::apply_potential(const std::vector<double>& charge,
 {
     // Validate collectively before any rank enters a moment reduction or FFT.
     const double volume = parameters_.area * parameters_.length;
+    const double volume_difference = volume - basis_.omega;
     const double normal_square = normal_ * normal_;
+    const double normalization_error = normal_square - 1.0;
     double invalid = 0.0;
     if (projected_positions_.size() != static_cast<std::size_t>(basis_.nrxx)
         || !std::isfinite(parameters_.area) || parameters_.area <= 0.0
         || !std::isfinite(parameters_.length) || parameters_.length <= 0.0
         || !std::isfinite(volume) || !std::isfinite(basis_.omega) || basis_.omega <= 0.0
-        || std::abs(volume - basis_.omega) > 1e-10 * basis_.omega
-        || !std::isfinite(normal_square) || std::abs(normal_square - 1.0) > 1e-10)
+        || std::abs(volume_difference) > 1e-10 * basis_.omega
+        || !std::isfinite(normal_square) || std::abs(normalization_error) > 1e-10)
     {
         invalid = 1.0;
     }

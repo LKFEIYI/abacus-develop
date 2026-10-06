@@ -45,7 +45,8 @@ TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFf
         const int ix = ir / (basis.ny * basis.nplane);
         const double angle = ModuleBase::TWO_PI * ix / basis.nx;
         const double solute = 0.5 + amplitude * mode[ir];
-        const double epsilon = std::exp(log_bulk * (1.0 - solute));
+        const double log_epsilon = log_bulk * (1.0 - solute);
+        const double epsilon = std::exp(log_epsilon);
         const double gradient = -amplitude * tpiba * std::sin(angle);
         const double laplacian = -amplitude * tpiba * tpiba * mode[ir];
         const double expected = epsilon * (-0.5 * log_bulk * laplacian
@@ -53,7 +54,8 @@ TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFf
                                 / ModuleBase::FOUR_PI;
         EXPECT_NEAR(response.solute[ir], solute, 1e-14);
         EXPECT_NEAR(coefficient[ir], expected, 1e-12);
-        EXPECT_NEAR(response.grad_log_epsilon[ir].x, -log_bulk * gradient, 1e-12);
+        const double expected_gradient = -log_bulk * gradient;
+        EXPECT_NEAR(response.grad_log_epsilon[ir].x, expected_gradient, 1e-12);
         EXPECT_NEAR(response.grad_log_epsilon[ir].y, 0.0, 1e-12);
         EXPECT_NEAR(response.grad_log_epsilon[ir].z, 0.0, 1e-12);
     }
@@ -66,7 +68,8 @@ TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFf
     double difference = 0.0;
     for (int ir = 0; ir < basis.nrxx; ++ir)
     {
-        const double local_difference = std::abs(coefficient[ir] - periodic_coefficient[ir]);
+        const double coefficient_difference = coefficient[ir] - periodic_coefficient[ir];
+        const double local_difference = std::abs(coefficient_difference);
         if (local_difference > difference) { difference = local_difference; }
     }
     Parallel_Reduce::reduce_max_pool(basis.poolnproc, difference);

@@ -28,11 +28,12 @@ bool Pcc0dCoulombOperator::apply_potential(const std::vector<double>& charge,
     // Reject rank-local geometry errors before any rank enters the FFTs.
     const double length = parameters_.length;
     const double volume = length * length * length;
+    const double volume_difference = volume - basis_.omega;
     double invalid = 0.0;
     if (relative_positions_.size() != static_cast<std::size_t>(basis_.nrxx)
         || !std::isfinite(length) || length <= 0.0 || !std::isfinite(volume)
         || !std::isfinite(basis_.omega) || basis_.omega <= 0.0
-        || std::abs(volume - basis_.omega) > 1e-10 * basis_.omega
+        || std::abs(volume_difference) > 1e-10 * basis_.omega
         || !std::isfinite(parameters_.madelung))
     {
         invalid = 1.0;

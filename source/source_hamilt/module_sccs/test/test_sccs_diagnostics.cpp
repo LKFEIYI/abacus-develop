@@ -30,12 +30,18 @@ TEST_F(SccsDiagnosticsTest, FixedPointCheckAddsOneSolveWithoutChangingResponse)
     EXPECT_FALSE(first.polarization.fixed_point_checked);
     EXPECT_TRUE(second.polarization.fixed_point_checked);
     EXPECT_LT(second.polarization.fixed_point_defect_max, 1e-9);
-    EXPECT_EQ(checked.transform_counts().forward_calls, plain.transform_counts().forward_calls + 1);
-    EXPECT_EQ(checked.transform_counts().inverse_calls, plain.transform_counts().inverse_calls + 1);
+    const int expected_forward = plain.transform_counts().forward_calls + 1;
+    EXPECT_EQ(checked.transform_counts().forward_calls, expected_forward);
+    const int expected_inverse = plain.transform_counts().inverse_calls + 1;
+    EXPECT_EQ(checked.transform_counts().inverse_calls, expected_inverse);
     EXPECT_EQ(first.polarization.potential, second.polarization.potential);
     std::vector<double> polarization;
     ASSERT_TRUE(ModuleSccs::continuum_polarization_charge(charge, second, basis, tpiba, polarization, error));
-    for (int i = 0; i < basis.nrxx; ++i) { EXPECT_NEAR(polarization[i], -0.8 * charge[i], 1e-12); }
+    for (int i = 0; i < basis.nrxx; ++i)
+    {
+        const double expected_charge = -0.8 * charge[i];
+        EXPECT_NEAR(polarization[i], expected_charge, 1e-12);
+    }
 }
 
 TEST_F(SccsDiagnosticsTest, InvalidLocalShapeFailsCollectivelyWithoutOverwritingResult)

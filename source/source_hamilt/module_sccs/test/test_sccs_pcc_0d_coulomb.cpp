@@ -127,7 +127,8 @@ TEST_F(SccsPcc0dCoulombTest, ChargedUniformDielectricPreservesGaugeAndVacuumSubt
             const double reaction = dielectric_potential - vacuum[ir];
             EXPECT_NEAR(response.polarization.potential[ir], dielectric_potential, 1e-13);
             EXPECT_NEAR(result.reaction_potential[ir], reaction, 1e-13);
-            EXPECT_NEAR(result.electron_potential[ir], -reaction, 1e-13);
+            const double expected_electron_potential = -reaction;
+        EXPECT_NEAR(result.electron_potential[ir], expected_electron_potential, 1e-13);
         }
         const double expected_energy = 0.5 * (1.0 / epsilon - 1.0) * integrate_product(charge, vacuum);
         EXPECT_NEAR(result.reaction_energy, expected_energy, 1e-13);

@@ -89,8 +89,9 @@ bool validate_sccs_pcc_2d_screening(const ModuleSccs::SccsResponse& response,
     const double solver_tolerance = std::max(grid_tolerance, relative_tolerance);
     const double tolerance = std::max(1e-6, solver_tolerance);
     const double actual = response.far_field_polarization_charge;
+    const double screening_error = actual - expected;
     if (!std::isfinite(expected) || !std::isfinite(actual) || !std::isfinite(tolerance)
-        || std::abs(actual - expected) > tolerance)
+        || std::abs(screening_error) > tolerance)
     {
         std::ostringstream message;
         message << "SCCS pcc_2d far-field polarization charge " << actual

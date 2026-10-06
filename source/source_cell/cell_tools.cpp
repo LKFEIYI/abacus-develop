@@ -26,7 +26,8 @@ namespace unitcell
             if (first != std::string::npos)
             {
                 const std::size_t last = label.find_last_not_of(" \t");
-                const std::string symbol = label.substr(first, last - first + 1);
+                const std::size_t symbol_length = last - first + 1;
+                const std::string symbol = label.substr(first, symbol_length);
                 const auto element = std::find(ModuleBase::element_name.begin(), ModuleBase::element_name.end(), symbol);
                 if (element != ModuleBase::element_name.end())
                 {

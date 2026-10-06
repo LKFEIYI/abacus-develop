@@ -26,7 +26,8 @@ protected:
         atom.mass = 1.0;
         atom.ncpp.zv = 1.0;
         atom.tau = {ModuleBase::Vector3<double>(0.25, 0.25, 0.25)};
-        density.assign(basis.nrxx, 0.6 / basis.omega);
+        const double density_value = 0.6 / basis.omega;
+        density.assign(basis.nrxx, density_value);
         channel = density.data();
         charge.nspin = 1;
         charge.rho = &channel;
@@ -94,7 +95,8 @@ TEST_F(SccsPcc0dTest, ChargedDielectricAddsOnlyReactionAndCavityTerms)
     ModuleBase::matrix point_potential = potential;
     const double point_energy = correction.get_energy();
     solvent.cal_v_eff(&charge, &cell, potential);
-    EXPECT_NEAR(solvent.get_energy(), 2.0 * functional.reaction_energy, 1e-12);
+    const double reaction_energy_rydberg = 2.0 * functional.reaction_energy;
+    EXPECT_NEAR(solvent.get_energy(), reaction_energy_rydberg, 1e-12);
     const double combined_energy = solvent.get_energy() + correction.get_energy();
     const double expected_energy = point_energy + 2.0 * functional.reaction_energy;
     EXPECT_NEAR(combined_energy, expected_energy, 1e-12);
@@ -116,7 +118,8 @@ TEST_F(SccsPcc0dTest, ChargedDielectricAddsOnlyReactionAndCavityTerms)
     {
         const double expected = point_potential(0, ir) + 2.0 * functional.electron_potential[ir];
         EXPECT_NEAR(potential(0, ir), expected, 1e-12);
-        EXPECT_NEAR((*electrostatic)[ir], -2.0 * functional.reaction_potential[ir], 1e-12);
+        const double expected_potential = -2.0 * functional.reaction_potential[ir];
+        EXPECT_NEAR((*electrostatic)[ir], expected_potential, 1e-12);
     }
 }
 
