@@ -7,6 +7,7 @@
 #include "source_pw/module_pwdft/stru_fac.h"
 #include "source_pw/module_pwdft/vsep_pw.h"
 
+#include <iosfwd>
 #include <memory>
 #include <vector>
 
@@ -15,6 +16,7 @@ struct Input_para;
 namespace elecstate
 {
 class PotPcc;
+class PotSccs;
 class TDFieldManager;
 
 /**
@@ -83,6 +85,12 @@ class Potential : public PotBase
 
     PotBase* get_pot_type(const std::string& pot_type, const Input_para& input);
 
+    /// SCCS delayed start, called before SCF mixing with the pool-consistent
+    /// density residual. True only in the iteration that activates SCCS.
+    bool update_sccs_activation(int electronic_iteration, double density_residual);
+    /// sccs_debug output of the active correction: SCCS, else PCC.
+    void write_correction_iteration(std::ostream& output, int level, double residual) const;
+    void write_correction_final(std::ostream& output, int level) const;
     void get_solvation_energy(double& electrostatic, double& non_electrostatic) const override;
     void add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const override;
     const std::vector<double>* solvent_electrostatic_potential() const override;
@@ -235,7 +243,12 @@ class Potential : public PotBase
 
     // the registered PCC component, or nullptr when PCC is off
     const PotPcc* pcc_component() const;
-    PotBase* make_sccs_potential(const Input_para& input);
+    const PotSccs* sccs_component() const;
+    PotSccs* sccs_component();
+    // An SCCS activation reached in an earlier ionic step is passed to the
+    // rebuilt component.
+    PotBase* make_sccs_potential(const Input_para& input, bool resume_active);
+    bool sccs_activation_reached() const;
 
     std::vector<double> v_eff_fixed;
     ModuleBase::matrix v_eff;

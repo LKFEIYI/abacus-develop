@@ -49,7 +49,7 @@ TEST_F(SccsPcc0dTest, VacuumLimitRetainsPointIonPccExactlyOnce)
     ModuleSccs::PolarizationSolverParameters solver;
     elecstate::make_sccs_config_from_input(input, config, solver);
     EXPECT_EQ(config.boundary, ModuleSccs::Boundary::Pcc0d);
-    elecstate::PotSccs solvent(&basis, config, solver);
+    elecstate::PotSccs solvent(&basis, config, solver, false);
     elecstate::PotPcc correction(&basis);
     ModuleBase::matrix vacuum(1, basis.nrxx);
     correction.cal_v_eff(&charge, &cell, vacuum);
@@ -88,7 +88,7 @@ TEST_F(SccsPcc0dTest, ChargedDielectricAddsOnlyReactionAndCavityTerms)
     ModuleSccs::FunctionalResult functional;
     ModuleSccs::evaluate_functional(solute_charge, response, config, basis, tpiba,
                                     *coulomb, functional);
-    elecstate::PotSccs solvent(&basis, config, solver);
+    elecstate::PotSccs solvent(&basis, config, solver, false);
     elecstate::PotPcc correction(&basis);
     ModuleBase::matrix potential(1, basis.nrxx);
     correction.cal_v_eff(&charge, &cell, potential);
@@ -121,4 +121,33 @@ TEST_F(SccsPcc0dTest, ChargedDielectricAddsOnlyReactionAndCavityTerms)
         const double expected_potential = -2.0 * functional.reaction_potential[ir];
         EXPECT_NEAR((*electrostatic)[ir], expected_potential, 1e-12);
     }
+}
+
+TEST_F(SccsPcc0dTest, DelayedSccsRetainsIndependentPccPotentialEnergyAndForce)
+{
+    Input_para input;
+    input.assume_isolated = "pcc_0d";
+    input.sccs_start_drho = 1e-3;
+    input.sccs_start_nmax = 2;
+    ModuleSccs::SccsConfig config;
+    ModuleSccs::PolarizationSolverParameters solver;
+    elecstate::make_sccs_config_from_input(input, config, solver);
+    elecstate::PotSccs solvent(&basis, config, solver, false);
+    elecstate::PotPcc correction(&basis);
+    ModuleBase::matrix vacuum(1, basis.nrxx);
+    correction.cal_v_eff(&charge, &cell, vacuum);
+    const double energy = correction.get_energy();
+    EXPECT_GT(std::abs(energy), 1e-5);
+    ModuleBase::matrix combined = vacuum;
+    solvent.cal_v_eff(&charge, &cell, combined);
+    EXPECT_FALSE(solvent.is_active());
+    EXPECT_DOUBLE_EQ(solvent.get_energy(), 0.0);
+    EXPECT_DOUBLE_EQ(correction.get_energy(), energy);
+    for (int ir = 0; ir < basis.nrxx; ++ir) { EXPECT_DOUBLE_EQ(combined(0, ir), vacuum(0, ir)); }
+    ModuleBase::matrix force(1, 3);
+    correction.add_force(cell, force);
+    const ModuleBase::matrix original_force = force;
+    solvent.add_solvation_force(cell, force);
+    for (int axis = 0; axis < 3; ++axis) { EXPECT_DOUBLE_EQ(force(0, axis), original_force(0, axis)); }
+    EXPECT_TRUE(solvent.update_activation(2, 0.1));
 }

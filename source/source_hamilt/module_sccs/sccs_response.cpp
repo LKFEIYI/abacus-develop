@@ -1,4 +1,5 @@
 #include "sccs_response.h"
+#include "sccs_diagnostics.h"
 #include "sccs_cavity_derivatives.h"
 #include "sccs_lowpass.h"
 #include "sccs_parameters.h"
@@ -217,6 +218,10 @@ void solve_sccs_response(const std::vector<double>& density,
         ModuleBase::WARNING_QUIT("ModuleSccs::solve_sccs_response", message.str());
     }
 
+    if (solver.check_fixed_point)
+    {
+        check_sccs_fixed_point(charge, coefficient, potential, invsqrt, basis, coulomb, polarization);
+    }
     candidate.restart_potential = potential;
     // Preserve the physical gauge fixed by a boundary correction.
     if (!open_boundary)

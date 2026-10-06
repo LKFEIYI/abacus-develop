@@ -168,6 +168,17 @@ PotBase* Potential::get_pot_type(const std::string& pot_type, const Input_para&)
     return new MockPotComponent(pot_type, grid_size);
 }
 
+// The SCCS component lives in potential_sccs.cpp, which this test does not link.
+PotBase* Potential::make_sccs_potential(const Input_para& input, bool)
+{
+    return this->get_pot_type("sccs", input);
+}
+
+bool Potential::sccs_activation_reached() const
+{
+    return false;
+}
+
 } // namespace elecstate
 
 class PotentialNewTest : public ::testing::Test

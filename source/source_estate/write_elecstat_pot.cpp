@@ -31,11 +31,6 @@ void write_elecstat_pot(
 
     std::vector<double> v_elecstat(rho_basis->nrxx, 0.0);
 
-    if (solvent_potential != nullptr && solvent_potential->size() != static_cast<std::size_t>(rho_basis->nrxx))
-    {
-        ModuleBase::WARNING_QUIT("write_elecstat_pot", "Solvent potential does not match the output grid");
-    }
-
     const int nspin = PARAM.inp.nspin;
     const int efield = PARAM.inp.efield_flag;
     const int dip_corr = PARAM.inp.dip_cor_flag;

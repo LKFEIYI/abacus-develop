@@ -45,8 +45,8 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
     { error = "SCCS currently supports assume_isolated none, pcc_0d or pcc_2d"; }
     else if (input.device != "cpu" || input.esolver_type != "ksdft") { error = "SCCS requires CPU KS-DFT"; }
     else if (input.basis_type != "pw" && input.basis_type != "lcao") { error = "SCCS requires basis_type pw or lcao"; }
-    else if (input.calculation != "scf" || input.cal_stress)
-    { error = "SCCS currently supports SCF energies and forces without stress"; }
+    else if ((input.calculation != "scf" && input.calculation != "relax") || input.cal_stress)
+    { error = "SCCS supports calculation scf or fixed-cell relax without stress"; }
     else if (input.nspin != 1 && input.nspin != 2) { error = "SCCS requires nspin 1 or 2"; }
     else if (input.efield_flag || input.gate_flag || input.dfthalf_type != 0
              || input.deepks_scf || input.deepks_out_labels || input.deepks_bandgap
@@ -64,6 +64,7 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
     const bool p1_positive = input.sccs_lowpass_p1 > 0.0;
     const bool p2_positive = input.sccs_lowpass_p2 > 0.0;
     const bool pcc = input.assume_isolated == "pcc_0d" || input.assume_isolated == "pcc_2d";
+    const bool delayed_start = input.sccs_start_drho > 0.0;
     if (input.sccs_epsilon < 1.0) { error = "sccs_epsilon must be at least 1"; }
     else if (input.sccs_rho_min <= 0.0 || input.sccs_rho_max <= input.sccs_rho_min)
     { error = "sccs_rho_min and sccs_rho_max must satisfy 0 < sccs_rho_min < sccs_rho_max"; }
@@ -79,6 +80,11 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
     { error = "sccs_solvent_mode must be electronic or full"; }
     else if (input.sccs_corespread.empty())
     { error = "sccs_corespread must contain one value or exactly nat values"; }
+    else if (input.sccs_start_drho < 0.0) { error = "sccs_start_drho must be non-negative"; }
+    else if (delayed_start && input.sccs_start_drho <= input.scf_thr)
+    { error = "sccs_start_drho must be zero or larger than scf_thr"; }
+    else if (input.sccs_start_nmax <= 0 || (delayed_start && input.sccs_start_nmax >= input.scf_nmax))
+    { error = "sccs_start_nmax must be positive and smaller than scf_nmax when delayed start is enabled"; }
     return error.empty();
 }
 
@@ -89,7 +95,7 @@ void ReadInput::item_sccs()
         item.annotation = "implicit solvent model";
         item.category = "Implicit solvation model";
         item.type = "Integer";
-        item.description = "Select 0 for vacuum, 1 for the original ABACUS implicit solvation model, or 2 for SCCS. Legacy Boolean values remain accepted as 0 or 1. SCCS supports CPU KS-DFT SCF calculations with basis_type pw or lcao and nspin 1 or 2: neutral periodic cells (assume_isolated none), neutral/charged molecules in cubic cells (assume_isolated pcc_0d), or neutral/charged slabs (assume_isolated pcc_2d). Forces are supported for periodic SCCS and SCCS with pcc_0d or pcc_2d. Stress, external fields and other correction models are not supported.";
+        item.description = "Select 0 for vacuum, 1 for the original ABACUS implicit solvation model, or 2 for SCCS. Legacy Boolean values remain accepted as 0 or 1. SCCS supports CPU KS-DFT SCF and fixed-cell relax calculations with basis_type pw or lcao and nspin 1 or 2: neutral periodic cells (assume_isolated none), neutral/charged molecules in cubic cells (assume_isolated pcc_0d), or neutral/charged slabs (assume_isolated pcc_2d). Forces are supported for periodic SCCS and SCCS with pcc_0d or pcc_2d. Stress, external fields and other correction models are not supported.";
         item.default_value = "0";
         item.read_value = [](const Input_Item& item, Parameter& para) {
             std::string error;
@@ -277,5 +283,47 @@ void ReadInput::item_sccs()
         sync_doublevec(input.sccs_corespread, para.input.sccs_corespread.size(), 0.0);
         this->add_item(item);
     }
+    {
+        Input_Item item("sccs_start_drho");
+        item.annotation = "SCCS delayed-start density threshold";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Delay SCCS at the start of the run until DRHO is at or below this value. Zero starts SCCS immediately; a positive value must exceed scf_thr so that the SCF cannot converge before SCCS starts, and the SCF does not stop in the iteration that activates SCCS. Once activated, SCCS remains active for all later electronic and ionic steps. PCC remains active during the delay. User-controlled for every sccs_preset, default 0.";
+        item.default_value = "0.0";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_start_drho);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_start_nmax");
+        item.annotation = "SCCS delayed-start iteration limit";
+        item.category = "Implicit solvation model";
+        item.type = "Integer";
+        item.description = "Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. The value must be positive, and smaller than scf_nmax when delayed start is enabled. User-controlled for every sccs_preset, default 30; inactive when sccs_start_drho=0.";
+        item.default_value = "30";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_int(input.sccs_start_nmax);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_debug");
+        item.annotation = "detailed SCCS diagnostics";
+        item.category = "Implicit solvation model";
+        item.type = "Integer";
+        item.description = "SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation. Applies to standalone PCC as well as SCCS. Timings appear in the standard ABACUS timer summary.";
+        item.default_value = "0";
+        item.unit = "";
+        read_sync_int(input.sccs_debug);
+        item.check_value = [](const Input_Item&, const Parameter& para) {
+            if (para.input.sccs_debug < 0 || para.input.sccs_debug > 2)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "sccs_debug must be 0, 1, or 2");
+            }
+        };
+        this->add_item(item);
+    }
+
 }
 } // namespace ModuleIO

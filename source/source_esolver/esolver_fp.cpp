@@ -160,6 +160,12 @@ void ESolver_FP::after_scf(UnitCell& ucell, const int istep, const bool conv_eso
 {
     ModuleBase::TITLE("ESolver_FP", "after_scf");
 
+    const bool is_output_rank = this->kv.para_k.my_pool == 0 && this->kv.para_k.rank_in_pool == 0;
+    if (is_output_rank && this->inp_->sccs_debug >= 2)
+    {
+        this->pelec->pot->write_correction_final(std::cout, this->inp_->sccs_debug);
+    }
+
     //! Output convergence information
     ModuleIO::output_convergence_after_scf(conv_esolver, this->pelec->f_en.etot);
 

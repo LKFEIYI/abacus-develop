@@ -6,6 +6,8 @@
 #include "source_estate/pcc_0d.h"
 #include "source_estate/pcc_2d.h"
 
+#include <iosfwd>
+
 namespace elecstate
 {
 
@@ -56,6 +58,8 @@ class PotPcc : public PotBase
 
     void cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential) override;
     double get_energy() const override;
+    bool has_result() const { return result_valid_; }
+    void write_iteration_output(std::ostream& output, int level) const;
     const std::vector<double>& electron_potential() const;
     void add_force(const UnitCell& cell, ModuleBase::matrix& force) const;
 
@@ -81,6 +85,7 @@ class PotPcc : public PotBase
     std::vector<double> ionic_charges_;
     std::vector<double> electron_potential_;
     double energy_rydberg_ = 0.0;
+    bool result_valid_ = false;
 };
 
 } // namespace elecstate

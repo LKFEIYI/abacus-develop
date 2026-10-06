@@ -58,7 +58,7 @@ TEST_F(SccsPcc2dTest, VacuumLimitRetainsPointIonPccExactlyOnce)
     ModuleSccs::PolarizationSolverParameters solver;
     elecstate::make_sccs_config_from_input(input, config, solver);
     EXPECT_EQ(config.boundary, ModuleSccs::Boundary::Pcc2d);
-    elecstate::PotSccs solvent(&basis, config, solver);
+    elecstate::PotSccs solvent(&basis, config, solver, false);
     elecstate::PotPcc correction(&basis, elecstate::PotPcc::Dimension::slab, input.pcc_2d_axis);
     ModuleBase::matrix vacuum(1, basis.nrxx);
     correction.cal_v_eff(&charge, &cell, vacuum);
@@ -106,7 +106,7 @@ TEST_F(SccsPcc2dTest, ChargedDielectricAddsOnlyReactionAndCavityTerms)
     ModuleSccs::FunctionalResult functional;
     ModuleSccs::evaluate_functional(solute_charge, response, config, basis, tpiba,
                                     *coulomb, functional);
-    elecstate::PotSccs solvent(&basis, config, solver);
+    elecstate::PotSccs solvent(&basis, config, solver, false);
     elecstate::PotPcc correction(&basis, elecstate::PotPcc::Dimension::slab, input.pcc_2d_axis);
     ModuleBase::matrix potential(1, basis.nrxx);
     correction.cal_v_eff(&charge, &cell, potential);

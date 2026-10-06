@@ -5,6 +5,10 @@
 #include <vector>
 
 class UnitCell;
+namespace ModuleBase
+{
+template <typename T> class Vector3;
+}
 namespace ModulePW
 {
 class PW_Basis;
@@ -24,6 +28,13 @@ namespace elecstate
 void make_sccs_pcc_0d_operator(const UnitCell& cell,
                                const ModulePW::PW_Basis& basis,
                                const std::vector<unitcell::AtomData>& atoms,
+                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb);
+
+// Use caller-owned Cartesian grid coordinates, e.g. from a fixed-source cache.
+void make_sccs_pcc_0d_operator(const UnitCell& cell,
+                               const ModulePW::PW_Basis& basis,
+                               const std::vector<unitcell::AtomData>& atoms,
+                               const std::vector<ModuleBase::Vector3<double>>& grid_positions,
                                std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb);
 } // namespace elecstate
 

@@ -15,6 +15,17 @@ void make_sccs_pcc_0d_operator(const UnitCell& cell,
                                const std::vector<unitcell::AtomData>& atoms,
                                std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb)
 {
+    std::vector<ModuleBase::Vector3<double>> positions;
+    ModulePW::grid_positions(basis, cell.latvec, cell.lat0, positions);
+    make_sccs_pcc_0d_operator(cell, basis, atoms, positions, coulomb);
+}
+
+void make_sccs_pcc_0d_operator(const UnitCell& cell,
+                               const ModulePW::PW_Basis& basis,
+                               const std::vector<unitcell::AtomData>& atoms,
+                               const std::vector<ModuleBase::Vector3<double>>& grid_positions,
+                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb)
+{
     unitcell::OrthogonalCell geometry;
     Pcc0dParameters parameters;
     const bool orthogonal = unitcell::make_orthogonal_cell(cell.latvec, cell.lat0, 1e-10, geometry);
@@ -28,8 +39,7 @@ void make_sccs_pcc_0d_operator(const UnitCell& cell,
         masses.push_back(atom.mass);
     }
     geometry.origin = unitcell::weighted_center(positions, masses, geometry);
-    std::vector<ModuleBase::Vector3<double>> relative_positions;
-    ModulePW::grid_positions(basis, cell.latvec, cell.lat0, relative_positions);
+    std::vector<ModuleBase::Vector3<double>> relative_positions = grid_positions;
     for (auto& position : relative_positions)
     {
         position = unitcell::relative_position(position, geometry);

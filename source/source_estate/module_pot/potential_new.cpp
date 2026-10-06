@@ -69,6 +69,9 @@ void Potential::pot_register(const std::vector<std::string>& components_list)
 void Potential::pot_register(const std::vector<std::string>& components_list, const Input_para& input)
 {
     ModuleBase::TITLE("Potential", "pot_register");
+    // An SCCS activation reached in an earlier ionic step survives the
+    // rebuild; no other state is carried over from the old components.
+    const bool sccs_active = this->sccs_activation_reached();
     // delete old components first.
     if (this->components.size() > 0)
     {
@@ -85,7 +88,9 @@ void Potential::pot_register(const std::vector<std::string>& components_list, co
     //---------------------------
     for (auto comp: components_list)
     {
-        PotBase* tmp = this->get_pot_type(comp, input);
+        PotBase* tmp = nullptr;
+        if (comp == "sccs") { tmp = this->make_sccs_potential(input, sccs_active); }
+        else { tmp = this->get_pot_type(comp, input); }
         this->components.push_back(tmp);
     }
 
