@@ -231,10 +231,15 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     output_.transforms = coulomb->transform_counts();
     if (config_.boundary == ModuleSccs::Boundary::Pcc2d)
     {
+        std::string screening_warning;
         const double electron_count = ionic_sum - net_charge;
         const bool screening_valid = validate_sccs_pcc_2d_screening(response, config_, solver_, electron_count,
-                                                                    ionic_sum, basis.omega, error);
+                                                                    ionic_sum, basis.omega, screening_warning, error);
         require_valid_on_pool(screening_valid, error);
+        if (!screening_warning.empty())
+        {
+            ModuleBase::WARNING("PotSccs", screening_warning);
+        }
     }
     ModuleSccs::FunctionalResult functional;
     const bool functional_valid = ModuleSccs::evaluate_functional(solute_charge, response, config_, basis,

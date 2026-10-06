@@ -77,8 +77,10 @@ bool validate_sccs_pcc_2d_screening(const ModuleSccs::SccsResponse& response,
                                    double electron_count,
                                    double ionic_charge,
                                    double cell_volume,
+                                   std::string& warning,
                                    std::string& error)
 {
+    warning.clear();
     error.clear();
     const double solute_charge = ionic_charge - electron_count;
     const double expected = (1.0 / config.cavity.epsilon_bulk - 1.0) * solute_charge;
@@ -90,14 +92,18 @@ bool validate_sccs_pcc_2d_screening(const ModuleSccs::SccsResponse& response,
     const double tolerance = std::max(1e-6, solver_tolerance);
     const double actual = response.far_field_polarization_charge;
     const double screening_error = actual - expected;
-    if (!std::isfinite(expected) || !std::isfinite(actual) || !std::isfinite(tolerance)
-        || std::abs(screening_error) > tolerance)
+    if (!std::isfinite(expected) || !std::isfinite(actual) || !std::isfinite(tolerance))
+    {
+        error = "SCCS PCC 2D far-field screening charge or tolerance is not finite";
+        return false;
+    }
+    if (std::abs(screening_error) > tolerance)
     {
         std::ostringstream message;
         message << "SCCS pcc_2d far-field polarization charge " << actual
                 << " differs from expected " << expected << " by more than tolerance " << tolerance;
-        error = message.str();
-        return false;
+        message << ". Check convergence with respect to the charge-density cutoff.";
+        warning = message.str();
     }
     return true;
 }

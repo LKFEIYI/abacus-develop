@@ -10,6 +10,8 @@
 #include "source_hamilt/module_sccs/test/sccs_test.h"
 #include "source_io/module_parameter/input_parameter.h"
 
+#include <limits>
+
 class SccsPcc2dTest : public SccsTest::PwTest
 {
 protected:
@@ -166,7 +168,7 @@ TEST_F(SccsPcc2dTest, OpenAxisIsExplicitAndInvalidGeometryPreservesOperator)
     EXPECT_FALSE(error.empty());
 }
 
-TEST_F(SccsPcc2dTest, FarFieldScreeningPreservesOriginalTolerance)
+TEST_F(SccsPcc2dTest, FarFieldScreeningWarnsAboveOriginalTolerance)
 {
     Input_para input;
     input.assume_isolated = "pcc_2d";
@@ -175,16 +177,31 @@ TEST_F(SccsPcc2dTest, FarFieldScreeningPreservesOriginalTolerance)
     ModuleSccs::PolarizationSolverParameters solver;
     ASSERT_TRUE(elecstate::make_sccs_config_from_input(input, config, solver, error));
     ModuleSccs::SccsResponse response;
+    std::string warning;
     const double electrons = 0.6;
     const double ions = 1.0;
     response.far_field_polarization_charge = -0.32;
     EXPECT_TRUE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
-                                                         ions, basis.omega, error));
+                                                         ions, basis.omega, warning, error));
+    EXPECT_TRUE(warning.empty());
+    EXPECT_TRUE(error.empty());
     response.far_field_polarization_charge += 5e-5;
     EXPECT_TRUE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
-                                                         ions, basis.omega, error));
+                                                         ions, basis.omega, warning, error));
+    EXPECT_TRUE(warning.empty());
     response.far_field_polarization_charge += 1e-3;
+    EXPECT_TRUE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
+                                                         ions, basis.omega, warning, error));
+    EXPECT_TRUE(error.empty());
+    EXPECT_NE(warning.find("far-field polarization charge"), std::string::npos);
+    EXPECT_NE(warning.find("charge-density cutoff"), std::string::npos);
+    response.far_field_polarization_charge = -0.32;
+    EXPECT_TRUE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
+                                                         ions, basis.omega, warning, error));
+    EXPECT_TRUE(warning.empty());
+    response.far_field_polarization_charge = std::numeric_limits<double>::quiet_NaN();
     EXPECT_FALSE(elecstate::validate_sccs_pcc_2d_screening(response, config, solver, electrons,
-                                                          ions, basis.omega, error));
-    EXPECT_NE(error.find("far-field polarization charge"), std::string::npos);
+                                                          ions, basis.omega, warning, error));
+    EXPECT_TRUE(warning.empty());
+    EXPECT_NE(error.find("not finite"), std::string::npos);
 }

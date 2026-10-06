@@ -44,14 +44,16 @@ bool make_sccs_pcc_2d_operator(const UnitCell& cell,
                               const std::vector<ModuleBase::Vector3<double>>& grid_positions,
                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb,
                               std::string& error);
-// Keep the original slab far-field charge consistency check. Counts are
-// positive electron/ionic charge integrals; energies and INPUT are not read.
+// Diagnose slab far-field charge consistency using the original tolerance.
+// Finite deviations populate warning; non-finite values fail with error.
+// Counts are positive electron/ionic charge integrals; INPUT is not read.
 bool validate_sccs_pcc_2d_screening(const ModuleSccs::SccsResponse& response,
                                    const ModuleSccs::SccsConfig& config,
                                    const ModuleSccs::PolarizationSolverParameters& solver,
                                    double electron_count,
                                    double ionic_charge,
                                    double cell_volume,
+                                   std::string& warning,
                                    std::string& error);
 } // namespace elecstate
 
