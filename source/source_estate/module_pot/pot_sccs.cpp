@@ -1,4 +1,6 @@
 #include "pot_sccs.h"
+#include "sccs_pcc_0d.h"
+#include "sccs_pcc_2d.h"
 
 #include "source_base/parallel_reduce.h"
 #include "source_base/timer.h"
@@ -8,6 +10,7 @@
 #include "source_hamilt/module_sccs/sccs_ionic_charge.h"
 #include "source_hamilt/module_sccs/sccs_ionic_force.h"
 #include "source_hamilt/module_sccs/sccs_response.h"
+#include "source_hamilt/module_sccs/sccs_pw_coulomb.h"
 #include "source_io/module_parameter/input_parameter.h"
 
 #include <cmath>
@@ -34,6 +37,13 @@ void make_sccs_config_from_input(const Input_para& input,
         config = ModuleSccs::make_sccs_config(preset);
     }
     config.surface_regularization = input.sccs_surface_eta;
+    if (input.assume_isolated == "pcc_0d") { config.boundary = ModuleSccs::Boundary::Pcc0d; }
+    else if (input.assume_isolated == "pcc_2d")
+    {
+        config.boundary = ModuleSccs::Boundary::Pcc2d;
+        config.pcc_2d_axis = input.pcc_2d_axis;
+    }
+    else { config.boundary = ModuleSccs::Boundary::Periodic; }
     solver.max_iterations = input.sccs_maxiter;
     solver.tolerance_rms = input.sccs_tol_rms;
     solver.tolerance_max = input.sccs_tol_max;
@@ -69,15 +79,28 @@ void PotSccs::cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::
     const double dv = basis.omega / basis.nxyz;
     net_charge *= dv;
     const bool neutral = std::abs(net_charge) < 1e-6;
-    if (!neutral)
+    if (config_.boundary == ModuleSccs::Boundary::Periodic && !neutral)
     {
         ModuleBase::WARNING_QUIT("PotSccs::cal_v_eff", "Periodic SCCS currently requires a neutral cell");
     }
+    std::unique_ptr<ModuleSccs::CoulombOperator> coulomb;
+    if (config_.boundary == ModuleSccs::Boundary::Pcc0d)
+    {
+        make_sccs_pcc_0d_operator(*cell, basis, atoms, coulomb);
+    }
+    else if (config_.boundary == ModuleSccs::Boundary::Pcc2d)
+    {
+        make_sccs_pcc_2d_operator(*cell, basis, atoms, config_.pcc_2d_axis, coulomb);
+    }
+    else
+    {
+        coulomb.reset(new ModuleSccs::PeriodicCoulombOperator(basis, cell->tpiba));
+    }
     ModuleSccs::SccsResponse response;
     ModuleSccs::solve_sccs_response(density, solute_charge, config_.cavity, solver_, restart_potential_, basis,
-                                    cell->tpiba, response);
+                                    cell->tpiba, *coulomb, response);
     ModuleSccs::FunctionalResult functional;
-    ModuleSccs::evaluate_functional(solute_charge, response, config_, basis, cell->tpiba, functional);
+    ModuleSccs::evaluate_functional(solute_charge, response, config_, basis, cell->tpiba, *coulomb, functional);
     electrostatic_rydberg_ = 2.0 * functional.reaction_energy;
     non_electrostatic_rydberg_ = 2.0 * (functional.surface_energy + functional.volume_energy);
     electrostatic_potential_.resize(basis.nrxx);

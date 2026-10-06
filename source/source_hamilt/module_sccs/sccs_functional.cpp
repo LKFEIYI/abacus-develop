@@ -20,9 +20,20 @@ void evaluate_functional(const std::vector<double>& charge,
                           double tpiba,
                           FunctionalResult& result)
 {
+    PeriodicCoulombOperator coulomb(basis, tpiba);
+    evaluate_functional(charge, response, config, basis, tpiba, coulomb, result);
+}
+
+void evaluate_functional(const std::vector<double>& charge,
+                          const SccsResponse& response,
+                          const SccsConfig& config,
+                          const ModulePW::PW_Basis& basis,
+                          double tpiba,
+                          CoulombOperator& coulomb,
+                          FunctionalResult& result)
+{
     const std::size_t size = charge.size();
     const double dv = basis.omega / basis.nxyz;
-    PeriodicCoulombOperator coulomb(basis, tpiba);
     std::vector<double> vacuum;
     coulomb.apply_potential(charge, vacuum);
     FunctionalResult candidate;

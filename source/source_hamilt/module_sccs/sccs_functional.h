@@ -10,6 +10,8 @@ class PW_Basis;
 
 namespace ModuleSccs
 {
+class CoulombOperator;
+
 struct SccsConfig;
 struct SccsResponse;
 
@@ -24,12 +26,21 @@ struct FunctionalResult
     std::vector<double> electron_potential; // derivative of all three energy terms
 };
 
-// Collective over the PW pool; a non-finite energy stops the run.
+// Collective over the PW pool.
 void evaluate_functional(const std::vector<double>& charge,
                           const SccsResponse& response,
                           const SccsConfig& config,
                           const ModulePW::PW_Basis& basis,
                           double tpiba,
+                          FunctionalResult& result);
+
+// Use the same operator for the dielectric response and vacuum subtraction.
+void evaluate_functional(const std::vector<double>& charge,
+                          const SccsResponse& response,
+                          const SccsConfig& config,
+                          const ModulePW::PW_Basis& basis,
+                          double tpiba,
+                          CoulombOperator& coulomb,
                           FunctionalResult& result);
 } // namespace ModuleSccs
 

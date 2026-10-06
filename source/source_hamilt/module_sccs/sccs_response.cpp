@@ -1,4 +1,5 @@
 #include "sccs_response.h"
+#include "sccs_cavity_derivatives.h"
 #include "sccs_parameters.h"
 #include "sccs_pw_coulomb.h"
 
@@ -18,58 +19,29 @@ namespace ModuleSccs
 {
 namespace
 {
-void prepare_cavity(const std::vector<double>& density,
-                    const CavityParameters& cavity,
-                    const ModulePW::PW_Basis& basis,
-                    double tpiba,
-                    SccsResponse& response,
-                    std::vector<double>& coefficient)
+// sqrt(eps) v = C_PCC(s), s = (q - f v)/sqrt(eps). The far-field
+// screening charge is int(s)/sqrt(eps_bulk) - int(q), including its physical sign.
+void finish_open_boundary_response(const std::vector<double>& charge,
+                                   const std::vector<double>& coefficient,
+                                   const std::vector<double>& invsqrt,
+                                   const CavityParameters& cavity,
+                                   const ModulePW::PW_Basis& basis,
+                                   SccsResponse& result)
 {
-    const std::size_t size = density.size();
-    response.solute.resize(size);
-    response.dsolute_drho.resize(size);
-    response.epsilon.resize(size);
-    response.depsilon_drho.resize(size);
-    response.grad_log_epsilon.resize(size);
+    const std::size_t size = charge.size();
+    const std::vector<double>& potential = result.polarization.potential;
+    double source_sum = 0.0;
+    double solute_sum = 0.0;
     for (std::size_t i = 0; i < size; ++i)
     {
-        const CavityPoint point = evaluate_cavity(density[i], cavity);
-        response.solute[i] = point.solute;
-        response.dsolute_drho[i] = point.dsolute_drho;
-        response.epsilon[i] = point.epsilon;
-        response.depsilon_drho[i] = point.depsilon_drho;
+        source_sum += (charge[i] - coefficient[i] * potential[i]) * invsqrt[i];
+        solute_sum += charge[i];
     }
-
-    std::vector<std::complex<double>> density_g(basis.npw);
-    basis.real2recip(density.data(), density_g.data());
-    std::vector<ModuleBase::Vector3<double>> gradient(size);
-    std::vector<double> laplacian(size);
-    // These XC helpers use G in units of tpiba and ABACUS's normalized FFT.
-    XC_Functional::grad_rho(density_g.data(), gradient.data(), &basis, tpiba);
-    XC_Functional::laplacian_rho(density_g.data(), laplacian.data(), &basis, tpiba);
-    const double density_ratio = cavity.density_max / cavity.density_min;
-    const double width = std::log(density_ratio);
-    const double log_bulk = std::log(cavity.epsilon_bulk);
-    coefficient.resize(size);
-    for (std::size_t i = 0; i < size; ++i)
-    {
-        double second_log = 0.0;
-        if (density[i] > cavity.density_min && density[i] < cavity.density_max)
-        {
-            const double local_ratio = cavity.density_max / density[i];
-            const double x = std::log(local_ratio) / width;
-            const double angle = ModuleBase::TWO_PI * x;
-            second_log = log_bulk * (1.0 - std::cos(angle) + ModuleBase::TWO_PI * std::sin(angle) / width)
-                         / (width * density[i] * density[i]);
-        }
-        const double first_log = response.depsilon_drho[i] / response.epsilon[i];
-        const ModuleBase::Vector3<double>& local_gradient = gradient[i];
-        const double gradient_square = local_gradient * local_gradient;
-        response.grad_log_epsilon[i] = local_gradient * first_log;
-        const double lap_log = first_log * laplacian[i] + second_log * gradient_square;
-        coefficient[i] = response.epsilon[i] * (0.5 * lap_log + 0.25 * first_log * first_log * gradient_square)
-                         / ModuleBase::FOUR_PI;
-    }
+    Parallel_Reduce::reduce_pool(source_sum);
+    Parallel_Reduce::reduce_pool(solute_sum);
+    const double volume_element = basis.omega / basis.nxyz;
+    const double bulk_invsqrt = 1.0 / std::sqrt(cavity.epsilon_bulk);
+    result.far_field_polarization_charge = (source_sum * bulk_invsqrt - solute_sum) * volume_element;
 }
 
 // Pool-reduced norms, so every rank takes the same convergence decision. A
@@ -114,7 +86,7 @@ double grid_dot(const std::vector<double>& left,
 // P r = eps^-1/2 G eps^-1/2 r; only FFT scratch survives an application.
 void apply_preconditioner(const std::vector<double>& rhs,
                           const std::vector<double>& invsqrt,
-                          PeriodicCoulombOperator& coulomb,
+                          CoulombOperator& coulomb,
                           std::vector<double>& weighted,
                           std::vector<double>& value)
 {
@@ -141,21 +113,35 @@ void solve_sccs_response(const std::vector<double>& density,
                          double tpiba,
                          SccsResponse& result)
 {
+    PeriodicCoulombOperator coulomb(basis, tpiba);
+    solve_sccs_response(density, charge, cavity, solver, initial_potential, basis, tpiba, coulomb, result);
+}
+
+void solve_sccs_response(const std::vector<double>& density,
+                         const std::vector<double>& charge,
+                         const CavityParameters& cavity,
+                         const PolarizationSolverParameters& solver,
+                         const std::vector<double>& initial_potential,
+                         const ModulePW::PW_Basis& basis,
+                         double tpiba,
+                         CoulombOperator& coulomb,
+                         SccsResponse& result)
+{
     // Determine start mode collectively, including ranks with no real-space points.
     double initial_count = initial_potential.size();
     Parallel_Reduce::reduce_pool(initial_count);
     const bool warm_start = initial_count != 0.0;
 
+    const bool open_boundary = coulomb.has_boundary_correction();
     SccsResponse candidate;
     std::vector<double> coefficient;
-    prepare_cavity(density, cavity, basis, tpiba, candidate, coefficient);
+    prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary, candidate, coefficient);
     const std::size_t size = density.size();
     std::vector<double> invsqrt(size);
     for (std::size_t i = 0; i < size; ++i)
     {
         invsqrt[i] = 1.0 / std::sqrt(candidate.epsilon[i]);
     }
-    PeriodicCoulombOperator coulomb(basis, tpiba);
     std::vector<double> residual = charge;
     std::vector<double> potential(size, 0.0);
     std::vector<double> direction(size, 0.0);
@@ -230,22 +216,30 @@ void solve_sccs_response(const std::vector<double>& density,
     }
 
     candidate.restart_potential = potential;
-    double mean = 0.0;
-    for (double value : potential)
+    // Preserve the physical gauge fixed by a boundary correction.
+    if (!open_boundary)
     {
-        mean += value;
-    }
-    Parallel_Reduce::reduce_pool(mean);
-    mean /= basis.nxyz;
-    for (double& value : potential)
-    {
-        value -= mean;
+        double mean = 0.0;
+        for (double value : potential)
+        {
+            mean += value;
+        }
+        Parallel_Reduce::reduce_pool(mean);
+        mean /= basis.nxyz;
+        for (double& value : potential)
+        {
+            value -= mean;
+        }
     }
     std::vector<std::complex<double>> potential_g(basis.npw);
     basis.real2recip(potential.data(), potential_g.data());
     polarization.gradient.resize(size);
     XC_Functional::grad_rho(potential_g.data(), polarization.gradient.data(), &basis, tpiba);
     polarization.potential.swap(potential);
+    if (open_boundary)
+    {
+        finish_open_boundary_response(charge, coefficient, invsqrt, cavity, basis, candidate);
+    }
     candidate.cavity_potential.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
