@@ -1,0 +1,1 @@
+PW neutral water with periodic SCCS and the solvent-aware cavity (solvent radius 2, filling threshold 0.3); checks energy, forces, solvation terms and the out_sol cavity integral.

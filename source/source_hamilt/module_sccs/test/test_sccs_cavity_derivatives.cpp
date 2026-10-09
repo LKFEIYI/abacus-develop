@@ -2,10 +2,47 @@
 #include "../sccs_cavity_derivatives.h"
 #include "../sccs_cavity.h"
 #include "../sccs_response.h"
+#include "../sccs_solvent_aware.h"
+
+#include "source_hamilt/module_xc/xc_functional.h"
 
 #include "source_base/parallel_reduce.h"
 
 using SccsCavityDerivativesTest = SccsTest::PwTest;
+
+namespace
+{
+std::vector<ModuleBase::Vector3<double>> fft_gradient(const std::vector<double>& values,
+                                                      const std::vector<double>& filter,
+                                                      const ModulePW::PW_Basis& basis,
+                                                      double tpiba)
+{
+    std::vector<std::complex<double>> values_g(basis.npw);
+    basis.real2recip(values.data(), values_g.data());
+    for (int ig = 0; ig < basis.npw && !filter.empty(); ++ig) { values_g[ig] *= filter[ig]; }
+    std::vector<ModuleBase::Vector3<double>> gradient(values.size());
+    XC_Functional::grad_rho(values_g.data(), gradient.data(), &basis, tpiba);
+    return gradient;
+}
+
+// grad s_sa = (1 - f) grad s + (1 - s) f' p * grad s for a given grad s.
+std::vector<ModuleBase::Vector3<double>> filled_gradient(const ModuleSccs::SccsResponse& response,
+                                                         const std::vector<double>& kernel,
+                                                         const ModulePW::PW_Basis& basis,
+                                                         const std::vector<ModuleBase::Vector3<double>>& local)
+{
+    const std::vector<ModuleBase::Vector3<double>> fraction = ModuleSccs::convolve_probe_gradient(kernel, basis,
+                                                                                                   local);
+    std::vector<ModuleBase::Vector3<double>> gradient(local.size());
+    for (std::size_t i = 0; i < local.size(); ++i)
+    {
+        const double empty = 1.0 - response.solvent_aware.filling.filling[i];
+        const double solvent = 1.0 - response.solvent_aware.local[i];
+        gradient[i] = local[i] * empty + fraction[i] * (solvent * response.solvent_aware.filling.dfilling[i]);
+    }
+    return gradient;
+}
+} // namespace
 
 TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFft)
 {
@@ -36,7 +73,7 @@ TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFf
     ModuleSccs::SccsResponse response;
     ModuleSccs::CavityDerivatives derivatives;
     const std::vector<double>& coefficient = derivatives.coefficient;
-    ModuleSccs::prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary,
+    ModuleSccs::prepare_cavity_derivatives(density, cavity, SccsTest::no_probe, basis, tpiba, open_boundary,
                                            response, derivatives);
     const double log_bulk = std::log(cavity.epsilon_bulk);
     for (int ir = 0; ir < basis.nrxx; ++ir)
@@ -62,7 +99,7 @@ TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFf
     ModuleSccs::SccsResponse periodic;
     ModuleSccs::CavityDerivatives periodic_derivatives;
     const std::vector<double>& periodic_coefficient = periodic_derivatives.coefficient;
-    ModuleSccs::prepare_cavity_derivatives(density, cavity, basis, tpiba, periodic_boundary,
+    ModuleSccs::prepare_cavity_derivatives(density, cavity, SccsTest::no_probe, basis, tpiba, periodic_boundary,
                                            periodic, periodic_derivatives);
     double difference = 0.0;
     for (int ir = 0; ir < basis.nrxx; ++ir)
@@ -76,7 +113,7 @@ TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFf
 
     cavity.lowpass_p1 = basis.ggecut;
     cavity.lowpass_p2 = 0.5;
-    ModuleSccs::prepare_cavity_derivatives(density, cavity, basis, tpiba, open_boundary,
+    ModuleSccs::prepare_cavity_derivatives(density, cavity, SccsTest::no_probe, basis, tpiba, open_boundary,
                                            response, derivatives);
     const double weight = 0.5 * std::erfc(0.5);
     for (int ir = 0; ir < basis.nrxx; ++ir)
@@ -90,5 +127,111 @@ TEST_F(SccsCavityDerivativesTest, OpenBoundaryCoefficientUsesSwitchingFunctionFf
                                 / ModuleBase::FOUR_PI;
         EXPECT_NEAR(coefficient[ir], expected, 1e-12);
         EXPECT_NEAR(derivatives.gradient[ir].x, gradient, 1e-12);
+    }
+}
+
+// The filled dielectric: periodic cells chain through the density; open
+// boundaries differentiate s_sa on the filtered grid with lowpass, otherwise
+// fill the FFT gradient of the local s analytically.
+TEST_F(SccsCavityDerivativesTest, FilledDielectricPathsFollowBoundaryAndLowpass)
+{
+    ModuleSccs::CavityParameters cavity;
+    cavity.density_min = 1e-4;
+    cavity.density_max = 5e-3;
+    cavity.epsilon_bulk = 5.0;
+    cavity.solvent_aware.solvent_radius = 1.5;
+    cavity.solvent_aware.filling_threshold = 0.67;
+    cavity.solvent_aware.filling_spread = 0.1;
+    const ModuleBase::Matrix3 lattice;
+    const std::vector<double> kernel = ModuleSccs::solvent_probe_kernel(basis, lattice, length, cavity.solvent_aware);
+    const std::vector<double> mode = cosine_mode(0);
+    std::vector<double> density(basis.nrxx);
+    for (int ir = 0; ir < basis.nrxx; ++ir) { density[ir] = 1e-3 * (1.0 + 0.3 * mode[ir]); }
+    const double log_bulk = std::log(cavity.epsilon_bulk);
+    const std::vector<double> no_filter;
+    for (int path = 0; path < 3; ++path)
+    {
+        const bool open_boundary = path > 0;
+        const bool lowpass = path == 2;
+        cavity.lowpass_p1 = lowpass ? basis.ggecut : -1.0;
+        cavity.lowpass_p2 = lowpass ? 0.5 : -1.0;
+        ModuleSccs::SccsResponse response;
+        ModuleSccs::CavityDerivatives derivatives;
+        ModuleSccs::prepare_cavity_derivatives(density, cavity, kernel, basis, tpiba, open_boundary, response,
+                                               derivatives);
+        double filled_volume = response.solvent_aware.volume;
+        EXPECT_GT(filled_volume, 50.0);
+        std::vector<ModuleBase::Vector3<double>> expected;
+        if (lowpass)
+        {
+            expected = fft_gradient(response.solute, derivatives.filter, basis, tpiba);
+        }
+        else if (open_boundary)
+        {
+            const std::vector<ModuleBase::Vector3<double>> local = fft_gradient(response.solvent_aware.local, no_filter,
+                                                                                basis, tpiba);
+            expected = filled_gradient(response, kernel, basis, local);
+        }
+        else
+        {
+            std::vector<ModuleBase::Vector3<double>> local = fft_gradient(density, no_filter, basis, tpiba);
+            for (int ir = 0; ir < basis.nrxx; ++ir) { local[ir] *= response.dsolute_drho[ir]; }
+            expected = filled_gradient(response, kernel, basis, local);
+        }
+        double error = 0.0;
+        double scale = 0.0;
+        for (int ir = 0; ir < basis.nrxx; ++ir)
+        {
+            const ModuleBase::Vector3<double> target = expected[ir] * (-log_bulk);
+            const ModuleBase::Vector3<double> difference = response.grad_log_epsilon[ir] - target;
+            const double target_norm = target.norm();
+            error = std::max(error, difference.norm());
+            scale = std::max(scale, target_norm);
+            const double epsilon_exponent = log_bulk * (1.0 - response.solute[ir]);
+            EXPECT_NEAR(response.epsilon[ir], std::exp(epsilon_exponent), 1e-12);
+        }
+        Parallel_Reduce::reduce_max_pool(basis.poolnproc, error);
+        Parallel_Reduce::reduce_max_pool(basis.poolnproc, scale);
+        EXPECT_GT(scale, 1e-2);
+        const double tolerance = 1e-12 * scale;
+        EXPECT_LT(error, tolerance);
+        EXPECT_EQ(derivatives.gradient.empty(), !lowpass);
+    }
+}
+
+// The probe kernel alone switches the filling on: solvent-aware parameters
+// without a kernel give the plain cavity on every path.
+TEST_F(SccsCavityDerivativesTest, SolventAwareParametersWithoutAProbeLeaveTheCavityUnfilled)
+{
+    ModuleSccs::CavityParameters plain;
+    plain.density_min = 1e-4;
+    plain.density_max = 5e-3;
+    plain.epsilon_bulk = 5.0;
+    ModuleSccs::CavityParameters parameters_only = plain;
+    parameters_only.solvent_aware.solvent_radius = 1.5;
+    const std::vector<double> mode = cosine_mode(0);
+    std::vector<double> density(basis.nrxx);
+    for (int ir = 0; ir < basis.nrxx; ++ir) { density[ir] = 1e-3 * (1.0 + 0.3 * mode[ir]); }
+    for (int path = 0; path < 3; ++path)
+    {
+        const bool open_boundary = path > 0;
+        const bool lowpass = path == 2;
+        const double p1 = lowpass ? basis.ggecut : -1.0;
+        const double p2 = lowpass ? 0.5 : -1.0;
+        plain.lowpass_p1 = p1;
+        plain.lowpass_p2 = p2;
+        parameters_only.lowpass_p1 = p1;
+        parameters_only.lowpass_p2 = p2;
+        ModuleSccs::SccsResponse expected;
+        ModuleSccs::CavityDerivatives expected_derivatives;
+        ModuleSccs::prepare_cavity_derivatives(density, plain, SccsTest::no_probe, basis, tpiba, open_boundary,
+                                               expected, expected_derivatives);
+        ModuleSccs::SccsResponse response;
+        ModuleSccs::CavityDerivatives derivatives;
+        ModuleSccs::prepare_cavity_derivatives(density, parameters_only, SccsTest::no_probe, basis, tpiba,
+                                               open_boundary, response, derivatives);
+        EXPECT_FALSE(response.solvent_aware.enabled());
+        EXPECT_EQ(response.solute, expected.solute);
+        EXPECT_EQ(derivatives.coefficient, expected_derivatives.coefficient);
     }
 }

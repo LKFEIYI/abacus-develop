@@ -51,10 +51,10 @@ TEST_F(SccsPcc2dTest, SolventAddsOnlyReactionAndCavityTermsToThePointIonPcc)
         for (int ir = 0; ir < basis.nrxx; ++ir) { solute_charge[ir] = ions[ir] - density[ir]; }
         const std::vector<double> cold;
         ModuleSccs::SccsResponse response;
-        ModuleSccs::solve_sccs_response(density, solute_charge, config.cavity, solver, cold,
+        ModuleSccs::solve_sccs_response(density, solute_charge, config.cavity, SccsTest::no_probe, solver, cold,
                                         basis, tpiba, *coulomb, response);
         ModuleSccs::FunctionalResult functional;
-        ModuleSccs::evaluate_functional(solute_charge, response, config, basis, tpiba,
+        ModuleSccs::evaluate_functional(solute_charge, response, config, SccsTest::no_probe, basis, tpiba,
                                         *coulomb, functional);
         elecstate::PotSccs solvent(&basis, config, solver, 0.6, no_resume);
         elecstate::PotPcc correction(&basis, elecstate::PotPcc::Dimension::slab, input.pcc_2d_axis, 0.6);

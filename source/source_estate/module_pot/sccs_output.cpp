@@ -95,7 +95,9 @@ void write_sccs_output(std::ostream& output, const SccsOutput& result, int level
                << " Q_POL_EXPECTED/e " << result.expected_charge
                << " TOLERANCE/e " << result.screening_tolerance << '\n';
     }
-    output << " SCCS_CAVITY VOLUME/Bohr3 " << result.volume << " SURFACE/Bohr2 " << result.surface << '\n'
+    output << " SCCS_CAVITY VOLUME/Bohr3 " << result.volume << " SURFACE/Bohr2 " << result.surface;
+    if (result.filled) { output << " FILLED_VOLUME/Bohr3 " << result.filled_volume; }
+    output << '\n'
            << " SCCS_FFT R2G_CALLS " << result.transforms.forward_calls
            << " G2R_CALLS " << result.transforms.inverse_calls
            << " CACHED_SOURCES " << result.reused_fixed_sources << '\n';

@@ -11,7 +11,8 @@ add_library(sccs OBJECT
   sccs_pcc_2d_coulomb.cpp
   sccs_pcc_moments.cpp
   sccs_pw_coulomb.cpp
-  sccs_response.cpp)
+  sccs_response.cpp
+  sccs_solvent_aware.cpp)
 
 if(ENABLE_COVERAGE)
   add_coverage(sccs)

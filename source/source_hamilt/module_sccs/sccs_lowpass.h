@@ -17,14 +17,14 @@ struct SccsResponse;
 // Reciprocal-space filter on the local G vectors; empty when disabled.
 std::vector<double> make_switching_filter(const CavityParameters& cavity, const ModulePW::PW_Basis& basis);
 
-// Exact derivative of the filtered, discrete sqrt-CG reaction energy through
-// the electronic-density cavity; collective over the PW pool.
-void evaluate_lowpass_cavity_potential(const std::vector<double>& charge,
-                                       const CavityParameters& cavity,
-                                       const CavityDerivatives& derivatives,
-                                       const ModulePW::PW_Basis& basis,
-                                       double tpiba,
-                                       SccsResponse& response);
+// Exact derivative of the filtered, discrete sqrt-CG reaction energy with
+// respect to the boundary s; collective over the PW pool.
+void evaluate_lowpass_boundary_potential(const std::vector<double>& charge,
+                                         const CavityParameters& cavity,
+                                         const CavityDerivatives& derivatives,
+                                         const ModulePW::PW_Basis& basis,
+                                         double tpiba,
+                                         SccsResponse& response);
 } // namespace ModuleSccs
 
 #endif
