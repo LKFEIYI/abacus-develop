@@ -65,3 +65,61 @@ TEST(ReadInpSccs, SupportedScopeAndNumericalValidation)
     input.sccs_preset = "unused";
     EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
 }
+
+TEST(ReadInpSccs, LowpassRequiresPairedValuesAndPcc)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    std::string error;
+    EXPECT_DOUBLE_EQ(input.sccs_lowpass_p1, -1.0);
+    EXPECT_DOUBLE_EQ(input.sccs_lowpass_p2, -1.0);
+    input.sccs_lowpass_p1 = 10.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p2 = 5.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.assume_isolated = "pcc_0d";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.assume_isolated = "pcc_2d";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p1 = 0.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_lowpass_p2 = 0.0;
+    input.assume_isolated = "none";
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+}
+
+TEST(ReadInpSccs, FullCavityWidthsAndModeValidation)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    input.sccs_solvent_mode = "full";
+    std::string error;
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.7, 0.0, -1.0};
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.0};
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread.clear();
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input.sccs_corespread = {0.5};
+    input.sccs_solvent_mode = "invalid";
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+}
+
+TEST(ReadInpSccs, CoreSpreadWordsMustBeFiniteNumbers)
+{
+    std::vector<double> spreads = {0.5};
+    std::string error;
+    ASSERT_TRUE(ModuleIO::parse_core_spreads({"0.7", "-1", "1e-1"}, spreads, error)) << error;
+    ASSERT_EQ(spreads.size(), 3u);
+    EXPECT_DOUBLE_EQ(spreads[0], 0.7);
+    EXPECT_DOUBLE_EQ(spreads[1], -1.0);
+    EXPECT_DOUBLE_EQ(spreads[2], 0.1);
+    const std::vector<std::string> invalid[] = {{"abc"}, {"0.5abc"}, {"0.5", "x"}, {"nan"}, {"inf"}, {""}};
+    for (const std::vector<std::string>& words : invalid)
+    {
+        EXPECT_FALSE(ModuleIO::parse_core_spreads(words, spreads, error));
+        EXPECT_NE(error.find("sccs_corespread"), std::string::npos);
+        EXPECT_EQ(spreads.size(), 3u);
+    }
+}
