@@ -547,6 +547,10 @@
     - [sccs\_tol\_rms](#sccs_tol_rms)
     - [sccs\_tol\_max](#sccs_tol_max)
     - [sccs\_surface\_eta](#sccs_surface_eta)
+    - [sccs\_lowpass\_p1](#sccs_lowpass_p1)
+    - [sccs\_lowpass\_p2](#sccs_lowpass_p2)
+    - [sccs\_solvent\_mode](#sccs_solvent_mode)
+    - [sccs\_corespread](#sccs_corespread)
   - [Quasiatomic Orbital (QO) analysis](#quasiatomic-orbital-qo-analysis)
     - [qo\_switch](#qo_switch)
     - [qo\_basis](#qo_basis)
@@ -5042,6 +5046,35 @@
 - **Description**: Positive regularization of the SCCS surface gradient norm.
 - **Default**: 1e-8
 - **Unit**: bohr^-1
+
+### sccs_lowpass_p1
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Low-pass filter of the SCCS switching-function derivatives, as Environ deriv_lowpass_p1 with deriv_method fft. Only with assume_isolated pcc_0d or pcc_2d. The default -1 turns it off and reproduces Environ deriv_method fft (continuum cavity potential). With lowpass disabled (the default), analytical forces may differ from finite differences of the self-consistent energy. For geometry optimization with PCC, consider enabling lowpass and check force accuracy against finite differences. With lowpass disabled, the cavity potential uses the FFT gradient of the PCC-corrected potential, which oscillates around the potential step at the cell boundary half a cell from the system center; keep the dielectric transition region several bohr away from that boundary. The values sccs_lowpass_p1 10 and sccs_lowpass_p2 5 were validated at ecutrho 300-500 Ry; the filter changes the model energy (about 10 meV for H3O+).
+- **Default**: -1
+
+### sccs_lowpass_p2
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Offset of the SCCS switching-function low-pass filter, as Environ deriv_lowpass_p2; see sccs_lowpass_p1. Both must be positive or both non-positive. Default -1 (off).
+- **Default**: -1
+
+### sccs_solvent_mode
+
+- **Type**: String
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Allowed values: electronic (default) and full, as Environ solvent_mode. electronic builds the dielectric cavity from the valence electron density. full adds valence-charge Gaussians selected by sccs_corespread.
+- **Default**: electronic
+
+### sccs_corespread
+
+- **Type**: Vector of Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom except those whose known atomic number equals the pseudopotential valence charge (within 1e-8). More than one value requires exactly nat values in STRU atom order (grouped by atom type), and overrides this automatic exclusion. A value &lt;= 0 disables the cavity Gaussian on that atom.
+- **Default**: 0.5
+- **Unit**: bohr
 
 [back to top](#full-list-of-input-keywords)
 
