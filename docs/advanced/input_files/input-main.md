@@ -537,6 +537,16 @@
     - [tau](#tau)
     - [sigma\_k](#sigma_k)
     - [nc\_k](#nc_k)
+    - [sccs\_preset](#sccs_preset)
+    - [sccs\_epsilon](#sccs_epsilon)
+    - [sccs\_rho\_min](#sccs_rho_min)
+    - [sccs\_rho\_max](#sccs_rho_max)
+    - [sccs\_gamma](#sccs_gamma)
+    - [sccs\_pressure](#sccs_pressure)
+    - [sccs\_maxiter](#sccs_maxiter)
+    - [sccs\_tol\_rms](#sccs_tol_rms)
+    - [sccs\_tol\_max](#sccs_tol_max)
+    - [sccs\_surface\_eta](#sccs_surface_eta)
   - [Quasiatomic Orbital (QO) analysis](#quasiatomic-orbital-qo-analysis)
     - [qo\_switch](#qo_switch)
     - [qo\_basis](#qo_basis)
@@ -4927,14 +4937,14 @@
 
 ### imp_sol
 
-- **Type**: Boolean
-- **Description**: Calculate implicit solvation correction
-- **Default**: False
+- **Type**: Integer
+- **Description**: Select 0 for vacuum, 1 for the original ABACUS implicit solvation model, or 2 for SCCS. Stress, external fields and other correction models are not supported.
+- **Default**: 0
 
 ### eb_k
 
 - **Type**: Real
-- **Availability**: *[`imp_sol`](#imp_sol)==true*
+- **Availability**: *[`imp_sol`](#imp_sol)==1*
 - **Description**: The relative permittivity of the bulk solvent, 80 for water
 - **Default**: 80
 
@@ -4955,6 +4965,83 @@
 - **Type**: Real
 - **Description**: The value of the electron density at which the dielectric cavity forms
 - **Default**: 0.00037
+
+### sccs_preset
+
+- **Type**: String
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: SCCS parameter preset. Allowed values: custom, vacuum, water-neutral, water-cation, water-anion. Non-custom presets override sccs_epsilon, sccs_rho_min, sccs_rho_max, sccs_gamma and sccs_pressure; solver controls and surface regularization remain user-controlled.
+- **Default**: custom
+
+### sccs_epsilon
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Bulk dielectric constant &gt;= 1 for the custom preset. The default 1 (no dielectric) follows the Environ env_static_permittivity default for environ_type input. Water presets use 78.3 and vacuum uses 1.
+- **Default**: 1.0
+
+### sccs_rho_min
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Lower electronic-density cavity threshold for the custom preset. Water-neutral/vacuum: 1e-4; water-cation: 2e-4; water-anion: 2.4e-3.
+- **Default**: 1e-4
+- **Unit**: e/bohr^3
+
+### sccs_rho_max
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Upper electronic-density cavity threshold for the custom preset. Water-neutral/vacuum: 5e-3; water-cation: 3.5e-3; water-anion: 1.55e-2.
+- **Default**: 5e-3
+- **Unit**: e/bohr^3
+
+### sccs_gamma
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Surface coefficient for the custom preset. Water-neutral: 47.9; water-cation: 5; water-anion/vacuum: 0.
+- **Default**: 0.0
+- **Unit**: dyn/cm
+
+### sccs_pressure
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Volume coefficient for the custom preset. Water-neutral: -0.36; water-cation: 0.125; water-anion: 0.45; vacuum: 0.
+- **Default**: 0.0
+- **Unit**: GPa
+
+### sccs_maxiter
+
+- **Type**: Integer
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Positive maximum number of SCCS sqrt-CG iterations. Failure to satisfy both residual tolerances terminates the calculation.
+- **Default**: 200
+
+### sccs_tol_rms
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Positive RMS charge-residual tolerance for the SCCS sqrt-CG solver.
+- **Default**: 1e-10
+- **Unit**: e/bohr^3
+
+### sccs_tol_max
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Positive maximum charge-residual tolerance for the SCCS sqrt-CG solver.
+- **Default**: 1e-8
+- **Unit**: e/bohr^3
+
+### sccs_surface_eta
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Positive regularization of the SCCS surface gradient norm.
+- **Default**: 1e-8
+- **Unit**: bohr^-1
 
 [back to top](#full-list-of-input-keywords)
 
