@@ -1,4 +1,5 @@
 #include "pot_surchem.h"
+#include "solvent_grid_field.h"
 
 namespace elecstate
 {
@@ -40,6 +41,35 @@ void PotSurChem::cal_v_eff(const Charge* const chg, const UnitCell* const ucell,
                                  this->structure_factors_,
                                  v_sol_correction);
     v_eff += v_sol_correction;
+}
+
+void PotSurChem::add_solvent_fields(std::vector<SolventGridField>& fields) const
+{
+    const std::vector<double>& epsilon = this->surchem_->last_epsilon();
+    if (epsilon.empty())
+    {
+        return;
+    }
+    SolventGridField dielectric;
+    dielectric.name = "eps";
+    dielectric.values = epsilon;
+    fields.push_back(dielectric);
+    // epsilon = 1 + (eb_k - 1) S with the solvent shape function S, so the
+    // cavity s = 1 - S follows from epsilon; without a dielectric it is undefined.
+    const double contrast = this->surchem_->bulk_permittivity() - 1.0;
+    if (contrast <= 0.0)
+    {
+        return;
+    }
+    SolventGridField cavity;
+    cavity.name = "cavity";
+    cavity.values.resize(epsilon.size());
+    for (std::size_t ir = 0; ir < epsilon.size(); ++ir)
+    {
+        const double shape = (epsilon[ir] - 1.0) / contrast;
+        cavity.values[ir] = 1.0 - shape;
+    }
+    fields.push_back(cavity);
 }
 
 } // namespace elecstate

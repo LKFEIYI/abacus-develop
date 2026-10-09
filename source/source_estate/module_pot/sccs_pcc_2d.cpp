@@ -51,11 +51,22 @@ void make_sccs_pcc_2d_operator(const UnitCell& cell,
                                int open_axis,
                                std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb)
 {
+    std::vector<ModuleBase::Vector3<double>> positions;
+    ModulePW::grid_positions(basis, cell.latvec, cell.lat0, positions);
+    make_sccs_pcc_2d_operator(cell, basis, atoms, open_axis, positions, coulomb);
+}
+
+void make_sccs_pcc_2d_operator(const UnitCell& cell,
+                               const ModulePW::PW_Basis& basis,
+                               const std::vector<unitcell::AtomData>& atoms,
+                               int open_axis,
+                               const std::vector<ModuleBase::Vector3<double>>& grid_positions,
+                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb)
+{
     unitcell::SlabCell geometry;
     Pcc2dParameters parameters;
     make_sccs_pcc_2d_geometry(cell, atoms, open_axis, geometry, parameters);
-    std::vector<ModuleBase::Vector3<double>> projected_positions;
-    ModulePW::grid_positions(basis, cell.latvec, cell.lat0, projected_positions);
+    std::vector<ModuleBase::Vector3<double>> projected_positions = grid_positions;
     make_pcc_2d_projected(geometry, projected_positions);
     coulomb.reset(new ModuleSccs::Pcc2dCoulombOperator(basis, cell.tpiba, projected_positions, geometry.normal,
                                                        parameters));

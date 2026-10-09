@@ -46,6 +46,14 @@ void make_sccs_pcc_2d_operator(const UnitCell& cell,
                                const std::vector<unitcell::AtomData>& atoms,
                                int open_axis,
                                std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb);
+
+// Use caller-owned Cartesian grid coordinates, e.g. from a fixed-source cache.
+void make_sccs_pcc_2d_operator(const UnitCell& cell,
+                               const ModulePW::PW_Basis& basis,
+                               const std::vector<unitcell::AtomData>& atoms,
+                               int open_axis,
+                               const std::vector<ModuleBase::Vector3<double>>& grid_positions,
+                               std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb);
 } // namespace elecstate
 
 #endif

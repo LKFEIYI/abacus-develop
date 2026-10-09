@@ -1,4 +1,5 @@
 #include "source_estate/module_pot/potential_new.h"
+#include "source_estate/module_pot/pot_sccs.h"
 
 #include "source_hamilt/module_xc/xc_functional.h"
 #include "source_io/module_parameter/parameter.h"
@@ -166,6 +167,17 @@ PotBase* Potential::get_pot_type(const std::string& pot_type, const Input_para&)
 {
     const int grid_size = this->get_rho_basis() == nullptr ? 0 : this->get_rho_basis()->nrxx;
     return new MockPotComponent(pot_type, grid_size);
+}
+
+// The SCCS component lives in potential_sccs.cpp, which this test does not link.
+PotBase* Potential::make_sccs_potential(const Input_para& input, const SccsResume&)
+{
+    return this->get_pot_type("sccs", input);
+}
+
+SccsResume Potential::sccs_resume_state() const
+{
+    return SccsResume();
 }
 
 } // namespace elecstate
