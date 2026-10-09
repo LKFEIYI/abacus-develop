@@ -104,6 +104,21 @@ std::string sccs_model_error(const Input_para& input)
     return error;
 }
 
+// Solvent-aware probe and filling; a zero radius turns the filling off.
+std::string sccs_solvent_aware_error(const Input_para& input)
+{
+    std::string error;
+    if (input.sccs_solvent_radius < 0.0) { error = "sccs_solvent_radius must be non-negative"; }
+    else if (input.sccs_radial_scale < 1.0) { error = "sccs_radial_scale must be at least 1"; }
+    else if (input.sccs_radial_spread <= 0.0) { error = "sccs_radial_spread must be positive"; }
+    // The probe solute fraction never exceeds one, so a threshold of one or
+    // more would fill nothing.
+    else if (input.sccs_filling_threshold <= 0.0 || input.sccs_filling_threshold >= 1.0)
+    { error = "sccs_filling_threshold must lie between 0 and 1"; }
+    else if (input.sccs_filling_spread <= 0.0) { error = "sccs_filling_spread must be positive"; }
+    return error;
+}
+
 // sqrt-CG solver controls and the delayed start.
 std::string sccs_solver_error(const Input_para& input)
 {
@@ -132,6 +147,7 @@ bool validate_sccs_input(const Input_para& input, std::string& error)
     if (input.imp_sol != 2) { return true; }
     error = sccs_context_error(input);
     if (error.empty()) { error = sccs_model_error(input); }
+    if (error.empty()) { error = sccs_solvent_aware_error(input); }
     if (error.empty()) { error = sccs_solver_error(input); }
     return error.empty();
 }
@@ -312,6 +328,66 @@ void ReadInput::item_sccs()
         this->add_item(item);
     }
     {
+        Input_Item item("sccs_solvent_radius");
+        item.annotation = "solvent radius of the solvent-aware SCCS cavity";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Solvent radius of the solvent-aware SCCS cavity, as Environ solvent_radius (Andreussi et al., J. Chem. Theory Comput. 15, 1996 (2019)). Default 0 (off); Environ's water example uses 3 bohr.";
+        item.default_value = "0.0";
+        item.unit = "bohr";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_solvent_radius);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_radial_scale");
+        item.annotation = "solvent-aware probe radius over sccs_solvent_radius";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Probe radius of the solvent-aware SCCS cavity in units of sccs_solvent_radius, as Environ radial_scale; at least 1, default 2. Used only when sccs_solvent_radius is positive.";
+        item.default_value = "2.0";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_radial_scale);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_radial_spread");
+        item.annotation = "erfc spread of the solvent-aware probe";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "erfc spread of the solvent-aware probe sphere, as Environ radial_spread; positive, default 0.5 bohr. Used only when sccs_solvent_radius is positive.";
+        item.default_value = "0.5";
+        item.unit = "bohr";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_radial_spread);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_filling_threshold");
+        item.annotation = "probe solute fraction that fills a point";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Solute fraction of the solvent-aware probe sphere above which a point is filled, as Environ filling_threshold; between 0 and 1 (exclusive), default 0.825. Used only when sccs_solvent_radius is positive.";
+        item.default_value = "0.825";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_filling_threshold);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_filling_spread");
+        item.annotation = "erfc width of the solvent-aware filling";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Width of the erfc step of the solvent-aware filling in the probe solute fraction, as Environ filling_spread; positive, default 0.02. Used only when sccs_solvent_radius is positive.";
+        item.default_value = "0.02";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_filling_spread);
+        this->add_item(item);
+    }
+    {
         Input_Item item("sccs_start_drho");
         item.annotation = "SCCS delayed-start density threshold";
         item.category = "Implicit solvation model";
@@ -340,7 +416,7 @@ void ReadInput::item_sccs()
         item.annotation = "detailed SCCS diagnostics";
         item.category = "Implicit solvation model";
         item.type = "Integer";
-        item.description = "SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.";
+        item.description = "SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface (with the solvent-aware filled volume), FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.";
         item.default_value = "0";
         item.unit = "";
         read_sync_int(input.sccs_debug);

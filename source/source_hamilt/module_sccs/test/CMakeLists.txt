@@ -7,6 +7,7 @@ AddTest(TARGET MODULE_HAMILT_sccs_parameters
 AddTest(TARGET MODULE_HAMILT_sccs_poisson
   LIBS parameter planewave device base
   SOURCES test_sccs_diagnostics.cpp test_sccs_lowpass.cpp test_sccs_cavity_derivatives.cpp test_sccs_pcc_0d_coulomb.cpp test_sccs_pcc_2d_coulomb.cpp test_sccs_pw_coulomb.cpp test_sccs_ionic_charge.cpp test_sccs_ionic_force.cpp test_sccs_response.cpp test_sccs_functional.cpp
+    test_sccs_solvent_aware.cpp test_sccs_solvent_aware_probe.cpp
     ../../../source_estate/test/test_pot_sccs.cpp
     ../../../source_estate/test/test_sccs_pcc_0d.cpp
     ../../../source_estate/test/test_sccs_pcc_2d.cpp
@@ -32,6 +33,7 @@ AddTest(TARGET MODULE_HAMILT_sccs_poisson
     ../sccs_functional.cpp
     ../sccs_parameters.cpp
     ../sccs_ionic_charge.cpp ../sccs_ionic_force.cpp ../sccs_pw_coulomb.cpp ../sccs_response.cpp ../sccs_cavity.cpp
+    ../sccs_solvent_aware.cpp
     ../../module_xc/xc_grad_utils.cpp)
 set_tests_properties(MODULE_HAMILT_sccs_poisson PROPERTIES
   ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 60)

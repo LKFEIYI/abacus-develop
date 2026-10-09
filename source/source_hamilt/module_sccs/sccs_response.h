@@ -2,6 +2,7 @@
 #define SCCS_RESPONSE_H
 
 #include "sccs_cavity.h"
+#include "sccs_solvent_aware.h"
 #include "source_base/vector3.h"
 
 #include <vector>
@@ -32,19 +33,36 @@ struct PolarizationResult
 
 struct SccsResponse
 {
+    // Dielectric boundary; with the solvent-aware filling it is s_sa, while
+    // dsolute_drho stays ds/dn of the local boundary s.
     std::vector<double> solute;
     std::vector<double> dsolute_drho;
+    FilledCavity solvent_aware; // empty without the filling
     std::vector<double> epsilon;
     std::vector<double> depsilon_drho;
     std::vector<ModuleBase::Vector3<double>> grad_log_epsilon;
     PolarizationResult polarization;
-    // Hartree: discrete cavity derivative with lowpass; otherwise -epsilon' |grad v|^2/(8 pi).
+    // Hartree: reaction-energy derivative with respect to the boundary s; the
+    // discrete derivative with lowpass, otherwise L eps |grad v|^2/(8 pi) with
+    // L = ln(eps_bulk).
+    std::vector<double> boundary_potential;
+    // Hartree: the same derivative with respect to the cavity density.
     std::vector<double> cavity_potential;
     std::vector<double> restart_potential; // unshifted solution for explicit warm starts
     double far_field_polarization_charge = 0.0; // open-boundary screened charge minus solute charge
 };
 
-// Original chain-derivative sqrt-CG periodic response; charge is ions minus electrons.
+// Chain a derivative with respect to the boundary to the cavity density,
+// through the solvent-aware adjoint when the boundary is filled; probe_kernel
+// is the one the response was solved with.
+void boundary_to_density_potential(const SccsResponse& response,
+                                   const std::vector<double>& probe_kernel,
+                                   const ModulePW::PW_Basis& basis,
+                                   const std::vector<double>& boundary_potential,
+                                   std::vector<double>& density_potential);
+
+// Original chain-derivative sqrt-CG periodic response without the
+// solvent-aware filling; charge is ions minus electrons.
 // All ranks in the PW pool must call together with the same configuration.
 // initial_potential is empty on all ranks for a cold start, otherwise a local grid.
 // A solver breakdown or missed tolerance stops the run with WARNING_QUIT.
@@ -59,9 +77,12 @@ void solve_sccs_response(const std::vector<double>& cavity_density,
                          SccsResponse& result);
 
 // Use the same operator for the dielectric response and vacuum subtraction.
+// probe_kernel is the solvent_probe_kernel of cavity.solvent_aware, or empty
+// for no filling; it alone decides whether the cavity is filled.
 void solve_sccs_response(const std::vector<double>& cavity_density,
                          const std::vector<double>& solute_charge,
                          const CavityParameters& cavity,
+                         const std::vector<double>& probe_kernel,
                          const PolarizationSolverParameters& solver,
                          const std::vector<double>& initial_potential,
                          const ModulePW::PW_Basis& basis,

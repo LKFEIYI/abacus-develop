@@ -4517,6 +4517,46 @@ parameters:
     default_value: "0.5"
     unit: bohr
     availability: imp_sol==2
+  - name: sccs_solvent_radius
+    category: Implicit solvation model
+    type: Real
+    description: |
+      Solvent radius of the solvent-aware SCCS cavity, as Environ solvent_radius (Andreussi et al., J. Chem. Theory Comput. 15, 1996 (2019)). Default 0 (off); Environ's water example uses 3 bohr.
+    default_value: "0.0"
+    unit: bohr
+    availability: imp_sol==2
+  - name: sccs_radial_scale
+    category: Implicit solvation model
+    type: Real
+    description: |
+      Probe radius of the solvent-aware SCCS cavity in units of sccs_solvent_radius, as Environ radial_scale; at least 1, default 2. Used only when sccs_solvent_radius is positive.
+    default_value: "2.0"
+    unit: ""
+    availability: imp_sol==2
+  - name: sccs_radial_spread
+    category: Implicit solvation model
+    type: Real
+    description: |
+      erfc spread of the solvent-aware probe sphere, as Environ radial_spread; positive, default 0.5 bohr. Used only when sccs_solvent_radius is positive.
+    default_value: "0.5"
+    unit: bohr
+    availability: imp_sol==2
+  - name: sccs_filling_threshold
+    category: Implicit solvation model
+    type: Real
+    description: |
+      Solute fraction of the solvent-aware probe sphere above which a point is filled, as Environ filling_threshold; between 0 and 1 (exclusive), default 0.825. Used only when sccs_solvent_radius is positive.
+    default_value: "0.825"
+    unit: ""
+    availability: imp_sol==2
+  - name: sccs_filling_spread
+    category: Implicit solvation model
+    type: Real
+    description: |
+      Width of the erfc step of the solvent-aware filling in the probe solute fraction, as Environ filling_spread; positive, default 0.02. Used only when sccs_solvent_radius is positive.
+    default_value: "0.02"
+    unit: ""
+    availability: imp_sol==2
   - name: sccs_start_drho
     category: Implicit solvation model
     type: Real
@@ -4537,7 +4577,7 @@ parameters:
     category: Implicit solvation model
     type: Integer
     description: |
-      SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.
+      SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface (with the solvent-aware filled volume), FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.
     default_value: "0"
     unit: ""
     availability: ""

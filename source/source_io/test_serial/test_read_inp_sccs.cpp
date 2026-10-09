@@ -106,6 +106,39 @@ TEST(ReadInpSccs, FullCavityWidthsAndModeValidation)
     EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
 }
 
+TEST(ReadInpSccs, SolventAwareFillingUsesEnvironRanges)
+{
+    Input_para input;
+    input.imp_sol = 2;
+    std::string error;
+    EXPECT_DOUBLE_EQ(input.sccs_solvent_radius, 0.0);
+    EXPECT_DOUBLE_EQ(input.sccs_radial_scale, 2.0);
+    EXPECT_DOUBLE_EQ(input.sccs_radial_spread, 0.5);
+    EXPECT_DOUBLE_EQ(input.sccs_filling_threshold, 0.825);
+    EXPECT_DOUBLE_EQ(input.sccs_filling_spread, 0.02);
+    input.sccs_solvent_radius = 3.0;
+    EXPECT_TRUE(ModuleIO::validate_sccs_input(input, error)) << error;
+    const Input_para valid = input;
+    input.sccs_solvent_radius = -1.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    EXPECT_NE(error.find("sccs_solvent_radius"), std::string::npos);
+    input = valid;
+    input.sccs_radial_scale = 0.9;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input = valid;
+    input.sccs_radial_spread = 0.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input = valid;
+    input.sccs_filling_threshold = 0.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    // The probe solute fraction never exceeds one.
+    input.sccs_filling_threshold = 1.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+    input = valid;
+    input.sccs_filling_spread = 0.0;
+    EXPECT_FALSE(ModuleIO::validate_sccs_input(input, error));
+}
+
 TEST(ReadInpSccs, DelayedStartRequiresRoomBeforeScfConvergenceAndIterationLimit)
 {
     Input_para input;

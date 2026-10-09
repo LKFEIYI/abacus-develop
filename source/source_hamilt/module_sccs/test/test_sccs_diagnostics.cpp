@@ -23,10 +23,10 @@ TEST_F(SccsDiagnosticsTest, FixedPointCheckAddsOneSolveWithoutChangingResponse)
     ModuleSccs::PolarizationSolverParameters solver;
     ModuleSccs::SccsResponse first;
     ModuleSccs::SccsResponse second;
-    ModuleSccs::solve_sccs_response(density, charge, config.cavity, solver, cold,
+    ModuleSccs::solve_sccs_response(density, charge, config.cavity, SccsTest::no_probe, solver, cold,
                                     basis, tpiba, plain, first);
     solver.check_fixed_point = true;
-    ModuleSccs::solve_sccs_response(density, charge, config.cavity, solver, cold,
+    ModuleSccs::solve_sccs_response(density, charge, config.cavity, SccsTest::no_probe, solver, cold,
                                     basis, tpiba, checked, second);
     EXPECT_FALSE(first.polarization.fixed_point_checked);
     EXPECT_TRUE(second.polarization.fixed_point_checked);
@@ -65,12 +65,12 @@ TEST_F(SccsDiagnosticsTest, FixedPointCheckAddsOneSolveWithoutChangingResponse)
     ModuleSccs::PolarizationSolverParameters filtered_solver;
     ModuleSccs::SccsResponse filtered_first;
     ModuleSccs::SccsResponse filtered_second;
-    ModuleSccs::solve_sccs_response(filtered_density, filtered_charge, filtered_config.cavity, filtered_solver,
-                                    filtered_cold,
+    ModuleSccs::solve_sccs_response(filtered_density, filtered_charge, filtered_config.cavity, SccsTest::no_probe,
+                                    filtered_solver, filtered_cold,
                                     basis, tpiba, plain_pcc, filtered_first);
     filtered_solver.check_fixed_point = true;
-    ModuleSccs::solve_sccs_response(filtered_density, filtered_charge, filtered_config.cavity, filtered_solver,
-                                    filtered_cold,
+    ModuleSccs::solve_sccs_response(filtered_density, filtered_charge, filtered_config.cavity, SccsTest::no_probe,
+                                    filtered_solver, filtered_cold,
                                     basis, tpiba, checked_pcc, filtered_second);
     EXPECT_TRUE(filtered_second.polarization.fixed_point_checked);
     EXPECT_LT(filtered_second.polarization.fixed_point_defect_max, 1e-8);

@@ -552,6 +552,11 @@
     - [sccs\_lowpass\_p2](#sccs_lowpass_p2)
     - [sccs\_solvent\_mode](#sccs_solvent_mode)
     - [sccs\_corespread](#sccs_corespread)
+    - [sccs\_solvent\_radius](#sccs_solvent_radius)
+    - [sccs\_radial\_scale](#sccs_radial_scale)
+    - [sccs\_radial\_spread](#sccs_radial_spread)
+    - [sccs\_filling\_threshold](#sccs_filling_threshold)
+    - [sccs\_filling\_spread](#sccs_filling_spread)
     - [sccs\_start\_drho](#sccs_start_drho)
     - [sccs\_start\_nmax](#sccs_start_nmax)
     - [sccs\_debug](#sccs_debug)
@@ -5092,6 +5097,43 @@
 - **Default**: 0.5
 - **Unit**: bohr
 
+### sccs_solvent_radius
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Solvent radius of the solvent-aware SCCS cavity, as Environ solvent_radius (Andreussi et al., J. Chem. Theory Comput. 15, 1996 (2019)). Default 0 (off); Environ's water example uses 3 bohr.
+- **Default**: 0.0
+- **Unit**: bohr
+
+### sccs_radial_scale
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Probe radius of the solvent-aware SCCS cavity in units of sccs_solvent_radius, as Environ radial_scale; at least 1, default 2. Used only when sccs_solvent_radius is positive.
+- **Default**: 2.0
+
+### sccs_radial_spread
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: erfc spread of the solvent-aware probe sphere, as Environ radial_spread; positive, default 0.5 bohr. Used only when sccs_solvent_radius is positive.
+- **Default**: 0.5
+- **Unit**: bohr
+
+### sccs_filling_threshold
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Solute fraction of the solvent-aware probe sphere above which a point is filled, as Environ filling_threshold; between 0 and 1 (exclusive), default 0.825. Used only when sccs_solvent_radius is positive.
+- **Default**: 0.825
+
+### sccs_filling_spread
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Width of the erfc step of the solvent-aware filling in the probe solute fraction, as Environ filling_spread; positive, default 0.02. Used only when sccs_solvent_radius is positive.
+- **Default**: 0.02
+
 ### sccs_start_drho
 
 - **Type**: Real
@@ -5109,7 +5151,7 @@
 ### sccs_debug
 
 - **Type**: Integer
-- **Description**: SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.
+- **Description**: SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface (with the solvent-aware filled volume), FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.
 - **Default**: 0
 
 [back to top](#full-list-of-input-keywords)
