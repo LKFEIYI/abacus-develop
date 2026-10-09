@@ -7,6 +7,7 @@
 #include "source_estate/module_charge/chg_symm.h" // use module_charge::cal_rhog_symm
 #include "source_hamilt/module_xc/xc_functional.h"    // use XC_Functional
 #include "source_estate/write_elecstat_pot.h" // use write_elecstat_pot
+#include "source_estate/module_pot/solvent_grid_field.h" // use SolventGridField
 #include "source_io/module_elf/write_elf.h"
 #include "source_io/module_parameter/input_parameter.h" // use Input_para
 
@@ -169,6 +170,28 @@ void ctrl_output_fp(UnitCell& ucell,
             pcc_potential,
             solvent_potential,
             inp.out_pot[1]);
+    }
+
+    // 5b) write the implicit-solvent dielectric function and cavity
+    if (inp.out_sol[0] == 1 && should_output)
+    {
+        const std::vector<elecstate::SolventGridField> fields = pelec->pot->solvent_output_fields();
+        for (const elecstate::SolventGridField& field : fields)
+        {
+            const std::string fn = global_out_dir + "sol_" + field.name + geom_block + ".cube";
+            ModuleIO::write_vdata_palgrid(para_grid,
+                                          field.values.data(),
+                                          -1, // no spin channel
+                                          nspin,
+                                          istep,
+                                          fn,
+                                          0.0, // efermi
+                                          &(ucell),
+                                          inp.out_sol[1], // precision
+                                          0, // out_fermi
+                                          false, // two_fermi, unused without out_fermi
+                                          false);
+        }
     }
 
     // 6) write ELF

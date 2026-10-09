@@ -10,6 +10,11 @@
 #include "sccs_cell_test.h"
 #include "source_io/module_parameter/input_parameter.h"
 
+namespace
+{
+const elecstate::SccsResume no_resume = elecstate::SccsResume();
+}
+
 class SccsPcc0dTest : public SccsTest::CellTest
 {
 protected:
@@ -48,7 +53,7 @@ TEST_F(SccsPcc0dTest, SolventAddsOnlyReactionAndCavityTermsToThePointIonPcc)
         ModuleSccs::FunctionalResult functional;
         ModuleSccs::evaluate_functional(solute_charge, response, config, basis, tpiba,
                                         *coulomb, functional);
-        elecstate::PotSccs solvent(&basis, config, solver, 0.6);
+        elecstate::PotSccs solvent(&basis, config, solver, 0.6, no_resume);
         elecstate::PotPcc correction(&basis, 0.6);
         ModuleBase::matrix potential(1, basis.nrxx);
         correction.cal_v_eff(&charge, &cell, potential);

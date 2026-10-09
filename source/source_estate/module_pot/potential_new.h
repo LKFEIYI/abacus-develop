@@ -7,6 +7,7 @@
 #include "source_pw/module_pwdft/stru_fac.h"
 #include "source_pw/module_pwdft/vsep_pw.h"
 
+#include <iosfwd>
 #include <memory>
 #include <vector>
 
@@ -15,6 +16,9 @@ struct Input_para;
 namespace elecstate
 {
 class PotPcc;
+class PotSccs;
+struct SolventGridField;
+struct SccsResume;
 class TDFieldManager;
 
 /**
@@ -83,9 +87,20 @@ class Potential : public PotBase
 
     PotBase* get_pot_type(const std::string& pot_type, const Input_para& input);
 
+    /// SCCS delayed start, called before SCF mixing with the pool-consistent
+    /// density residual. True only in the iteration that activates SCCS.
+    bool update_sccs_activation(int electronic_iteration, double density_residual);
+    /// True while an SCCS component waits for its delayed start; the
+    /// activation state is the same on every rank.
+    bool sccs_awaiting_activation() const;
+    /// sccs_debug output of the active correction: SCCS, else PCC.
+    void write_correction_iteration(std::ostream& output, int level, double residual) const;
+    void write_correction_final(std::ostream& output, int level) const;
     void get_solvation_energy(double& electrostatic, double& non_electrostatic) const override;
     void add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const override;
     const std::vector<double>* solvent_electrostatic_potential() const override;
+    /// Implicit-solvent fields of the registered components, for out_sol.
+    std::vector<SolventGridField> solvent_output_fields() const;
 
     /**
      * @brief Inject the shared RT-TDDFT field state before potential setup.
@@ -235,7 +250,12 @@ class Potential : public PotBase
 
     // the registered PCC component, or nullptr when PCC is off
     const PotPcc* pcc_component() const;
-    PotBase* make_sccs_potential(const Input_para& input);
+    const PotSccs* sccs_component() const;
+    PotSccs* sccs_component();
+    // The SCCS activation and warm start of an earlier ionic step are passed
+    // to the rebuilt component.
+    PotBase* make_sccs_potential(const Input_para& input, const SccsResume& resume);
+    SccsResume sccs_resume_state() const;
 
     std::vector<double> v_eff_fixed;
     ModuleBase::matrix v_eff;

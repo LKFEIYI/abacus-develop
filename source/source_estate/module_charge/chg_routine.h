@@ -22,6 +22,7 @@ struct ScfMixingCtx
     double scf_ene_thr;    ///< energy convergence threshold
     bool converged_u;      ///< whether DFT+U has converged
     bool ks_run;           ///< whether the current run is a KS calculation (PARAM.globalv.ks_run)
+    bool model_changed = false; ///< a potential component changed its model in this iteration (SCCS delayed start); the SCF is not converged
     double drho;            ///< charge density deviation (in/out)
     bool oscillate_esolver; ///< whether esolver oscillates (out)
     bool conv_esolver;      ///< whether esolver converged (out)

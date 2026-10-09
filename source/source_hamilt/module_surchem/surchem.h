@@ -7,6 +7,8 @@
 #include "source_basis/module_pw/pw_basis.h"
 #include "source_cell/unitcell.h"
 
+#include <vector>
+
 // forward-declared: used below only as pointer/reference
 class Parallel_Grid;
 class Structure_Factor;
@@ -156,9 +158,14 @@ class surchem
 
     void induced_charge(const UnitCell& cell, const ModulePW::PW_Basis* rho_basis, double* induced_rho) const;
 
+    // Dielectric function of the last cal_vel on the local grid; empty before it.
+    const std::vector<double>& last_epsilon() const { return last_epsilon_; }
+    double bulk_permittivity() const { return parameters_.eb_k; }
+
   private:
     SurchemParameters parameters_;
     bool parameters_set_ = false;
+    std::vector<double> last_epsilon_;
 };
 
 #endif

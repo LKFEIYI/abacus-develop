@@ -160,6 +160,7 @@
     - [out\_freq\_elec](#out_freq_elec)
     - [out\_chg](#out_chg)
     - [out\_pot](#out_pot)
+    - [out\_sol](#out_sol)
     - [out\_dmk](#out_dmk)
     - [out\_dmr](#out_dmr)
     - [out\_wfc\_pw](#out_wfc_pw)
@@ -551,6 +552,9 @@
     - [sccs\_lowpass\_p2](#sccs_lowpass_p2)
     - [sccs\_solvent\_mode](#sccs_solvent_mode)
     - [sccs\_corespread](#sccs_corespread)
+    - [sccs\_start\_drho](#sccs_start_drho)
+    - [sccs\_start\_nmax](#sccs_start_nmax)
+    - [sccs\_debug](#sccs_debug)
   - [Quasiatomic Orbital (QO) analysis](#quasiatomic-orbital-qo-analysis)
     - [qo\_switch](#qo_switch)
     - [qo\_basis](#qo_basis)
@@ -788,7 +792,7 @@
   - pcc_2d: self-consistent PCC correction for a slab, open along the lattice vector selected by pcc_2d_axis (default: the third) and periodic along the other two. The open vector must be perpendicular to the periodic plane (rewrite a tilted cell as the equivalent perpendicular one), and the k-point sampling along it must be Gamma only. The monopole term uses the open planar kernel that vanishes on the plane of the charge, -pi*Q*L/(3*A) with L the cell length along the open vector and A the periodic area, so the energy of a charged slab converges with the vacuum size; it is referenced to zero potential on the plane of the charge. ENVIRON uses -pi*Q/(3*L), so charged-slab energies agree with ENVIRON only for A = L^2.
   - makov-payne, m-p, mp: compute the Makov-Payne correction to the total energy and estimate a corrected vacuum level for eigenvalue alignment. This option is available only for cubic lattices (latname = sc, fcc, or bcc).
 
-  pcc_0d and pcc_2d contribute to the energy, the potential and the fixed-cell forces; the correction energy is printed as E_pcc. They require CPU KS-DFT (esolver_type ksdft) with basis_type pw or lcao, calculation scf or relax, and nspin 1 or 2, without efield_flag, gate_flag, cal_stress, DFT-1/2, deepks output or dm_to_rho. With imp_sol=2, pcc_0d and pcc_2d support SCF energies and forces; imp_sol=1 is not supported.
+  pcc_0d and pcc_2d contribute to the energy, the potential and the fixed-cell forces; the correction energy is printed as E_pcc. They require CPU KS-DFT (esolver_type ksdft) with basis_type pw or lcao, calculation scf or relax, and nspin 1 or 2, without efield_flag, gate_flag, cal_stress, DFT-1/2, deepks output or dm_to_rho. With imp_sol=2, pcc_0d and pcc_2d support SCF energies, forces and fixed-cell relax; imp_sol=1 is not supported.
 
   Theory: G. Makov and M. C. Payne, Phys. Rev. B 51, 4014 (1995); PCC: O. Andreussi and N. Marzari, Phys. Rev. B 90, 245101 (2014).
 - **Default**: none
@@ -1992,6 +1996,18 @@
   In molecular dynamics calculations, the output frequency is controlled by out_freq_ion.
 
   > Note: In the 3.10-LTS version, the file names are SPIN1_POT.cube and SPIN1_POT_INI.cube, etc.
+- **Default**: 0
+
+### out_sol
+
+- **Type**: Integer \[Integer\](optional)
+- **Description**: - 0: No output.
+  - 1: Output the implicit-solvent fields of the last solvent correction on real space grids into files in the folder OUT.{suffix}, for imp_sol 1 (the legacy model) and imp_sol 2 (SCCS):
+   - `sol_eps.cube`: the dielectric function epsilon(r), 1 in the solute and the bulk permittivity in the solvent. An isosurface such as epsilon = 15 shows where the continuum is.
+   - `sol_cavity.cube`: the solute boundary s(r), 1 in the solute and 0 in the solvent; for imp_sol 1 it is 1 minus the solvent shape function (written only when eb_k &gt; 1).
+   With out_freq_ion &gt; 0 the files are written every out_freq_ion ionic steps with the geometry index in the name, e.g. `sol_epsg1.cube`; with out_freq_ion = 0 they are overwritten at every step. Nothing is written while SCCS waits for its delayed start (sccs_start_drho).
+
+  The optional second integer controls the output precision. If not provided, the default precision is 8.
 - **Default**: 0
 
 ### out_dmk
@@ -5075,6 +5091,26 @@
 - **Description**: Widths of the valence-charge Gaussians used only with sccs_solvent_mode full. One value applies to every atom except those whose known atomic number equals the pseudopotential valence charge (within 1e-8). More than one value requires exactly nat values in STRU atom order (grouped by atom type), and overrides this automatic exclusion. A value &lt;= 0 disables the cavity Gaussian on that atom.
 - **Default**: 0.5
 - **Unit**: bohr
+
+### sccs_start_drho
+
+- **Type**: Real
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Delay SCCS at the start of the run until DRHO is at or below this value. Zero starts SCCS immediately; a positive value must exceed scf_thr so that the SCF cannot converge before SCCS starts, and the SCF does not stop in the iteration that activates SCCS. Once activated, SCCS remains active for all later electronic and ionic steps. PCC remains active during the delay. User-controlled for every sccs_preset, default 0.
+- **Default**: 0.0
+
+### sccs_start_nmax
+
+- **Type**: Integer
+- **Availability**: *[`imp_sol`](#imp_sol)==2*
+- **Description**: Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. The value must be positive, and smaller than scf_nmax when delayed start is enabled. User-controlled for every sccs_preset, default 30; inactive when sccs_start_drho=0.
+- **Default**: 30
+
+### sccs_debug
+
+- **Type**: Integer
+- **Description**: SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.
+- **Default**: 0
 
 [back to top](#full-list-of-input-keywords)
 

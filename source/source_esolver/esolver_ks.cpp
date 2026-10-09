@@ -1,5 +1,6 @@
 #include "esolver_ks.h"
 #include "source_base/timer_wrapper.h"
+#include "source_base/parallel_common.h"
 
 // for jason output information
 #include "source_io/module_json/output_info.h"
@@ -267,6 +268,29 @@ ESolver_KS::DensityStage ESolver_KS::density_stage(const int istep, const int it
 
 void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &conv_esolver)
 {
+    const bool is_output_rank = this->kv.para_k.my_pool == 0 && this->kv.para_k.rank_in_pool == 0;
+    bool sccs_activated = false;
+    // Only while a delayed SCCS start is pending: ordinary runs and runs whose
+    // SCCS is already active skip the broadcast. Activation is synchronized,
+    // so every rank takes the same branch.
+    const bool awaiting_sccs = this->inp_->imp_sol == 2 && this->pelec->pot->sccs_awaiting_activation();
+    if (awaiting_sccs)
+    {
+        // Band-parallel groups may differ slightly in drho until mixing broadcasts
+        // it; broadcast first so every rank activates SCCS in the same iteration.
+        double density_residual = this->drho;
+        Parallel_Common::bcast_double(density_residual);
+        sccs_activated = this->pelec->pot->update_sccs_activation(iter, density_residual);
+        if (sccs_activated)
+        {
+            this->p_chgmix->mix_reset();
+            if (is_output_rank && this->inp_->sccs_debug > 0)
+            {
+                std::cout << " SCCS activated at electronic iteration " << iter
+                          << ", DRHO = " << density_residual << std::endl;
+            }
+        }
+    }
 
     // 1.1) print out band gap 
     if (!PARAM.globalv.two_fermi)
@@ -310,6 +334,7 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     module_charge::ScfMixingCtx ctx;
     ctx.hsolver_error = hsolver_error;
     ctx.scf_thr = this->scf_thr;
+    ctx.model_changed = sccs_activated;
     ctx.scf_ene_thr = this->scf_ene_thr;
     ctx.converged_u = converged_u;
     ctx.ks_run = PARAM.globalv.ks_run;
@@ -373,6 +398,11 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     // print energies
     elecstate::print_etot(ucell.magnet, *pelec, conv_esolver, iter, drho,
     dkin, duration, *this->inp_, PARAM.globalv.two_fermi, diag_ethr, 0, true, this->ds_rms_);
+
+    if (is_output_rank && this->inp_->sccs_debug > 0)
+    {
+        this->pelec->pot->write_correction_iteration(std::cout, this->inp_->sccs_debug, this->drho);
+    }
 
 
 #ifdef __JSON

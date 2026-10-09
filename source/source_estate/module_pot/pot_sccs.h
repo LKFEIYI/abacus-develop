@@ -2,8 +2,11 @@
 #define POT_SCCS_H
 
 #include "pot_base.h"
+#include "sccs_output.h"
+#include "sccs_fixed_sources.h"
 #include "source_hamilt/module_sccs/sccs_parameters.h"
 
+#include <iosfwd>
 #include <string>
 
 struct Input_para;
@@ -25,31 +28,60 @@ std::string check_sccs_structure(const ModuleSccs::SccsConfig& config, const Uni
 // energy depends on the cell size. electron_count is INPUT nelec.
 std::string check_sccs_charge(const ModuleSccs::SccsConfig& config, const UnitCell& cell, double electron_count);
 
+// State carried from the component of the previous ionic step, which is
+// rebuilt every ionic step: an activation already reached, and the last
+// unshifted sqrt-CG solution as a warm start. The solver keeps the warm start
+// only when it lowers the initial charge residual, so moved atoms are safe.
+struct SccsResume
+{
+    bool active = false;
+    std::vector<double> restart_potential;
+};
+
 class PotSccs : public PotBase
 {
 public:
     // electron_count is the expected number of electrons (INPUT nelec); a grid
     // density that differs from it by more than 1e-6 e is reported in the
     // warning log, and the solute charge uses the grid density.
+    // resume carries the activation and warm start of the previous ionic step.
     PotSccs(const ModulePW::PW_Basis* basis,
             const ModuleSccs::SccsConfig& config,
             const ModuleSccs::PolarizationSolverParameters& solver,
-            double electron_count);
+            double electron_count,
+            const SccsResume& resume);
     void cal_v_eff(const Charge* charge, const UnitCell* cell, ModuleBase::matrix& potential) override;
     double get_energy() const override;
     void add_solvation_force(const UnitCell& cell, ModuleBase::matrix& force) const override;
     void get_solvation_energy(double& electrostatic, double& non_electrostatic) const override;
     const std::vector<double>* solvent_electrostatic_potential() const override;
+    // eps and the cavity s of the last active evaluation; none before the start.
+    void add_solvent_fields(std::vector<SolventGridField>& fields) const override;
+
+    // Delayed start: called once per electronic iteration with the
+    // pool-consistent density residual. Returns true only in the iteration
+    // that activates SCCS; activation is irreversible.
+    bool update_activation(int electronic_iteration, double density_residual);
+    bool is_active() const { return sccs_active_; }
+    SccsResume resume_state() const;
+    bool has_output() const { return output_.valid; }
+    void write_iteration_output(std::ostream& output, int level, double residual, double pcc_energy) const;
+    void write_final_output(std::ostream& output, double pcc_energy) const;
 
 private:
+    bool sccs_active_ = false;
     const ModuleSccs::SccsConfig config_;
     const ModuleSccs::PolarizationSolverParameters solver_;
     const double electron_count_;
+    SccsOutput output_;
+    SccsFixedSources fixed_sources_;
     double electrostatic_rydberg_ = 0.0;
     double non_electrostatic_rydberg_ = 0.0;
     std::vector<double> electrostatic_potential_;
     std::vector<double> restart_potential_;
     std::vector<double> cavity_potential_;
+    std::vector<double> epsilon_;
+    std::vector<double> solute_;
 };
 } // namespace elecstate
 #endif

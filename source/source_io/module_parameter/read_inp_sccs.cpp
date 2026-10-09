@@ -65,8 +65,8 @@ std::string sccs_context_error(const Input_para& input)
     { error = "SCCS currently supports assume_isolated none, pcc_0d or pcc_2d"; }
     else if (input.device != "cpu" || input.esolver_type != "ksdft") { error = "SCCS requires CPU KS-DFT"; }
     else if (input.basis_type != "pw" && input.basis_type != "lcao") { error = "SCCS requires basis_type pw or lcao"; }
-    else if (input.calculation != "scf" || input.cal_stress)
-    { error = "SCCS currently supports SCF energies and forces without stress"; }
+    else if ((input.calculation != "scf" && input.calculation != "relax") || input.cal_stress)
+    { error = "SCCS supports calculation scf or fixed-cell relax without stress"; }
     else if (input.nspin != 1 && input.nspin != 2) { error = "SCCS requires nspin 1 or 2"; }
     else if (input.efield_flag || input.gate_flag || input.dfthalf_type != 0
              || input.deepks_scf || input.deepks_out_labels || input.deepks_bandgap
@@ -104,13 +104,19 @@ std::string sccs_model_error(const Input_para& input)
     return error;
 }
 
-// sqrt-CG solver controls.
+// sqrt-CG solver controls and the delayed start.
 std::string sccs_solver_error(const Input_para& input)
 {
+    const bool delayed_start = input.sccs_start_drho > 0.0;
     std::string error;
     if (input.sccs_maxiter <= 0) { error = "sccs_maxiter must be positive"; }
     else if (input.sccs_tol_rms <= 0.0) { error = "sccs_tol_rms must be positive"; }
     else if (input.sccs_tol_max <= 0.0) { error = "sccs_tol_max must be positive"; }
+    else if (input.sccs_start_drho < 0.0) { error = "sccs_start_drho must be non-negative"; }
+    else if (delayed_start && input.sccs_start_drho <= input.scf_thr)
+    { error = "sccs_start_drho must be zero or larger than scf_thr"; }
+    else if (input.sccs_start_nmax <= 0 || (delayed_start && input.sccs_start_nmax >= input.scf_nmax))
+    { error = "sccs_start_nmax must be positive and smaller than scf_nmax when delayed start is enabled"; }
     return error;
 }
 } // namespace
@@ -305,5 +311,47 @@ void ReadInput::item_sccs()
         sync_doublevec(input.sccs_corespread, para.input.sccs_corespread.size(), 0.0);
         this->add_item(item);
     }
+    {
+        Input_Item item("sccs_start_drho");
+        item.annotation = "SCCS delayed-start density threshold";
+        item.category = "Implicit solvation model";
+        item.type = "Real";
+        item.description = "Delay SCCS at the start of the run until DRHO is at or below this value. Zero starts SCCS immediately; a positive value must exceed scf_thr so that the SCF cannot converge before SCCS starts, and the SCF does not stop in the iteration that activates SCCS. Once activated, SCCS remains active for all later electronic and ionic steps. PCC remains active during the delay. User-controlled for every sccs_preset, default 0.";
+        item.default_value = "0.0";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_double(input.sccs_start_drho);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_start_nmax");
+        item.annotation = "SCCS delayed-start iteration limit";
+        item.category = "Implicit solvation model";
+        item.type = "Integer";
+        item.description = "Force delayed SCCS activation at this electronic iteration if the SCCS start DRHO threshold has not yet been reached. The value must be positive, and smaller than scf_nmax when delayed start is enabled. User-controlled for every sccs_preset, default 30; inactive when sccs_start_drho=0.";
+        item.default_value = "30";
+        item.unit = "";
+        item.set_availability("imp_sol==2");
+        read_sync_int(input.sccs_start_nmax);
+        this->add_item(item);
+    }
+    {
+        Input_Item item("sccs_debug");
+        item.annotation = "detailed SCCS diagnostics";
+        item.category = "Implicit solvation model";
+        item.type = "Integer";
+        item.description = "SCCS/PCC output level, printed to the screen (standard output): 0 suppresses per-SCF summaries and diagnostics; 1 prints the iteration count and correction energy; 2 additionally prints residual, warm-start, cavity volume and surface, FFT-count, Gauss-law (PCC: far-field polarization charge, its expected value and the comparison tolerance), multipole and energy diagnostics, and verifies the sqrt-CG fixed point with one extra Poisson solve per SCCS evaluation.";
+        item.default_value = "0";
+        item.unit = "";
+        read_sync_int(input.sccs_debug);
+        item.check_value = [](const Input_Item&, const Parameter& para) {
+            if (para.input.sccs_debug < 0 || para.input.sccs_debug > 2)
+            {
+                ModuleBase::WARNING_QUIT("ReadInput", "sccs_debug must be 0, 1, or 2");
+            }
+        };
+        this->add_item(item);
+    }
+
 }
 } // namespace ModuleIO

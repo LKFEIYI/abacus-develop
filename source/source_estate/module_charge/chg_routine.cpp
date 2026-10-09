@@ -42,7 +42,7 @@ void module_charge::chgmixing_ks(const int iter,
         // not ground state
         bool not_restart_step = !(iter == p_chgmix->mixing_restart_step && inp.mixing_restart > 0.0);
 
-        conv_esolver = (drho < scf_thr && not_restart_step && converged_u);
+        conv_esolver = (drho < scf_thr && not_restart_step && converged_u && !ctx.model_changed);
 
         // add energy threshold for SCF convergence
         if (scf_ene_thr > 0.0)

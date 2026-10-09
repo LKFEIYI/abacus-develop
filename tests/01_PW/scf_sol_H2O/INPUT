@@ -21,3 +21,4 @@ nc_k              0.00037
 #Parameters	(General)
 suffix            autotest
 pseudo_dir        ../../PP_ORB
+out_sol           1
