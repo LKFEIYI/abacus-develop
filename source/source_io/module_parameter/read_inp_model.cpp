@@ -188,7 +188,7 @@ void ReadInput::item_model()
         item.annotation = "implicit solvent model";
         item.category = "Implicit solvation model";
         item.type = "Integer";
-        item.description = "Select 0 for vacuum, 1 for the original ABACUS implicit solvation model, or 2 for SCCS. Stress, external fields and other correction models are not supported.";
+        item.description = "Select 0 for vacuum, 1 for the original ABACUS implicit solvation model, or 2 for SCCS. Use assume_isolated pcc_0d or pcc_2d for charged systems. Stress, external fields and other correction models are not supported.";
         item.default_value = "0";
         item.read_value = [](const Input_Item& item, Parameter& para) {
             std::string error;
