@@ -30,7 +30,6 @@ void prepare_cavity(const std::vector<double>& density,
     response.dsolute_drho.resize(size);
     response.epsilon.resize(size);
     response.depsilon_drho.resize(size);
-    response.grad_log_epsilon.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
         const CavityPoint point = evaluate_cavity(density[i], cavity);
@@ -65,7 +64,6 @@ void prepare_cavity(const std::vector<double>& density,
         const double first_log = response.depsilon_drho[i] / response.epsilon[i];
         const ModuleBase::Vector3<double>& local_gradient = gradient[i];
         const double gradient_square = local_gradient * local_gradient;
-        response.grad_log_epsilon[i] = local_gradient * first_log;
         const double lap_log = first_log * laplacian[i] + second_log * gradient_square;
         coefficient[i] = response.epsilon[i] * (0.5 * lap_log + 0.25 * first_log * first_log * gradient_square)
                          / ModuleBase::FOUR_PI;
@@ -265,6 +263,11 @@ void finish_response(const ModulePW::PW_Basis& basis,
     polarization.gradient.resize(size);
     XC_Functional::grad_rho(potential_g.data(), polarization.gradient.data(), &basis, tpiba);
     polarization.potential.swap(potential);
+    // Continuum derivative of the reaction energy, as in Environ. It is not the
+    // exact derivative of the discrete energy: at uniform density that is
+    // eps'/(16 pi) (2 v L v - L v^2) with the spectral Laplacian L, and v^2
+    // aliases on the FFT grid. The two agree once v^2 is resolved by the grid
+    // (test CavityDerivativeConvergesWithGridRefinement).
     response.cavity_potential.resize(size);
     for (std::size_t i = 0; i < size; ++i)
     {
