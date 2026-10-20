@@ -99,6 +99,13 @@ if ! test -z "$imp_sol" && { [ "$imp_sol" = 1 ] || [ "$imp_sol" = 2 ]; }; then
 	esol_cav=`grep E_sol_cav $running_path | tail -1 | awk '{print $3}'`
 	echo "esolelref $esol_el" >>$props_result_file
 	echo "esolcavref $esol_cav" >>$props_result_file
+	# Solvent-aware SCCS: the filled volume int(s_sa - s) dV of the last
+	# evaluation, in the running log with sccs_debug 2.
+	filled_volume=$(grep "V_FILLED/Bohr3" "$running_path" | tail -1 \
+		| awk '{for (i = 1; i < NF; ++i) if ($i == "V_FILLED/Bohr3") print $(i + 1)}')
+	if [ -n "$filled_volume" ]; then
+		echo "sccs_filled_volumeref $filled_volume" >>$props_result_file
+	fi
 fi
 
 # out_sol 1: both cubes must exist (the cases set imp_sol 2, or imp_sol 1 with
