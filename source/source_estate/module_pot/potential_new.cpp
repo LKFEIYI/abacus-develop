@@ -1,5 +1,6 @@
 #include "potential_new.h"
 #include "pot_pcc.h"
+#include "sol_grid_field.h"
 
 #include "pot_ml_exx.h"
 #include "source_base/global_function.h"
@@ -69,25 +70,24 @@ void Potential::pot_register(const std::vector<std::string>& components_list)
 void Potential::pot_register(const std::vector<std::string>& components_list, const Input_para& input)
 {
     ModuleBase::TITLE("Potential", "pot_register");
-    // delete old components first.
-    if (this->components.size() > 0)
-    {
-        for (auto comp: this->components)
-        {
-            delete comp;
-        }
-        this->components.clear();
-    }
-
     // register components
     //---------------------------
     // mapping for register
     //---------------------------
+    // The new components are built before the old ones are deleted, so a
+    // component can take over state of its predecessor (the SCCS activation
+    // and warm start of an earlier ionic step).
+    std::vector<PotBase*> registered;
     for (auto comp: components_list)
     {
         PotBase* tmp = this->get_pot_type(comp, input);
-        this->components.push_back(tmp);
+        registered.push_back(tmp);
     }
+    for (auto comp: this->components)
+    {
+        delete comp;
+    }
+    this->components.swap(registered);
 
     // after register, reset fixed_done to false
     this->fixed_done = false;
@@ -433,6 +433,16 @@ const std::vector<double>* Potential::find_sol_pot() const
         if (value != nullptr) { return value; }
     }
     return nullptr;
+}
+
+std::vector<SolventGridField> Potential::sol_out_fields() const
+{
+    std::vector<SolventGridField> fields;
+    for (const PotBase* component : this->components)
+    {
+        component->add_sol_fields(fields);
+    }
+    return fields;
 }
 
 } // namespace elecstate

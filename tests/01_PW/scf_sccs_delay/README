@@ -1,0 +1,1 @@
+PW neutral water with periodic SCCS and a delayed start (sccs_start_drho 1e-3): the SCF first converges without solvent, SCCS starts once DRHO <= 1e-3 and the mixing restarts. ecutwfc 20 and ecutrho 240.

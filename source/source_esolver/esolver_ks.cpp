@@ -1,5 +1,6 @@
 #include "esolver_ks.h"
 #include "source_base/timer_wrapper.h"
+#include "source_base/parallel_common.h"
 
 // for jason output information
 #include "source_io/module_json/output_info.h"
@@ -295,6 +296,28 @@ ESolver_KS::DensityStage ESolver_KS::density_stage(const int istep, const int it
 
 void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &conv_esolver)
 {
+    const bool is_output_rank = this->kv.para_k.my_pool == 0 && this->kv.para_k.rank_in_pool == 0;
+    bool model_changed = false;
+    // Only while a potential component waits to change its model: ordinary
+    // runs skip the broadcast. The state is synchronized, so every rank takes
+    // the same branch.
+    if (this->pelec->pot->model_pending())
+    {
+        // Band-parallel groups may differ slightly in drho until mixing broadcasts
+        // it; broadcast first so every rank changes the model in the same iteration.
+        double density_residual = this->drho;
+        Parallel_Common::bcast_double(density_residual);
+        std::ostream* log = nullptr;
+        if (is_output_rank && this->inp_->sccs_debug > 0)
+        {
+            log = &std::cout;
+        }
+        model_changed = this->pelec->pot->update_model(iter, density_residual, log);
+        if (model_changed)
+        {
+            this->p_chgmix->mix_reset();
+        }
+    }
 
     // 1.1) print out band gap 
     if (!PARAM.globalv.two_fermi)
@@ -338,6 +361,7 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     module_charge::ScfMixingCtx ctx;
     ctx.hsolver_error = hsolver_error;
     ctx.scf_thr = this->scf_thr;
+    ctx.model_changed = model_changed;
     ctx.scf_ene_thr = this->scf_ene_thr;
     ctx.converged_u = converged_u;
     ctx.ks_run = PARAM.globalv.ks_run;
@@ -401,6 +425,11 @@ void ESolver_KS::iter_finish(UnitCell& ucell, const int istep, int& iter, bool &
     // print energies
     elecstate::print_etot(ucell.magnet, *pelec, conv_esolver, iter, drho,
     dkin, duration, *this->inp_, PARAM.globalv.two_fermi, diag_ethr, 0, true, this->ds_rms_);
+
+    if (is_output_rank && this->inp_->sccs_debug > 0)
+    {
+        this->pelec->pot->write_corr_iter(std::cout, this->inp_->sccs_debug, this->drho);
+    }
 
 
 #ifdef __JSON

@@ -1,0 +1,1 @@
+PW neutral water, fixed-cell relax with periodic SCCS, two ionic steps: the SCCS warm start and the delayed-start state carry over to the rebuilt potential of the second step. ecutwfc 20 and ecutrho 240.

@@ -47,11 +47,21 @@ void pcc_0d_operator(const UnitCell& cell,
                      const std::vector<unitcell::AtomData>& atoms,
                      std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb)
 {
+    std::vector<ModuleBase::Vector3<double>> positions;
+    ModulePW::grid_positions(basis, cell.latvec, cell.lat0, positions);
+    pcc_0d_operator(cell, basis, atoms, positions, coulomb);
+}
+
+void pcc_0d_operator(const UnitCell& cell,
+                     const ModulePW::PW_Basis& basis,
+                     const std::vector<unitcell::AtomData>& atoms,
+                     const std::vector<ModuleBase::Vector3<double>>& grid_positions,
+                     std::unique_ptr<ModuleSccs::CoulombOperator>& coulomb)
+{
     unitcell::OrthogonalCell geometry;
     Pcc0dParameters parameters;
     pcc_0d_geometry(cell, atoms, geometry, parameters);
-    std::vector<ModuleBase::Vector3<double>> relative_positions;
-    ModulePW::grid_positions(basis, cell.latvec, cell.lat0, relative_positions);
+    std::vector<ModuleBase::Vector3<double>> relative_positions = grid_positions;
     pcc_0d_relative(geometry, relative_positions);
     coulomb.reset(new ModuleSccs::Pcc0dCoulombOperator(basis, cell.tpiba, relative_positions, parameters));
 }

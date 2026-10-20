@@ -1,4 +1,5 @@
 #include "sccs_response.h"
+#include "sccs_diag.h"
 #include "sccs_cav_deriv.h"
 #include "sccs_lowpass.h"
 #include "sccs_parameters.h"
@@ -327,6 +328,10 @@ void solve_response(const std::vector<double>& density,
     }
     iterate_sqrt_cg(system, solver, state, polarization);
     std::vector<double>& potential = state.potential;
+    if (solver.check_fixed_point)
+    {
+        check_fixed_pt(charge, coefficient, potential, invsqrt, basis, coulomb, polarization);
+    }
     finish_response(system, charge, cavity, derivatives, tpiba, potential, candidate);
     result = std::move(candidate);
 }
