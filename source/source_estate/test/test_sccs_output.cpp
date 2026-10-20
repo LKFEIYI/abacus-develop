@@ -279,18 +279,32 @@ protected:
     }
 };
 
-// Every rank lists eps and cavity, including one without grid points, and the
-// energy and fields match the serial run.
+// Every rank, including one without grid points, lists the same fields: eps
+// and cavity, plus cavity_local and filled_fraction with the solvent-aware
+// filling. Energies and field sums are serial reference values.
 TEST_F(PotSccsEmptyPartitionTest, SolventOutputIsCollectiveOnEmptyGridPartitions)
 {
     double energy = 0.0;
     std::vector<std::string> names;
     std::vector<double> sums;
     evaluate_and_collect(active_config(), energy, names, sums);
-    const std::vector<std::string> expected_names = {"eps", "cavity"};
-    ASSERT_EQ(names, expected_names);
-    // Serial reference values.
+    const std::vector<std::string> plain_names = {"eps", "cavity"};
+    ASSERT_EQ(names, plain_names);
     EXPECT_NEAR(energy, -0.748979082383938, 1e-10);
     EXPECT_NEAR(sums[0], 795.834560078087, 1e-8);
     EXPECT_NEAR(sums[1], 154.256465345260, 1e-8);
+
+    ModuleSccs::SccsConfig filled = active_config();
+    filled.cavity.solvent_aware.solvent_radius = 0.5;
+    filled.cavity.solvent_aware.radial_spread = 0.3;
+    filled.cavity.solvent_aware.filling_threshold = 0.6;
+    filled.cavity.solvent_aware.filling_spread = 0.1;
+    evaluate_and_collect(filled, energy, names, sums);
+    const std::vector<std::string> filled_names = {"eps", "cavity", "cavity_local", "filled_fraction"};
+    ASSERT_EQ(names, filled_names);
+    EXPECT_NEAR(energy, -0.931004969822491, 1e-10);
+    EXPECT_NEAR(sums[0], 781.635153985345, 1e-8);
+    EXPECT_NEAR(sums[1], 160.406546243018, 1e-8);
+    EXPECT_NEAR(sums[2], 154.256465345260, 1e-8);
+    EXPECT_NEAR(sums[3], 154.256465345260, 1e-8);
 }

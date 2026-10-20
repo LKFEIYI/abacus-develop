@@ -11,7 +11,8 @@ namespace unitcell { struct AtomData; }
 namespace ModuleSccs { struct SccsConfig; }
 namespace elecstate
 {
-// Owns ion/core Gaussian densities and Cartesian grid coordinates. The cell,
+// Owns ion/core Gaussian densities, Cartesian grid coordinates and the
+// solvent-aware probe kernel (empty without the filling). The cell,
 // grid and SCCS configuration are fixed for one PotSccs, which is rebuilt every
 // ionic step; update rebuilds only for different atoms and returns true when
 // the previous sources were reused.
@@ -28,6 +29,7 @@ public:
     const std::vector<double>& ionic_density() const;
     const std::vector<double>& core_density() const;
     const std::vector<ModuleBase::Vector3<double>>& positions() const;
+    const std::vector<double>& probe_kernel() const;
 private:
     struct Data;
     std::unique_ptr<Data> data_;

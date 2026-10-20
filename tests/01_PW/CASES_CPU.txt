@@ -133,3 +133,5 @@ scf_sccs_pcc_0d
 scf_sccs_full
 scf_sccs_delay
 relax_sccs
+scf_sccs_sa
+scf_sccs_sa_pcc_2d_lowpass

@@ -56,7 +56,9 @@ public:
     void add_sol_force(const UnitCell& cell, ModuleBase::matrix& force) const override;
     void sol_energy(double& electrostatic, double& non_electrostatic) const override;
     const std::vector<double>* sol_elec_pot() const override;
-    // eps and the cavity s of the last active evaluation; none before the start.
+    // eps and the cavity s of the last active evaluation, plus the local s
+    // (cavity_local) and the probe fraction (filled_fraction) of a
+    // solvent-aware cavity; none before the start.
     void add_sol_fields(std::vector<SolventGridField>& fields) const override;
 
     // Delayed start: called once per electronic iteration with the
@@ -83,6 +85,8 @@ private:
     std::vector<double> cavity_potential_;
     std::vector<double> epsilon_;
     std::vector<double> solute_;
+    std::vector<double> local_solute_;
+    std::vector<double> filled_fraction_;
 };
 } // namespace elecstate
 #endif
